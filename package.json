@@ -1,0 +1,11 @@
+{
+  "name": "sam3-histology-root",
+  "version": "1.0.0",
+  "description": "Root package to launch frontend and backend simultaneously",
+  "scripts": {
+    "dev": "bash ./start.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,1452 @@
+---
+// SAM 3 Histology Auto-Segmenter with Annotation Editor & Roboflow Export
+---
+
+<html lang="es">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="generator" content={Astro.generator} />
+		<title>SAM 3 — Annotator + Roboflow Trainer</title>
+		<meta name="description" content="Segmentación automática con SAM 3, edición de anotaciones y entrenamiento en Roboflow" />
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+	</head>
+	<body>
+		<div class="app-container">
+			<header class="app-header">
+				<div class="logo-area">
+					<div class="glowing-orb"></div>
+					<h1>SAM 3 <span class="gradient-text">Annotator</span></h1>
+					<span class="badge">Multi-Image + Roboflow</span>
+				</div>
+				<p class="subtitle">Segmentación automática → edición de clases → entrenamiento en Roboflow. Pensado para imágenes de histología con cientos de células.</p>
+			</header>
+
+			<main class="app-main">
+				<!-- LEFT COLUMN: Image Gallery + Controls -->
+				<aside class="sidebar-panel">
+					<!-- Tab Buttons -->
+					<div class="tab-bar">
+						<button class="tab-btn active" data-tab="images-tab">🖼️ Imágenes</button>
+						<button class="tab-btn" data-tab="classes-tab">🏷️ Clases</button>
+						<button class="tab-btn" data-tab="export-tab">🚀 Exportar</button>
+					</div>
+
+					<!-- ==================== IMAGES TAB ==================== -->
+					<div class="tab-content active" id="images-tab">
+						<div class="upload-zone" id="drop-zone">
+							<input type="file" id="file-input" accept="image/*" multiple class="file-hidden" />
+							<div class="upload-content" id="upload-content">
+								<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+								</svg>
+								<p class="upload-text">Arrastra imágenes o <span class="text-link">seleccionalas</span></p>
+								<p class="upload-hint">PNG, JPG, JPEG, TIFF — Múltiples archivos</p>
+							</div>
+						</div>
+
+						<!-- Image Gallery -->
+						<div class="image-gallery" id="image-gallery"></div>
+
+						<!-- Segmentation controls -->
+						<div class="parameters-area">
+							<div class="form-group">
+								<label for="custom-prompt-input">Patrón visual adicional:</label>
+								<div class="input-with-btn">
+									<input type="text" id="custom-prompt-input" placeholder="Ej: elongated dark nucleus" class="form-input" />
+									<button type="button" id="re-segment-btn" class="btn-small">Re-segmentar</button>
+								</div>
+							</div>
+
+							<div class="form-group">
+								<div class="slider-header">
+									<label for="threshold-slider">Umbral de confianza</label>
+									<span id="threshold-val" class="slider-val">0.05</span>
+								</div>
+								<input type="range" id="threshold-slider" min="0.01" max="0.95" step="0.01" value="0.05" class="form-range" />
+							</div>
+						</div>
+
+						<!-- Status -->
+						<div class="status-area" id="status-area">
+							<div class="status-idle" id="status-idle">
+								<span class="status-dot idle"></span>
+								<span>Esperando imágenes...</span>
+							</div>
+							<div class="status-running" id="status-running" style="display:none;">
+								<span class="spinner-small"></span>
+								<span id="status-text">Segmentando...</span>
+							</div>
+						</div>
+					</div>
+
+					<!-- ==================== CLASSES TAB ==================== -->
+					<div class="tab-content" id="classes-tab">
+						<div class="classes-header">
+							<h3 class="section-title-sm">Clases de segmentación</h3>
+							<button type="button" id="add-class-btn" class="btn-small btn-green">+ Nueva Clase</button>
+						</div>
+						<div id="classes-list" class="classes-list">
+							<p class="empty-hint">Segmenta una imagen para ver las clases detectadas.</p>
+						</div>
+						<div class="class-actions">
+							<button type="button" id="merge-classes-btn" class="btn-small btn-outline" disabled>Fusionar seleccionadas</button>
+						</div>
+					</div>
+
+					<!-- ==================== EXPORT TAB ==================== -->
+					<div class="tab-content" id="export-tab">
+						<div class="export-section">
+							<h3 class="section-title-sm">Exportar Dataset</h3>
+
+							<div class="export-stats" id="export-stats">
+								<div class="stat-item">
+									<span class="stat-value" id="stat-images">0</span>
+									<span class="stat-label">Imágenes</span>
+								</div>
+								<div class="stat-item">
+									<span class="stat-value" id="stat-annotations">0</span>
+									<span class="stat-label">Anotaciones</span>
+								</div>
+								<div class="stat-item">
+									<span class="stat-value" id="stat-classes">0</span>
+									<span class="stat-label">Clases</span>
+								</div>
+							</div>
+
+							<button type="button" id="export-coco-btn" class="btn-action btn-primary-action">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+								Descargar COCO JSON
+							</button>
+
+							<div class="divider"></div>
+
+							<h3 class="section-title-sm">Roboflow</h3>
+							<div class="roboflow-status" id="roboflow-status">
+								<span class="status-dot idle"></span>
+								<span>Verificando conexión...</span>
+							</div>
+
+							<button type="button" id="upload-roboflow-btn" class="btn-action btn-roboflow" disabled>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+								Subir a Roboflow
+							</button>
+
+							<button type="button" id="train-roboflow-btn" class="btn-action btn-train" disabled>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+								Entrenar Modelo
+							</button>
+
+							<div class="progress-area" id="progress-area" style="display:none;">
+								<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+								<span class="progress-text" id="progress-text">Subiendo...</span>
+							</div>
+						</div>
+					</div>
+				</aside>
+
+				<!-- CENTER: Viewer -->
+				<section class="viewer-panel panel-card">
+					<div class="viewer-header">
+						<h2 class="section-title">Visor de Anotaciones</h2>
+						<div class="viewer-controls" id="viewer-controls" style="display: none;">
+							<label class="toggle-container">
+								<input type="checkbox" id="toggle-polygons" checked />
+								<span class="toggle-label">Polígonos</span>
+							</label>
+							<label class="toggle-container">
+								<input type="checkbox" id="toggle-boxes" />
+								<span class="toggle-label">Boxes</span>
+							</label>
+							<span class="separator">|</span>
+							<span id="detections-counter" class="counter-badge">0 detecciones</span>
+						</div>
+					</div>
+
+					<!-- Selection toolbar -->
+					<div class="selection-toolbar" id="selection-toolbar" style="display: none;">
+						<span id="selection-count">0 seleccionadas</span>
+						<select id="reassign-select" class="form-input-sm">
+							<option value="">Mover a clase...</option>
+						</select>
+						<button type="button" id="delete-selected-btn" class="btn-small btn-danger">🗑️ Eliminar</button>
+						<button type="button" id="deselect-btn" class="btn-small btn-outline">✕ Deseleccionar</button>
+					</div>
+
+					<div class="viewer-content">
+						<div class="empty-viewer" id="empty-viewer">
+							<svg xmlns="http://www.w3.org/2000/svg" class="empty-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+							</svg>
+							<p>Sube imágenes y la segmentación comenzará automáticamente.</p>
+							<p class="upload-hint">Luego podrás editar clases, eliminar detecciones erróneas, y exportar a Roboflow.</p>
+						</div>
+
+						<div class="image-viewport" id="image-viewport" style="display: none;">
+							<div class="viewer-container" id="viewer-container">
+								<img id="display-image" src="" alt="Histología" />
+								<svg id="overlay-svg" class="overlay-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+							</div>
+						</div>
+					</div>
+				</section>
+			</main>
+		</div>
+
+		<!-- Tooltip -->
+		<div id="box-tooltip" class="box-tooltip" style="display: none;">
+			<div class="tooltip-category" id="tooltip-category">-</div>
+			<div class="tooltip-score">Confianza: <span id="tooltip-score-val">0.00</span></div>
+			<div class="tooltip-coords">Box: <span id="tooltip-coords-val">0, 0</span></div>
+			<div class="tooltip-hint">Click = seleccionar · Shift+Click = multi-select</div>
+		</div>
+
+		<!-- Context menu -->
+		<div id="context-menu" class="context-menu" style="display: none;">
+			<div class="ctx-header" id="ctx-header">Detección</div>
+			<div class="ctx-item" id="ctx-delete">🗑️ Eliminar</div>
+			<div class="ctx-separator"></div>
+			<div class="ctx-sub-header">Mover a clase:</div>
+			<div id="ctx-class-list" class="ctx-class-list"></div>
+		</div>
+	</body>
+</html>
+
+<style is:global>
+	:root {
+		--bg-dark: #070913;
+		--bg-panel: rgba(15, 23, 42, 0.45);
+		--bg-sidebar: rgba(15, 23, 42, 0.65);
+		--border-color: rgba(255, 255, 255, 0.08);
+		--border-active: rgba(139, 92, 246, 0.5);
+		--text-main: #f8fafc;
+		--text-muted: #94a3b8;
+		--primary: #8b5cf6;
+		--primary-hover: #a78bfa;
+		--primary-glow: rgba(139, 92, 246, 0.4);
+		--accent-cyan: #06b6d4;
+		--accent-green: #10b981;
+		--accent-red: #f43f5e;
+		--font-family: 'Inter', sans-serif;
+		--font-title: 'Outfit', sans-serif;
+	}
+
+	* { box-sizing: border-box; margin: 0; padding: 0; }
+
+	body {
+		background-color: var(--bg-dark);
+		color: var(--text-main);
+		font-family: var(--font-family);
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		background-image: 
+			radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+			radial-gradient(circle at 90% 80%, rgba(6, 182, 212, 0.08) 0%, transparent 40%);
+		background-attachment: fixed;
+		overflow-x: hidden;
+	}
+
+	.app-container { width: 100%; max-width: 1600px; margin: 0 auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; flex-grow: 1; }
+	.app-header { text-align: left; position: relative; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+	.logo-area { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.4rem; }
+	.glowing-orb { width: 12px; height: 12px; border-radius: 50%; background-color: var(--accent-cyan); box-shadow: 0 0 12px var(--accent-cyan), 0 0 24px var(--accent-cyan); }
+	.app-header h1 { font-family: var(--font-title); font-weight: 800; font-size: 2rem; letter-spacing: -0.03em; }
+	.gradient-text { background: linear-gradient(135deg, var(--primary) 0%, var(--accent-cyan) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+	.badge { font-size: 0.7rem; font-weight: 600; padding: 0.2rem 0.55rem; border-radius: 9999px; background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); color: var(--accent-cyan); letter-spacing: 0.05em; }
+	.subtitle { color: var(--text-muted); font-size: 0.95rem; font-weight: 400; max-width: 900px; }
+
+	/* ===== LAYOUT ===== */
+	.app-main { display: grid; grid-template-columns: 380px 1fr; gap: 1.5rem; align-items: start; }
+	@media (max-width: 1024px) { .app-main { grid-template-columns: 1fr; } }
+
+	/* ===== SIDEBAR ===== */
+	.sidebar-panel { background: var(--bg-sidebar); backdrop-filter: blur(16px); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3); }
+
+	/* Tabs */
+	.tab-bar { display: flex; border-bottom: 1px solid var(--border-color); }
+	.tab-btn { flex: 1; padding: 0.75rem 0.5rem; background: none; border: none; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; font-family: var(--font-family); }
+	.tab-btn:hover { color: var(--text-main); background: rgba(255,255,255,0.03); }
+	.tab-btn.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.05); }
+	.tab-content { display: none; padding: 1.25rem; max-height: calc(100vh - 220px); overflow-y: auto; }
+	.tab-content.active { display: block; }
+
+	/* Upload Zone */
+	.upload-zone { border: 2px dashed rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 1.5rem 1rem; text-align: center; cursor: pointer; position: relative; transition: all 0.2s; background: rgba(255, 255, 255, 0.01); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+	.upload-zone:hover { border-color: var(--primary); background: rgba(139, 92, 246, 0.03); }
+	.upload-zone.dragover { border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.05); }
+	.file-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+	.upload-icon { width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.5rem; }
+	.upload-text { font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.3rem; font-weight: 500; }
+	.text-link { color: var(--primary-hover); text-decoration: underline; }
+	.upload-hint { font-size: 0.72rem; color: var(--text-muted); }
+
+	/* Image Gallery */
+	.image-gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-top: 1rem; }
+	.gallery-thumb { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+	.gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
+	.gallery-thumb.active { border-color: var(--accent-cyan); box-shadow: 0 0 12px rgba(6, 182, 212, 0.3); }
+	.gallery-thumb .thumb-badge { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; }
+	.gallery-thumb .thumb-badge.pending { background: var(--accent-red); }
+	.gallery-thumb .thumb-badge.annotated { background: var(--accent-green); }
+	.gallery-thumb .thumb-remove { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(244, 63, 94, 0.8); border: none; color: white; font-size: 10px; cursor: pointer; display: none; align-items: center; justify-content: center; line-height: 1; }
+	.gallery-thumb:hover .thumb-remove { display: flex; }
+	.gallery-thumb .thumb-count { position: absolute; bottom: 2px; right: 4px; font-size: 0.65rem; background: rgba(0,0,0,0.7); color: white; padding: 1px 4px; border-radius: 4px; }
+
+	/* Parameters */
+	.parameters-area { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); }
+	.form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+	.form-group label { font-size: 0.8rem; font-weight: 500; color: var(--text-muted); }
+	.input-with-btn { display: flex; gap: 0.4rem; align-items: center; }
+	.form-input { flex-grow: 1; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 8px; padding: 0.45rem 0.65rem; font-size: 0.8rem; font-family: var(--font-family); outline: none; transition: all 0.15s; }
+	.form-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-glow); }
+	.form-input-sm { background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px; padding: 0.3rem 0.5rem; font-size: 0.75rem; font-family: var(--font-family); outline: none; }
+
+	/* Buttons */
+	.btn-small { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 0.4rem 0.7rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: all 0.15s; font-family: var(--font-family); }
+	.btn-small:hover { background: var(--primary-hover); }
+	.btn-small:disabled { opacity: 0.4; cursor: not-allowed; }
+	.btn-green { background: var(--accent-green); }
+	.btn-green:hover { background: #059669; }
+	.btn-danger { background: var(--accent-red); }
+	.btn-danger:hover { background: #dc2626; }
+	.btn-outline { background: transparent; border: 1px solid var(--border-color); color: var(--text-muted); }
+	.btn-outline:hover { border-color: var(--text-muted); color: var(--text-main); }
+
+	.btn-action { width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.65rem 1rem; border: none; border-radius: 10px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: var(--font-family); margin-bottom: 0.5rem; }
+	.btn-action:disabled { opacity: 0.35; cursor: not-allowed; }
+	.btn-primary-action { background: linear-gradient(135deg, var(--primary), #7c3aed); color: white; }
+	.btn-primary-action:hover:not(:disabled) { box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4); transform: translateY(-1px); }
+	.btn-roboflow { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+	.btn-roboflow:hover:not(:disabled) { box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); transform: translateY(-1px); }
+	.btn-train { background: linear-gradient(135deg, var(--accent-green), #059669); color: white; }
+	.btn-train:hover:not(:disabled) { box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transform: translateY(-1px); }
+
+	.slider-header { display: flex; justify-content: space-between; align-items: center; }
+	.slider-val { font-family: var(--font-title); font-weight: 700; color: var(--accent-cyan); font-size: 0.9rem; background: rgba(6, 182, 212, 0.1); padding: 0.1rem 0.4rem; border-radius: 6px; }
+	.form-range { -webkit-appearance: none; width: 100%; height: 5px; border-radius: 9999px; background: rgba(255,255,255,0.1); outline: none; margin: 0.3rem 0; }
+	.form-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-cyan); cursor: pointer; box-shadow: 0 0 8px var(--accent-cyan); }
+	.range-info { font-size: 0.68rem; color: var(--text-muted); }
+
+	/* Status */
+	.status-area { padding: 0.6rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color); font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem; }
+	.status-idle, .status-running { display: flex; align-items: center; gap: 0.4rem; }
+	.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+	.status-dot.idle { background: rgba(148, 163, 184, 0.5); }
+	.status-dot.connected { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+	.status-dot.error { background: var(--accent-red); }
+	@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+	.spinner-small { width: 14px; height: 14px; border: 2px solid rgba(6, 182, 212, 0.3); border-radius: 50%; border-top-color: var(--accent-cyan); animation: spin 0.8s linear infinite; flex-shrink: 0; }
+	@keyframes spin { to { transform: rotate(360deg); } }
+
+	/* Classes tab */
+	.classes-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+	.section-title-sm { font-family: var(--font-title); font-size: 0.95rem; font-weight: 600; }
+	.classes-list { display: flex; flex-direction: column; gap: 0.35rem; }
+	.class-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); transition: all 0.15s; cursor: pointer; }
+	.class-item:hover { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.12); }
+	.class-item.hidden { opacity: 0.3; }
+	.class-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; cursor: pointer; }
+	.class-name { flex-grow: 1; font-size: 0.82rem; color: var(--text-main); background: none; border: none; outline: none; font-family: var(--font-family); cursor: text; padding: 0.1rem 0; }
+	.class-name:focus { border-bottom: 1px solid var(--accent-cyan); }
+	.class-count { font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-title); font-weight: 600; min-width: 20px; text-align: right; }
+	.class-toggle { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.75rem; padding: 0.2rem; transition: color 0.15s; }
+	.class-toggle:hover { color: var(--text-main); }
+	.class-delete { background: none; border: none; color: rgba(244, 63, 94, 0.5); cursor: pointer; font-size: 0.8rem; padding: 0.2rem; transition: color 0.15s; }
+	.class-delete:hover { color: var(--accent-red); }
+	.class-actions { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.5rem; }
+	.empty-hint { font-size: 0.8rem; color: var(--text-muted); font-style: italic; padding: 1rem 0; text-align: center; }
+
+	/* Export tab */
+	.export-section { display: flex; flex-direction: column; gap: 0.75rem; }
+	.export-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.5rem; }
+	.stat-item { text-align: center; padding: 0.6rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color); }
+	.stat-value { display: block; font-family: var(--font-title); font-weight: 700; font-size: 1.4rem; color: var(--accent-cyan); }
+	.stat-label { font-size: 0.7rem; color: var(--text-muted); }
+	.divider { height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+	.roboflow-status { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+	.progress-area { padding: 0.6rem; }
+	.progress-bar { height: 6px; background: rgba(255,255,255,0.1); border-radius: 9999px; overflow: hidden; }
+	.progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent-cyan)); border-radius: 9999px; width: 0%; transition: width 0.3s; }
+	.progress-text { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.3rem; display: block; }
+
+	/* ===== VIEWER ===== */
+	.panel-card { background: var(--bg-panel); backdrop-filter: blur(16px); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3); }
+	.section-title { font-family: var(--font-title); font-size: 1.15rem; font-weight: 600; letter-spacing: -0.01em; }
+	.viewer-panel { display: flex; flex-direction: column; min-height: 600px; }
+	.viewer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 0.5rem; }
+	.viewer-controls { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; color: var(--text-muted); }
+	.separator { color: rgba(255,255,255,0.1); }
+	.counter-badge { font-family: var(--font-title); font-weight: 600; color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08); padding: 0.15rem 0.5rem; border-radius: 6px; font-size: 0.8rem; }
+	.toggle-container { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; user-select: none; }
+	.toggle-container input { position: absolute; opacity: 0; width: 0; height: 0; }
+	.toggle-label { color: var(--text-muted); transition: color 0.15s; font-size: 0.8rem; }
+	.toggle-container:hover .toggle-label { color: var(--text-main); }
+	.toggle-container input:checked + .toggle-label { color: var(--text-main); }
+
+	/* Selection toolbar */
+	.selection-toolbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 10px; margin-bottom: 0.75rem; font-size: 0.8rem; color: var(--text-main); flex-wrap: wrap; }
+
+	.viewer-content { position: relative; flex-grow: 1; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 400px; }
+	.empty-viewer { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; color: var(--text-muted); font-size: 0.9rem; padding: 2rem; text-align: center; }
+	.empty-icon { width: 50px; height: 50px; color: rgba(255,255,255,0.1); }
+
+	.image-viewport { position: relative; max-width: 100%; max-height: 100%; display: flex; align-items: center; justify-content: center; padding: 0.75rem; }
+	.viewer-container { position: relative; display: inline-block; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border-radius: 8px; overflow: hidden; }
+	.viewer-container img { max-width: 100%; max-height: 65vh; display: block; object-fit: contain; border-radius: 8px; }
+	.overlay-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+
+	/* SVG element styles */
+	.det-polygon { cursor: pointer; pointer-events: auto; transition: all 0.1s; }
+	.det-polygon:hover { filter: brightness(1.3); }
+	.det-polygon.selected { stroke-width: 3 !important; filter: drop-shadow(0 0 8px currentColor); }
+	.det-box { stroke-width: 1.2; pointer-events: auto; cursor: pointer; transition: all 0.1s; fill: none; }
+	.det-box:hover { stroke-width: 2.5; }
+	.det-box.selected { stroke-width: 3; stroke-dasharray: 5,3; }
+
+	/* Tooltip */
+	.box-tooltip { position: fixed; z-index: 1000; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.75rem; pointer-events: none; color: #fff; box-shadow: 0 4px 20px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 0.15rem; transform: translate(15px, 15px); }
+	.tooltip-category { font-weight: 700; font-size: 0.8rem; }
+	.tooltip-score { font-weight: 600; color: var(--accent-cyan); }
+	.tooltip-coords { color: var(--text-muted); font-family: monospace; font-size: 0.7rem; }
+	.tooltip-hint { color: rgba(255,255,255,0.3); font-size: 0.65rem; margin-top: 0.15rem; }
+
+	/* Context menu */
+	.context-menu { position: fixed; z-index: 1100; background: rgba(15, 23, 42, 0.97); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 0.4rem; min-width: 180px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+	.ctx-header { padding: 0.4rem 0.6rem; font-weight: 700; font-size: 0.8rem; color: var(--accent-cyan); }
+	.ctx-item { padding: 0.4rem 0.6rem; font-size: 0.8rem; cursor: pointer; border-radius: 6px; transition: background 0.1s; }
+	.ctx-item:hover { background: rgba(255,255,255,0.08); }
+	.ctx-separator { height: 1px; background: var(--border-color); margin: 0.3rem 0; }
+	.ctx-sub-header { padding: 0.3rem 0.6rem; font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+	.ctx-class-item { padding: 0.35rem 0.6rem; font-size: 0.78rem; cursor: pointer; border-radius: 6px; transition: background 0.1s; display: flex; align-items: center; gap: 0.4rem; }
+	.ctx-class-item:hover { background: rgba(255,255,255,0.08); }
+	.ctx-class-swatch { width: 10px; height: 10px; border-radius: 3px; }
+</style>
+
+<script>
+	const API_URL = "http://localhost:8000/api";
+
+	// ======================= STATE =======================
+	// Multi-image state
+	let imageStore = new Map();  // filename -> { file, dataUrl, width, height, groups, annotated }
+	let activeImageKey = null;
+
+	// Detection editing state
+	let selectedDetections = new Set();  // "groupKey:detIndex" identifiers
+
+	// Global class registry (shared across images)
+	// { id, name, color, key }
+	let classRegistry = [];
+	let classIdCounter = 1;
+
+	// Hidden categories
+	let hiddenCategories = new Set();
+
+	// ======================= DOM =======================
+	const dropZone = document.getElementById("drop-zone");
+	const fileInput = document.getElementById("file-input");
+	const uploadContent = document.getElementById("upload-content");
+	const imageGallery = document.getElementById("image-gallery");
+
+	const thresholdSlider = document.getElementById("threshold-slider");
+	const thresholdVal = document.getElementById("threshold-val");
+
+	const statusIdle = document.getElementById("status-idle");
+	const statusRunning = document.getElementById("status-running");
+	const statusText = document.getElementById("status-text");
+
+	const emptyViewer = document.getElementById("empty-viewer");
+	const imageViewport = document.getElementById("image-viewport");
+	const displayImage = document.getElementById("display-image");
+	const overlaySvg = document.getElementById("overlay-svg");
+	const detectionsCounter = document.getElementById("detections-counter");
+	const viewerControls = document.getElementById("viewer-controls");
+	const togglePolygons = document.getElementById("toggle-polygons");
+	const toggleBoxes = document.getElementById("toggle-boxes");
+
+	const selectionToolbar = document.getElementById("selection-toolbar");
+	const selectionCount = document.getElementById("selection-count");
+	const reassignSelect = document.getElementById("reassign-select");
+	const deleteSelectedBtn = document.getElementById("delete-selected-btn");
+	const deselectBtn = document.getElementById("deselect-btn");
+
+	const tooltip = document.getElementById("box-tooltip");
+	const tooltipCategory = document.getElementById("tooltip-category");
+	const tooltipScore = document.getElementById("tooltip-score-val");
+	const tooltipCoords = document.getElementById("tooltip-coords-val");
+
+	const contextMenu = document.getElementById("context-menu");
+	const ctxHeader = document.getElementById("ctx-header");
+	const ctxDelete = document.getElementById("ctx-delete");
+	const ctxClassList = document.getElementById("ctx-class-list");
+
+	const classesList = document.getElementById("classes-list");
+	const addClassBtn = document.getElementById("add-class-btn");
+
+	const exportCocoBtn = document.getElementById("export-coco-btn");
+	const uploadRoboflowBtn = document.getElementById("upload-roboflow-btn");
+	const trainRoboflowBtn = document.getElementById("train-roboflow-btn");
+	const roboflowStatus = document.getElementById("roboflow-status");
+	const progressArea = document.getElementById("progress-area");
+	const progressFill = document.getElementById("progress-fill");
+	const progressTextEl = document.getElementById("progress-text");
+
+	// ======================= TABS =======================
+	document.querySelectorAll(".tab-btn").forEach(btn => {
+		btn.addEventListener("click", () => {
+			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+			btn.classList.add("active");
+			document.getElementById(btn.dataset.tab).classList.add("active");
+		});
+	});
+
+	// ======================= FILE UPLOAD =======================
+	["dragenter", "dragover"].forEach(ev => {
+		dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.add("dragover"); }, false);
+	});
+	["dragleave", "drop"].forEach(ev => {
+		dropZone.addEventListener(ev, (e) => { e.preventDefault(); dropZone.classList.remove("dragover"); }, false);
+	});
+
+	dropZone.addEventListener("drop", (e) => {
+		if (e.dataTransfer.files.length > 0) handleFiles(Array.from(e.dataTransfer.files));
+	});
+	dropZone.addEventListener("click", (e) => { fileInput.click(); });
+	fileInput.addEventListener("change", () => {
+		if (fileInput.files.length > 0) handleFiles(Array.from(fileInput.files));
+	});
+
+	async function handleFiles(files) {
+		const imageFiles = files.filter(f => f.type.startsWith("image/"));
+		if (imageFiles.length === 0) { alert("Selecciona archivos de imagen."); return; }
+
+		for (const file of imageFiles) {
+			const key = file.name + "_" + Date.now();
+			const dataUrl = await readFileAsDataUrl(file);
+			const dims = await getImageDimensions(dataUrl);
+
+			imageStore.set(key, {
+				file: file,
+				filename: file.name,
+				dataUrl: dataUrl,
+				width: dims.width,
+				height: dims.height,
+				groups: [],
+				annotated: false,
+			});
+		}
+
+		renderGallery();
+
+		// Auto-segment new images
+		for (const file of imageFiles) {
+			const key = [...imageStore.keys()].find(k => imageStore.get(k).file === file);
+			if (key) {
+				selectImage(key);
+				await runAutoSegmentation(key);
+			}
+		}
+
+		fileInput.value = "";
+	}
+
+	function readFileAsDataUrl(file) {
+		return new Promise((resolve) => {
+			const reader = new FileReader();
+			reader.onload = (e) => resolve(e.target.result);
+			reader.readAsDataURL(file);
+		});
+	}
+
+	function getImageDimensions(dataUrl) {
+		return new Promise((resolve) => {
+			const img = new Image();
+			img.onload = () => resolve({ width: img.width, height: img.height });
+			img.src = dataUrl;
+		});
+	}
+
+	// ======================= IMAGE GALLERY =======================
+	function renderGallery() {
+		imageGallery.innerHTML = "";
+		imageStore.forEach((data, key) => {
+			const thumb = document.createElement("div");
+			thumb.className = `gallery-thumb ${key === activeImageKey ? "active" : ""}`;
+			thumb.dataset.key = key;
+
+			const detCount = countDetections(data);
+			thumb.innerHTML = `
+				<img src="${data.dataUrl}" alt="${data.filename}" />
+				<span class="thumb-badge ${data.annotated ? "annotated" : "pending"}"></span>
+				<button class="thumb-remove" title="Quitar imagen">✕</button>
+				${detCount > 0 ? `<span class="thumb-count">${detCount}</span>` : ""}
+			`;
+
+			thumb.addEventListener("click", (e) => {
+				if (e.target.classList.contains("thumb-remove")) {
+					e.stopPropagation();
+					removeImage(key);
+					return;
+				}
+				selectImage(key);
+			});
+
+			imageGallery.appendChild(thumb);
+		});
+	}
+
+	function removeImage(key) {
+		imageStore.delete(key);
+		if (activeImageKey === key) {
+			activeImageKey = null;
+			const first = imageStore.keys().next().value;
+			if (first) selectImage(first);
+			else resetViewer();
+		}
+		renderGallery();
+		updateExportStats();
+	}
+
+	function selectImage(key) {
+		activeImageKey = key;
+		const data = imageStore.get(key);
+		if (!data) return;
+
+		displayImage.src = data.dataUrl;
+		emptyViewer.style.display = "none";
+		imageViewport.style.display = "flex";
+
+		selectedDetections.clear();
+		updateSelectionToolbar();
+		renderOverlay();
+		renderGallery();
+		updateClassesList();
+		updateExportStats();
+
+		if (data.groups.length > 0) {
+			viewerControls.style.display = "flex";
+		} else {
+			viewerControls.style.display = "none";
+		}
+	}
+
+	function resetViewer() {
+		emptyViewer.style.display = "flex";
+		imageViewport.style.display = "none";
+		viewerControls.style.display = "none";
+		overlaySvg.innerHTML = "";
+		statusRunning.style.display = "none";
+		statusIdle.style.display = "flex";
+	}
+
+	function countDetections(data) {
+		const threshold = parseFloat(thresholdSlider.value);
+		let count = 0;
+		(data.groups || []).forEach(g => {
+			count += g.detections.filter(d => d.score >= threshold).length;
+		});
+		return count;
+	}
+
+	// ======================= SEGMENTATION =======================
+	const customPromptInput = document.getElementById("custom-prompt-input");
+	const reSegmentBtn = document.getElementById("re-segment-btn");
+
+	reSegmentBtn.addEventListener("click", () => {
+		if (activeImageKey) runAutoSegmentation(activeImageKey);
+	});
+	customPromptInput.addEventListener("keydown", (e) => {
+		if (e.key === "Enter" && activeImageKey) runAutoSegmentation(activeImageKey);
+	});
+
+	async function runAutoSegmentation(key) {
+		const data = imageStore.get(key);
+		if (!data) return;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `Segmentando ${data.filename}...`;
+
+		const formData = new FormData();
+		formData.append("image", data.file);
+		formData.append("umbral", "0.01");
+		if (customPromptInput.value.trim()) {
+			formData.append("custom_prompt", customPromptInput.value.trim());
+		}
+
+		try {
+			const response = await fetch(`${API_URL}/segment-auto`, {
+				method: "POST",
+				body: formData
+			});
+
+			if (!response.ok) {
+				const err = await response.json();
+				throw new Error(err.detail || "Error del servidor.");
+			}
+
+			const result = await response.json();
+			data.groups = result.groups || [];
+			data.width = result.width || data.width;
+			data.height = result.height || data.height;
+			data.annotated = true;
+
+			// Register classes from this segmentation
+			for (const group of data.groups) {
+				if (!classRegistry.find(c => c.key === group.key)) {
+					classRegistry.push({
+						id: classIdCounter++,
+						name: group.label,
+						color: group.color,
+						key: group.key,
+					});
+				}
+			}
+
+			if (key === activeImageKey) {
+				viewerControls.style.display = "flex";
+				selectedDetections.clear();
+				updateSelectionToolbar();
+				renderOverlay();
+				updateClassesList();
+			}
+
+			renderGallery();
+			updateExportStats();
+
+			statusText.textContent = `✓ ${data.filename}: ${result.total_detections} detecciones`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "none";
+			}, 2500);
+
+		} catch (error) {
+			console.error(error);
+			alert(`Error: ${error.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+
+	// ======================= THRESHOLD =======================
+	thresholdSlider.addEventListener("input", (e) => {
+		thresholdVal.textContent = parseFloat(e.target.value).toFixed(2);
+		renderOverlay();
+		renderGallery();
+		updateClassesList();
+		updateExportStats();
+	});
+
+	// ======================= TOGGLE VISIBILITY =======================
+	togglePolygons.addEventListener("change", renderOverlay);
+	toggleBoxes.addEventListener("change", renderOverlay);
+
+	// ======================= RENDER OVERLAY =======================
+	function renderOverlay() {
+		overlaySvg.innerHTML = "";
+		if (!activeImageKey) return;
+
+		const data = imageStore.get(activeImageKey);
+		if (!data || !data.groups.length) return;
+
+		const w = data.width || displayImage.naturalWidth || 1;
+		const h = data.height || displayImage.naturalHeight || 1;
+
+		overlaySvg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+		overlaySvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+		const threshold = parseFloat(thresholdSlider.value);
+		const showPolygons = togglePolygons.checked;
+		const showBoxes = toggleBoxes.checked;
+		let totalCount = 0;
+
+		data.groups.forEach(group => {
+			if (hiddenCategories.has(group.key)) return;
+
+			const color = getClassColor(group.key);
+			const label = getClassName(group.key);
+
+			group.detections.forEach((det, detIdx) => {
+				if (det.score < threshold) return;
+				if (det._deleted) return;
+				totalCount++;
+
+				const detId = `${group.key}:${detIdx}`;
+				const isSelected = selectedDetections.has(detId);
+
+				// Draw polygon
+				if (showPolygons && det.segmentation && det.segmentation.length > 0) {
+					det.segmentation.forEach(poly => {
+						const points = [];
+						for (let i = 0; i < poly.length; i += 2) {
+							points.push(`${poly[i]},${poly[i+1]}`);
+						}
+						const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+						polygon.setAttribute("points", points.join(" "));
+						polygon.setAttribute("class", `det-polygon ${isSelected ? "selected" : ""}`);
+						polygon.style.fill = hexToRgba(color, isSelected ? 0.35 : 0.2);
+						polygon.style.stroke = color;
+						polygon.style.strokeWidth = isSelected ? "3" : "1.5";
+						polygon.dataset.detId = detId;
+						addDetectionListeners(polygon, group, det, detIdx, color, label);
+						overlaySvg.appendChild(polygon);
+					});
+				}
+
+				// Draw bounding box
+				if (showBoxes && det.box) {
+					const [x1, y1, x2, y2] = det.box;
+					const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+					rect.setAttribute("x", x1);
+					rect.setAttribute("y", y1);
+					rect.setAttribute("width", x2 - x1);
+					rect.setAttribute("height", y2 - y1);
+					rect.setAttribute("class", `det-box ${isSelected ? "selected" : ""}`);
+					rect.style.stroke = color;
+					rect.dataset.detId = detId;
+					addDetectionListeners(rect, group, det, detIdx, color, label);
+					overlaySvg.appendChild(rect);
+				}
+
+				// If neither mode shows anything, still draw boxes
+				if (!showPolygons && !showBoxes && det.box) {
+					const [x1, y1, x2, y2] = det.box;
+					const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+					rect.setAttribute("x", x1);
+					rect.setAttribute("y", y1);
+					rect.setAttribute("width", x2 - x1);
+					rect.setAttribute("height", y2 - y1);
+					rect.setAttribute("class", `det-box ${isSelected ? "selected" : ""}`);
+					rect.style.stroke = color;
+					rect.style.fill = hexToRgba(color, 0.08);
+					rect.dataset.detId = detId;
+					addDetectionListeners(rect, group, det, detIdx, color, label);
+					overlaySvg.appendChild(rect);
+				}
+			});
+		});
+
+		detectionsCounter.textContent = `${totalCount} detecciones`;
+	}
+
+	function addDetectionListeners(el, group, det, detIdx, color, label) {
+		const detId = `${group.key}:${detIdx}`;
+
+		// Tooltip
+		el.addEventListener("mouseenter", () => {
+			tooltipCategory.textContent = label;
+			tooltipCategory.style.color = color;
+			tooltipScore.textContent = `${(det.score * 100).toFixed(1)}%`;
+			if (det.box) {
+				const [x1, y1, x2, y2] = det.box;
+				tooltipCoords.textContent = `${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}`;
+			}
+			tooltip.style.display = "block";
+		});
+		el.addEventListener("mousemove", (e) => {
+			tooltip.style.left = `${e.clientX}px`;
+			tooltip.style.top = `${e.clientY}px`;
+		});
+		el.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+
+		// Click to select
+		el.addEventListener("click", (e) => {
+			e.stopPropagation();
+			if (e.shiftKey) {
+				// Multi-select
+				if (selectedDetections.has(detId)) selectedDetections.delete(detId);
+				else selectedDetections.add(detId);
+			} else {
+				// Single select
+				if (selectedDetections.has(detId) && selectedDetections.size === 1) {
+					selectedDetections.clear();
+				} else {
+					selectedDetections.clear();
+					selectedDetections.add(detId);
+				}
+			}
+			updateSelectionToolbar();
+			renderOverlay();
+		});
+
+		// Right-click context menu
+		el.addEventListener("contextmenu", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			if (!selectedDetections.has(detId)) {
+				selectedDetections.clear();
+				selectedDetections.add(detId);
+				updateSelectionToolbar();
+				renderOverlay();
+			}
+			showContextMenu(e.clientX, e.clientY, detId);
+		});
+	}
+
+	// Click on viewer background = deselect all
+	document.getElementById("viewer-container").addEventListener("click", (e) => {
+		if (e.target === displayImage || e.target === overlaySvg) {
+			selectedDetections.clear();
+			updateSelectionToolbar();
+			renderOverlay();
+		}
+	});
+
+	// ======================= SELECTION TOOLBAR =======================
+	function updateSelectionToolbar() {
+		if (selectedDetections.size > 0) {
+			selectionToolbar.style.display = "flex";
+			selectionCount.textContent = `${selectedDetections.size} seleccionada${selectedDetections.size > 1 ? "s" : ""}`;
+			updateReassignDropdown();
+		} else {
+			selectionToolbar.style.display = "none";
+		}
+	}
+
+	function updateReassignDropdown() {
+		reassignSelect.innerHTML = '<option value="">Mover a clase...</option>';
+		classRegistry.forEach(cls => {
+			const opt = document.createElement("option");
+			opt.value = cls.key;
+			opt.textContent = cls.name;
+			reassignSelect.appendChild(opt);
+		});
+	}
+
+	deleteSelectedBtn.addEventListener("click", () => { deleteSelectedDetections(); });
+	deselectBtn.addEventListener("click", () => {
+		selectedDetections.clear();
+		updateSelectionToolbar();
+		renderOverlay();
+	});
+
+	reassignSelect.addEventListener("change", () => {
+		const targetKey = reassignSelect.value;
+		if (!targetKey || !activeImageKey) return;
+		reassignDetections(targetKey);
+		reassignSelect.value = "";
+	});
+
+	// Keyboard shortcuts
+	document.addEventListener("keydown", (e) => {
+		if (e.key === "Delete" || e.key === "Backspace") {
+			if (selectedDetections.size > 0 && document.activeElement.tagName !== "INPUT") {
+				e.preventDefault();
+				deleteSelectedDetections();
+			}
+		}
+		if (e.key === "Escape") {
+			selectedDetections.clear();
+			updateSelectionToolbar();
+			renderOverlay();
+			contextMenu.style.display = "none";
+		}
+		// Ctrl+A = select all visible
+		if (e.key === "a" && (e.ctrlKey || e.metaKey) && document.activeElement.tagName !== "INPUT") {
+			e.preventDefault();
+			selectAllVisible();
+		}
+	});
+
+	function selectAllVisible() {
+		if (!activeImageKey) return;
+		const data = imageStore.get(activeImageKey);
+		if (!data) return;
+		const threshold = parseFloat(thresholdSlider.value);
+		selectedDetections.clear();
+		data.groups.forEach(group => {
+			if (hiddenCategories.has(group.key)) return;
+			group.detections.forEach((det, idx) => {
+				if (det.score >= threshold && !det._deleted) {
+					selectedDetections.add(`${group.key}:${idx}`);
+				}
+			});
+		});
+		updateSelectionToolbar();
+		renderOverlay();
+	}
+
+	// ======================= DETECTION OPERATIONS =======================
+	function deleteSelectedDetections() {
+		if (!activeImageKey || selectedDetections.size === 0) return;
+		const data = imageStore.get(activeImageKey);
+		if (!data) return;
+
+		selectedDetections.forEach(detId => {
+			const [groupKey, detIdx] = parseDetId(detId);
+			const group = data.groups.find(g => g.key === groupKey);
+			if (group && group.detections[detIdx]) {
+				group.detections[detIdx]._deleted = true;
+			}
+		});
+
+		selectedDetections.clear();
+		updateSelectionToolbar();
+		renderOverlay();
+		renderGallery();
+		updateClassesList();
+		updateExportStats();
+	}
+
+	function reassignDetections(targetKey) {
+		if (!activeImageKey || selectedDetections.size === 0) return;
+		const data = imageStore.get(activeImageKey);
+		if (!data) return;
+
+		const targetGroup = data.groups.find(g => g.key === targetKey);
+		if (!targetGroup) {
+			// Create new group if doesn't exist for this image
+			const cls = classRegistry.find(c => c.key === targetKey);
+			if (!cls) return;
+			const newGroup = { key: targetKey, prompt: "", label: cls.name, color: cls.color, detections: [], count: 0 };
+			data.groups.push(newGroup);
+			reassignDetections(targetKey); // Retry
+			return;
+		}
+
+		const detsToMove = [];
+		selectedDetections.forEach(detId => {
+			const [groupKey, detIdx] = parseDetId(detId);
+			if (groupKey === targetKey) return; // Already in target
+			const group = data.groups.find(g => g.key === groupKey);
+			if (group && group.detections[detIdx] && !group.detections[detIdx]._deleted) {
+				detsToMove.push({ fromGroup: group, det: { ...group.detections[detIdx] }, detIdx });
+			}
+		});
+
+		// Move detections
+		detsToMove.forEach(({ fromGroup, det, detIdx }) => {
+			fromGroup.detections[detIdx]._deleted = true;
+			delete det._deleted;
+			targetGroup.detections.push(det);
+		});
+
+		selectedDetections.clear();
+		updateSelectionToolbar();
+		renderOverlay();
+		updateClassesList();
+		updateExportStats();
+	}
+
+	function parseDetId(detId) {
+		const lastColon = detId.lastIndexOf(":");
+		return [detId.substring(0, lastColon), parseInt(detId.substring(lastColon + 1))];
+	}
+
+	// ======================= CONTEXT MENU =======================
+	let contextDetId = null;
+
+	function showContextMenu(x, y, detId) {
+		contextDetId = detId;
+		const [groupKey] = parseDetId(detId);
+		const cls = classRegistry.find(c => c.key === groupKey);
+
+		ctxHeader.textContent = cls ? cls.name : "Detección";
+		ctxHeader.style.color = cls ? cls.color : "var(--accent-cyan)";
+
+		// Build class list for reassignment
+		ctxClassList.innerHTML = "";
+		classRegistry.forEach(c => {
+			if (c.key === groupKey) return; // Don't show current class
+			const item = document.createElement("div");
+			item.className = "ctx-class-item";
+			item.innerHTML = `<span class="ctx-class-swatch" style="background:${c.color}"></span>${c.name}`;
+			item.addEventListener("click", () => {
+				// Move selected detections to this class
+				if (!selectedDetections.has(detId)) {
+					selectedDetections.clear();
+					selectedDetections.add(detId);
+				}
+				reassignDetections(c.key);
+				contextMenu.style.display = "none";
+			});
+			ctxClassList.appendChild(item);
+		});
+
+		contextMenu.style.left = `${x}px`;
+		contextMenu.style.top = `${y}px`;
+		contextMenu.style.display = "block";
+	}
+
+	ctxDelete.addEventListener("click", () => {
+		if (contextDetId && !selectedDetections.has(contextDetId)) {
+			selectedDetections.add(contextDetId);
+		}
+		deleteSelectedDetections();
+		contextMenu.style.display = "none";
+	});
+
+	document.addEventListener("click", () => { contextMenu.style.display = "none"; });
+
+	// ======================= CLASSES TAB =======================
+	function updateClassesList() {
+		classesList.innerHTML = "";
+		if (classRegistry.length === 0) {
+			classesList.innerHTML = '<p class="empty-hint">Segmenta una imagen para ver las clases.</p>';
+			return;
+		}
+
+		const threshold = parseFloat(thresholdSlider.value);
+
+		classRegistry.forEach(cls => {
+			// Count total annotations across all images
+			let totalCount = 0;
+			imageStore.forEach(data => {
+				const group = data.groups.find(g => g.key === cls.key);
+				if (group) {
+					totalCount += group.detections.filter(d => d.score >= threshold && !d._deleted).length;
+				}
+			});
+
+			const isHidden = hiddenCategories.has(cls.key);
+			const item = document.createElement("div");
+			item.className = `class-item ${isHidden ? "hidden" : ""}`;
+			item.innerHTML = `
+				<span class="class-swatch" style="background:${cls.color}" title="Click para cambiar color"></span>
+				<input class="class-name" type="text" value="${cls.name}" data-key="${cls.key}" />
+				<span class="class-count">${totalCount}</span>
+				<button class="class-toggle" title="${isHidden ? "Mostrar" : "Ocultar"}">${isHidden ? "👁️‍🗨️" : "👁️"}</button>
+				<button class="class-delete" title="Eliminar clase">✕</button>
+			`;
+
+			// Rename class
+			const nameInput = item.querySelector(".class-name");
+			nameInput.addEventListener("change", (e) => {
+				cls.name = e.target.value.trim() || cls.name;
+				// Update group labels in all images
+				imageStore.forEach(data => {
+					const group = data.groups.find(g => g.key === cls.key);
+					if (group) group.label = cls.name;
+				});
+				renderOverlay();
+			});
+
+			// Toggle visibility
+			item.querySelector(".class-toggle").addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (hiddenCategories.has(cls.key)) hiddenCategories.delete(cls.key);
+				else hiddenCategories.add(cls.key);
+				updateClassesList();
+				renderOverlay();
+			});
+
+			// Delete class
+			item.querySelector(".class-delete").addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (!confirm(`¿Eliminar la clase "${cls.name}" y todas sus detecciones?`)) return;
+				// Mark all detections as deleted
+				imageStore.forEach(data => {
+					const group = data.groups.find(g => g.key === cls.key);
+					if (group) group.detections.forEach(d => d._deleted = true);
+				});
+				classRegistry = classRegistry.filter(c => c.key !== cls.key);
+				hiddenCategories.delete(cls.key);
+				updateClassesList();
+				renderOverlay();
+				renderGallery();
+				updateExportStats();
+			});
+
+			// Color picker
+			item.querySelector(".class-swatch").addEventListener("click", (e) => {
+				e.stopPropagation();
+				const colorInput = document.createElement("input");
+				colorInput.type = "color";
+				colorInput.value = cls.color;
+				colorInput.style.position = "absolute";
+				colorInput.style.opacity = "0";
+				document.body.appendChild(colorInput);
+				colorInput.addEventListener("input", (ev) => {
+					cls.color = ev.target.value;
+					imageStore.forEach(data => {
+						const group = data.groups.find(g => g.key === cls.key);
+						if (group) group.color = cls.color;
+					});
+					updateClassesList();
+					renderOverlay();
+				});
+				colorInput.addEventListener("change", () => { document.body.removeChild(colorInput); });
+				colorInput.click();
+			});
+
+			classesList.appendChild(item);
+		});
+	}
+
+	// Add new class
+	addClassBtn.addEventListener("click", () => {
+		const newKey = `clase_custom_${classIdCounter}`;
+		const colors = ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#60a5fa", "#fb923c", "#c084fc", "#2dd4bf"];
+		const color = colors[classRegistry.length % colors.length];
+
+		classRegistry.push({
+			id: classIdCounter++,
+			name: `Nueva Clase ${classRegistry.length + 1}`,
+			color: color,
+			key: newKey,
+		});
+
+		updateClassesList();
+		updateReassignDropdown();
+	});
+
+	// ======================= EXPORT =======================
+	function updateExportStats() {
+		const threshold = parseFloat(thresholdSlider.value);
+		let totalImages = 0, totalAnnotations = 0;
+		const classSet = new Set();
+
+		imageStore.forEach(data => {
+			if (!data.annotated) return;
+			totalImages++;
+			data.groups.forEach(group => {
+				group.detections.forEach(det => {
+					if (det.score >= threshold && !det._deleted) {
+						totalAnnotations++;
+						classSet.add(group.key);
+					}
+				});
+			});
+		});
+
+		document.getElementById("stat-images").textContent = totalImages;
+		document.getElementById("stat-annotations").textContent = totalAnnotations;
+		document.getElementById("stat-classes").textContent = classSet.size;
+
+		// Enable/disable buttons
+		const hasData = totalImages > 0 && totalAnnotations > 0;
+		exportCocoBtn.disabled = !hasData;
+		uploadRoboflowBtn.disabled = !hasData || !roboflowConnected;
+		trainRoboflowBtn.disabled = !roboflowConnected;
+	}
+
+	// Build export payload
+	function buildExportPayload() {
+		const threshold = parseFloat(thresholdSlider.value);
+		const imagesPayload = [];
+
+		imageStore.forEach((data, key) => {
+			if (!data.annotated) return;
+
+			const classes = [];
+			const annotations = [];
+			let annId = 1;
+
+			data.groups.forEach(group => {
+				const cls = classRegistry.find(c => c.key === group.key);
+				if (!cls) return;
+
+				let hasAnnotations = false;
+				group.detections.forEach(det => {
+					if (det.score < threshold || det._deleted) return;
+					hasAnnotations = true;
+
+					const [x1, y1, x2, y2] = det.box || [0, 0, 0, 0];
+					const bbox = [x1, y1, x2 - x1, y2 - y1]; // COCO: [x, y, width, height]
+
+					annotations.push({
+						id: annId++,
+						class_id: cls.id,
+						bbox: bbox,
+						segmentation: det.segmentation || [],
+						area: det.area || ((x2 - x1) * (y2 - y1)),
+						score: det.score,
+					});
+				});
+
+				if (hasAnnotations) {
+					if (!classes.find(c => c.id === cls.id)) {
+						classes.push({ id: cls.id, name: cls.name, color: cls.color });
+					}
+				}
+			});
+
+			if (annotations.length > 0) {
+				imagesPayload.push({
+					image_filename: data.filename,
+					image_width: data.width,
+					image_height: data.height,
+					classes: classes,
+					annotations: annotations,
+				});
+			}
+		});
+
+		return imagesPayload;
+	}
+
+	// Download COCO JSON
+	exportCocoBtn.addEventListener("click", async () => {
+		const payload = buildExportPayload();
+		if (payload.length === 0) { alert("No hay anotaciones para exportar."); return; }
+
+		try {
+			const response = await fetch(`${API_URL}/export-coco`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ images: payload }),
+			});
+
+			if (!response.ok) throw new Error("Error generando COCO JSON");
+
+			const coco = await response.json();
+			const blob = new Blob([JSON.stringify(coco, null, 2)], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `sam3_annotations_${Date.now()}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			alert(`Error: ${e.message}`);
+		}
+	});
+
+	// Upload to Roboflow
+	uploadRoboflowBtn.addEventListener("click", async () => {
+		const payload = buildExportPayload();
+		if (payload.length === 0) { alert("No hay anotaciones para subir."); return; }
+
+		uploadRoboflowBtn.disabled = true;
+		progressArea.style.display = "block";
+		progressFill.style.width = "10%";
+		progressTextEl.textContent = "Preparando dataset...";
+
+		try {
+			const formData = new FormData();
+			formData.append("annotations", JSON.stringify({ images: payload }));
+
+			// Add image files
+			let fileCount = 0;
+			imageStore.forEach((data) => {
+				if (!data.annotated) return;
+				// Only include images that have annotations
+				if (payload.find(p => p.image_filename === data.filename)) {
+					formData.append("images", data.file, data.filename);
+					fileCount++;
+				}
+			});
+
+			progressFill.style.width = "30%";
+			progressTextEl.textContent = `Subiendo ${fileCount} imágenes a Roboflow...`;
+
+			const response = await fetch(`${API_URL}/upload-roboflow`, {
+				method: "POST",
+				body: formData,
+			});
+
+			progressFill.style.width = "90%";
+
+			if (!response.ok) {
+				const err = await response.json();
+				throw new Error(err.detail || "Error subiendo a Roboflow");
+			}
+
+			const result = await response.json();
+			progressFill.style.width = "100%";
+			progressTextEl.textContent = `✓ Subidas ${result.images_uploaded} imágenes con ${result.annotations_uploaded} anotaciones`;
+
+			trainRoboflowBtn.disabled = false;
+
+			setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+
+		} catch (e) {
+			alert(`Error: ${e.message}`);
+			progressTextEl.textContent = `Error: ${e.message}`;
+		} finally {
+			uploadRoboflowBtn.disabled = false;
+		}
+	});
+
+	// Train model
+	trainRoboflowBtn.addEventListener("click", async () => {
+		if (!confirm("¿Iniciar entrenamiento en Roboflow? Esto puede tomar tiempo.")) return;
+
+		trainRoboflowBtn.disabled = true;
+		progressArea.style.display = "block";
+		progressFill.style.width = "50%";
+		progressTextEl.textContent = "Iniciando entrenamiento...";
+
+		try {
+			const response = await fetch(`${API_URL}/train-roboflow`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ model_type: "yolov8" }),
+			});
+
+			if (!response.ok) {
+				const err = await response.json();
+				throw new Error(err.detail || "Error iniciando entrenamiento");
+			}
+
+			const result = await response.json();
+			progressFill.style.width = "100%";
+			progressTextEl.textContent = `✓ ${result.message}`;
+
+			setTimeout(() => { progressArea.style.display = "none"; }, 8000);
+
+		} catch (e) {
+			alert(`Error: ${e.message}`);
+			progressTextEl.textContent = `Error: ${e.message}`;
+		} finally {
+			trainRoboflowBtn.disabled = false;
+		}
+	});
+
+	// ======================= ROBOFLOW STATUS =======================
+	let roboflowConnected = false;
+
+	async function checkRoboflow() {
+		try {
+			const response = await fetch(`${API_URL}/roboflow-status`);
+			const data = await response.json();
+
+			if (data.connected) {
+				roboflowConnected = true;
+				roboflowStatus.innerHTML = `
+					<span class="status-dot connected"></span>
+					<span>Conectado: <strong>${data.workspace}</strong> / ${data.project?.name || data.project?.id || ""}</span>
+				`;
+				uploadRoboflowBtn.disabled = false;
+				trainRoboflowBtn.disabled = false;
+			} else {
+				roboflowStatus.innerHTML = `
+					<span class="status-dot error"></span>
+					<span>Error: ${data.error || "No conectado"}</span>
+				`;
+			}
+		} catch (e) {
+			roboflowStatus.innerHTML = `
+				<span class="status-dot error"></span>
+				<span>Backend no disponible</span>
+			`;
+		}
+		updateExportStats();
+	}
+
+	// Check Roboflow status on load
+	setTimeout(checkRoboflow, 1500);
+
+	// ======================= HELPERS =======================
+	function getClassColor(key) {
+		const cls = classRegistry.find(c => c.key === key);
+		return cls ? cls.color : "#8b5cf6";
+	}
+
+	function getClassName(key) {
+		const cls = classRegistry.find(c => c.key === key);
+		return cls ? cls.name : key;
+	}
+
+	function hexToRgba(hex, alpha) {
+		hex = hex.replace("#", "");
+		const r = parseInt(hex.substring(0, 2), 16);
+		const g = parseInt(hex.substring(2, 4), 16);
+		const b = parseInt(hex.substring(4, 6), 16);
+		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+	}
+</script>

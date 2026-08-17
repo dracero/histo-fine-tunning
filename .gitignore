@@ -1,0 +1,24 @@
+# Environment & Secrets
+.env
+.env.local
+*.env
+
+# Python & Virtual Environments
+.venv/
+venv/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Frontend & Node
+node_modules/
+dist/
+.astro/
+
+# Logs & Output Directories
+*.log
+resultados_sam3/
+tmp/
+.DS_Store

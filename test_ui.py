@@ -2,7 +2,7 @@ import sys
 import time
 from playwright.sync_api import sync_playwright
 
-def run():
+def run() -> None:
     print("Iniciando prueba local de UI con Playwright...")
     with sync_playwright() as p:
         # Launch headless Chromium

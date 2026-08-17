@@ -39,14 +39,14 @@ PROMPTS_SUGERIDOS = {
 }
 
 
-def cargar_modelo():
+def cargar_modelo() -> Sam3Processor:
     print("Cargando SAM3 (esto puede tardar la primera vez)...")
     model = build_sam3_image_model()
     processor = Sam3Processor(model)
     return processor
 
 
-def segmentar_con_texto(processor, ruta_imagen, prompt_texto, umbral_score=0.3):
+def segmentar_con_texto(processor: Sam3Processor, ruta_imagen: str, prompt_texto: str, umbral_score: float = 0.3) -> tuple[Image.Image, list, list, list]:
     """Segmenta todas las instancias que coincidan con el prompt de texto."""
     image = Image.open(ruta_imagen).convert("RGB")
     inference_state = processor.set_image(image)
@@ -67,7 +67,7 @@ def segmentar_con_texto(processor, ruta_imagen, prompt_texto, umbral_score=0.3):
     return image, masks, boxes, scores
 
 
-def visualizar_resultado(image, masks, boxes, scores, prompt_texto, ruta_salida):
+def visualizar_resultado(image: Image.Image, masks: list, boxes: list, scores: list, prompt_texto: str, ruta_salida: str) -> None:
     fig, ax = plt.subplots(1, 1, figsize=(12, 12))
     ax.imshow(image)
 
@@ -95,7 +95,7 @@ def visualizar_resultado(image, masks, boxes, scores, prompt_texto, ruta_salida)
     print(f"  Guardado: {ruta_salida}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True, help="Ruta a la imagen de histología")
     parser.add_argument(

@@ -20,9 +20,9 @@ from typing import List, Tuple, Dict, Any
 # Root directory of workspace
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 
-# Files & directories to ignore
+# Files & directories to ignore (including third-party vendor models like sam3)
 IGNORE_DIRS = {
-    ".git", ".venv", "node_modules", "__pycache__", ".astro", "dist", "build", ".next"
+    ".git", ".venv", "node_modules", "__pycache__", ".astro", "dist", "build", ".next", "sam3"
 }
 IGNORE_FILES = {
     "package-lock.json", "yarn.lock", "pnpm-lock.yaml"
@@ -201,10 +201,10 @@ class PyASTVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call):
         func = getattr(node, "func", None)
-        func_name = getattr(func, "attr", None) or getattr(func, "id", None)
+        func_attr = getattr(func, "attr", None)
 
         # Rule 3: Check tensor .to(device) calls inside loops
-        if self.loop_depth > 0 and isinstance(func, ast.Attribute) and getattr(func, "attr", None) == "to":
+        if self.loop_depth > 0 and isinstance(func, ast.Attribute) and func_attr == "to":
             if node.args and any(isinstance(arg, ast.Name) and arg.id in ("device", "cuda", "device_obj") for arg in node.args):
                 self.result.add_warning(
                     f"{self.filename}:{node.lineno}",
@@ -213,12 +213,16 @@ class PyASTVisitor(ast.NodeVisitor):
                 )
 
         # Rule 5: Database / HTTP Queries inside loops (N+1 Query Problem)
-        if self.loop_depth > 0 and func_name in ("execute", "executemany", "get", "post", "query", "fetch_one", "fetch_all"):
-            self.result.add_warning(
-                f"{self.filename}:{node.lineno}",
-                "Database & API Optimization",
-                f"Potential N+1 query problem: network/database call '{func_name}' inside loop. Use bulk queries or eager loading."
-            )
+        # Avoid false positives on dictionary.get() by checking caller object type or name
+        if self.loop_depth > 0 and isinstance(func, ast.Attribute):
+            caller_name = getattr(func.value, "id", "")
+            if func_attr in ("execute", "executemany", "post", "query", "fetch_one", "fetch_all") or \
+               (func_attr == "get" and caller_name in ("requests", "session", "httpx", "http", "client", "db")):
+                self.result.add_warning(
+                    f"{self.filename}:{node.lineno}",
+                    "Database & API Optimization",
+                    f"Potential N+1 query problem: network/database call '{caller_name}.{func_attr}' inside loop. Use bulk queries or eager loading."
+                )
 
         self.generic_visit(node)
 

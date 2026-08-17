@@ -79,7 +79,7 @@ AUTO_SEGMENT_PROMPTS = [
 MAX_INFERENCE_DIM = 1440  # Max dimension for SAM3 inference interpolation to prevent VRAM OOM
 
 @app.on_event("startup")
-def load_model():
+def load_model() -> None:
     global processor
     logger.info("Initializing SAM 3 model...")
     start_time = time.time()
@@ -243,7 +243,7 @@ def _prepare_image_for_inference(pil_image: Image.Image):
 
 
 @app.get("/api/health")
-def health_check():
+def health_check() -> Dict[str, Any]:
     return {
         "status": "ok" if processor is not None else "model_not_loaded",
         "device": device,
@@ -251,7 +251,7 @@ def health_check():
     }
 
 @app.get("/api/prompts")
-def get_prompts():
+def get_prompts() -> Dict[str, Any]:
     """Returns the list of automatic prompts used for segmentation."""
     return {"prompts": AUTO_SEGMENT_PROMPTS}
 
@@ -261,7 +261,7 @@ async def segment_image(
     image: UploadFile = File(...),
     prompt: str = Form("object"),
     umbral: float = Form(0.05)
-):
+) -> Dict[str, Any]:
     """Single-prompt segmentation endpoint."""
     if processor is None:
         raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
@@ -306,7 +306,7 @@ async def segment_auto(
     image: UploadFile = File(...),
     umbral: float = Form(0.05),
     custom_prompt: str = Form(None)
-):
+) -> Dict[str, Any]:
     """
     Universal automatic multi-prompt segmentation for ANY image.
     Runs universal visual prompts on the image and returns grouped detections
@@ -392,13 +392,13 @@ async def segment_auto(
 # ======================== Roboflow Integration Endpoints ========================
 
 @app.get("/api/roboflow-status")
-def roboflow_status():
+def roboflow_status() -> Dict[str, Any]:
     """Check Roboflow connection and list project info."""
     return rf_check_connection()
 
 
 @app.post("/api/export-coco")
-async def export_coco(payload: Dict[str, Any] = Body(...)):
+async def export_coco(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
     """
     Generate a COCO JSON from the curated annotations.
 
@@ -422,7 +422,7 @@ async def export_coco(payload: Dict[str, Any] = Body(...)):
 async def upload_roboflow(
     annotations: str = Form(...),
     images: List[UploadFile] = File(...)
-):
+) -> Dict[str, Any]:
     """
     Upload annotated images to Roboflow.
 
@@ -454,7 +454,7 @@ async def upload_roboflow(
 
 
 @app.post("/api/train-roboflow")
-async def train_roboflow(payload: Dict[str, Any] = Body(default={})):
+async def train_roboflow(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
     """Trigger model training on Roboflow."""
     model_type = payload.get("model_type", "yolov8")
     result = trigger_training(model_type=model_type)

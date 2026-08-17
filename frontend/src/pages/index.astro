@@ -130,21 +130,53 @@
 								<span>Verificando conexión...</span>
 							</div>
 
+							<div class="roboflow-options-panel" style="margin-bottom: 0.75rem;">
+								<div style="margin-bottom: 0.5rem;">
+									<label for="roboflow-version-select" style="font-size: 0.75rem; font-weight: 500; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">Versión del Dataset:</label>
+									<select id="roboflow-version-select" class="select-input" style="width: 100%; font-size: 0.8rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px;">
+										<option value="new">⚡ UNIFICAR TODAS LAS IMÁGENES (Nueva Versión Unificada)</option>
+									</select>
+								</div>
+
+								<div style="margin-bottom: 0.5rem;">
+									<label for="roboflow-model-select" style="font-size: 0.75rem; font-weight: 500; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">Formato Dataset (Local PC):</label>
+									<select id="roboflow-model-select" class="select-input" style="width: 100%; font-size: 0.8rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px;">
+										<option value="yolov8-obb">YOLOv8-OBB (Oriented Bounding Boxes)</option>
+										<option value="yolov8">YOLOv8 PyTorch / Ultralytics</option>
+										<option value="yolov11">YOLOv11 PyTorch</option>
+										<option value="yolov9">YOLOv9 PyTorch</option>
+										<option value="yolov7">YOLOv7 PyTorch</option>
+										<option value="yolov5">YOLOv5 PyTorch</option>
+										<option value="coco">COCO JSON Format</option>
+										<option value="coco-segmentation">COCO Instance Segmentation</option>
+										<option value="pascal_voc">Pascal VOC XML</option>
+										<option value="yolact">YOLACT Segmentation</option>
+										<option value="tfrecord">TensorFlow TFRecord</option>
+										<option value="coreml">Apple CoreML</option>
+									</select>
+								</div>
+							</div>
+
 							<button type="button" id="upload-roboflow-btn" class="btn-action btn-roboflow" disabled>
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-								1. Subir Dataset a Roboflow
+								1. Subir Lote a Roboflow
+							</button>
+
+							<button type="button" id="unify-versions-btn" class="btn-action" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff;" disabled>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+								⚡ Unificar Versiones
 							</button>
 
 							<button type="button" id="train-roboflow-btn" class="btn-action btn-train" disabled>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-								2. Entrenar Modelo YOLOv8
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+								2. Exportar / Descargar Dataset
 							</button>
 
 							<div class="divider"></div>
 
 							<button type="button" id="full-pipeline-btn" class="btn-action btn-primary-action" disabled>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-								🚀 Subir Batch y Entrenar YOLO
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+								🚀 Subir, Unificar y Exportar para PC
 							</button>
 
 							<div class="progress-area" id="progress-area" style="display:none;">
@@ -218,6 +250,33 @@
 			<div class="ctx-separator"></div>
 			<div class="ctx-sub-header">Mover a clase:</div>
 			<div id="ctx-class-list" class="ctx-class-list"></div>
+		</div>
+
+		<!-- Roboflow Code Snippet Modal -->
+		<div id="roboflow-snippet-modal" class="modal-backdrop" style="display: none;">
+			<div class="modal-card">
+				<div class="modal-header">
+					<h3>📦 Código Python Roboflow (Versión Unificada v<span id="modal-version-num">1</span>)</h3>
+					<button type="button" id="close-modal-btn" class="btn-small btn-outline" style="padding: 0.2rem 0.5rem;">✕</button>
+				</div>
+				<div class="modal-body">
+					<p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+						Copia este código Python para descargar la versión unificada del dataset directamente en Google Colab, Jupyter Notebook o en tu PC:
+					</p>
+
+					<div class="code-box-container" style="position: relative;">
+						<button type="button" id="copy-snippet-btn" class="btn-small btn-primary-action" style="position: absolute; top: 8px; right: 8px; font-size: 0.75rem; padding: 0.25rem 0.6rem; z-index: 10;">
+							📋 Copiar Código
+						</button>
+						<pre id="snippet-code-block" style="background: #0d1117; border: 1px solid var(--border-color); color: #e6edf3; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.82rem; overflow-x: auto; white-space: pre-wrap; margin: 0;"></pre>
+					</div>
+
+					<div style="margin-top: 1rem; padding: 0.75rem; background: rgba(56, 189, 248, 0.1); border-left: 3px solid #38bdf8; border-radius: 6px;">
+						<div style="font-size: 0.78rem; font-weight: 600; color: #38bdf8; margin-bottom: 0.25rem;">Ubicación descargada en tu PC local:</div>
+						<code id="modal-export-path" style="font-size: 0.75rem; color: var(--text-main); word-break: break-all;"></code>
+					</div>
+				</div>
+			</div>
 		</div>
 	</body>
 </html>
@@ -431,10 +490,31 @@
 	.ctx-class-item { padding: 0.35rem 0.6rem; font-size: 0.78rem; cursor: pointer; border-radius: 6px; transition: background 0.1s; display: flex; align-items: center; gap: 0.4rem; }
 	.ctx-class-item:hover { background: rgba(255,255,255,0.08); }
 	.ctx-class-swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+	/* Modal styles */
+	.modal-backdrop {
+		position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+		background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+		display: flex; align-items: center; justify-content: center;
+		z-index: 9999;
+	}
+	.modal-card {
+		background: #0f172a; border: 1px solid var(--border-color);
+		border-radius: 12px; width: 90%; max-width: 620px;
+		box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); overflow: hidden;
+	}
+	.modal-header {
+		padding: 1rem 1.25rem; background: rgba(255, 255, 255, 0.03);
+		border-bottom: 1px solid var(--border-color);
+		display: flex; align-items: center; justify-content: space-between;
+	}
+	.modal-header h3 { margin: 0; font-size: 1rem; color: var(--text-main); }
+	.modal-body { padding: 1.25rem; }
 </style>
 
 <script>
-	const API_URL = "http://localhost:8000/api";
+	const hostname = typeof window !== "undefined" && window.location.hostname ? window.location.hostname : "127.0.0.1";
+	const API_URL = `http://${hostname}:8000/api`;
 
 	// ======================= STATE =======================
 	// Multi-image state
@@ -495,6 +575,7 @@
 
 	const exportCocoBtn = document.getElementById("export-coco-btn");
 	const uploadRoboflowBtn = document.getElementById("upload-roboflow-btn");
+	const unifyVersionsBtn = document.getElementById("unify-versions-btn");
 	const trainRoboflowBtn = document.getElementById("train-roboflow-btn");
 	const fullPipelineBtn = document.getElementById("full-pipeline-btn");
 	const roboflowStatus = document.getElementById("roboflow-status");
@@ -1331,13 +1412,15 @@
 
 			// Add image files
 			let fileCount = 0;
-			imageStore.forEach((data) => {
-				if (!data.annotated) return;
-				if (payload.find(p => p.image_filename === data.filename)) {
-					formData.append("images", data.file, data.filename);
-					fileCount++;
-				}
-			});
+				imageStore.forEach((data) => {
+					if (!data.annotated) return;
+					if (payload.find(p => p.image_filename === data.filename)) {
+						if (data.file) {
+							formData.append("images", data.file, data.filename);
+							fileCount++;
+						}
+					}
+				});
 
 			progressFill.style.width = "30%";
 			progressTextEl.textContent = `Subiendo ${fileCount} imágenes a Roboflow...`;
@@ -1370,32 +1453,76 @@
 		}
 	});
 
-	// Train model
+	// Unify versions button
+	if (unifyVersionsBtn) {
+		unifyVersionsBtn.addEventListener("click", async () => {
+			const selectedModel = document.getElementById("roboflow-model-select")?.value || "yolov8-obb";
+			if (!confirm(`¿Unificar todas las imágenes en una nueva versión snapshot en Roboflow (${selectedModel})?`)) return;
+
+			unifyVersionsBtn.disabled = true;
+			progressArea.style.display = "block";
+			progressFill.style.width = "50%";
+			progressTextEl.textContent = "Unificando imágenes y congelando nueva versión en Roboflow...";
+
+			try {
+				const response = await fetch(`${API_URL}/export-roboflow-dataset`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ model_type: selectedModel, version: "new" }),
+				});
+
+				if (!response.ok) {
+					const err = await response.json();
+					throw new Error(err.detail || "Error unificando versiones");
+				}
+
+				const result = await response.json();
+				progressFill.style.width = "100%";
+				progressTextEl.textContent = `✓ Versión unificada v${result.version} creada con éxito`;
+
+				showSnippetModal(result);
+				setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+				checkRoboflow();
+
+			} catch (e) {
+				alert(`Error: ${e.message}`);
+				progressTextEl.textContent = `Error: ${e.message}`;
+			} finally {
+				unifyVersionsBtn.disabled = false;
+			}
+		});
+	}
+
+	// Export dataset for local GPU training
 	trainRoboflowBtn.addEventListener("click", async () => {
-		if (!confirm("¿Iniciar entrenamiento en Roboflow? Esto puede tomar tiempo.")) return;
+		const selectedModel = document.getElementById("roboflow-model-select")?.value || "yolov8";
+		const selectedVersion = document.getElementById("roboflow-version-select")?.value || "new";
+
+		if (!confirm(`¿Generar versión y descargar dataset (${selectedModel}) para entrenar en tu PC?`)) return;
 
 		trainRoboflowBtn.disabled = true;
 		progressArea.style.display = "block";
-		progressFill.style.width = "50%";
-		progressTextEl.textContent = "Iniciando entrenamiento...";
+		progressFill.style.width = "40%";
+		progressTextEl.textContent = "Generando versión y descargando dataset en tu PC...";
 
 		try {
-			const response = await fetch(`${API_URL}/train-roboflow`, {
+			const response = await fetch(`${API_URL}/export-roboflow-dataset`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ model_type: "yolov8" }),
+				body: JSON.stringify({ model_type: selectedModel, version: selectedVersion }),
 			});
 
 			if (!response.ok) {
 				const err = await response.json();
-				throw new Error(err.detail || "Error iniciando entrenamiento");
+				throw new Error(err.detail || "Error descargando dataset");
 			}
 
 			const result = await response.json();
 			progressFill.style.width = "100%";
-			progressTextEl.textContent = `✓ ${result.message}`;
+			progressTextEl.textContent = `✓ Dataset v${result.version} listo en ${result.export_dir}`;
 
-			setTimeout(() => { progressArea.style.display = "none"; }, 8000);
+			showSnippetModal(result);
+			setTimeout(() => { progressArea.style.display = "none"; }, 5000);
 
 		} catch (e) {
 			alert(`Error: ${e.message}`);
@@ -1405,13 +1532,16 @@
 		}
 	});
 
-	// Full Pipeline (Upload Batch + Generate Version + Train YOLO)
+	// Full Pipeline (Upload Batch + Generate Version Snapshot + Export Dataset locally)
 	if (fullPipelineBtn) {
 		fullPipelineBtn.addEventListener("click", async () => {
 			const payload = buildExportPayload();
 			if (payload.length === 0) { alert("No hay anotaciones en el lote para subir."); return; }
 
-			if (!confirm(`¿Subir ${payload.length} imágenes anotadas a Roboflow e iniciar el entrenamiento del modelo YOLOv8?`)) return;
+			const selectedModel = document.getElementById("roboflow-model-select")?.value || "yolov8-obb";
+			const selectedVersion = document.getElementById("roboflow-version-select")?.value || "new";
+
+			if (!confirm(`¿Subir ${payload.length} imágenes a Roboflow, unificar versión y generar código de descarga (${selectedModel})?`)) return;
 
 			fullPipelineBtn.disabled = true;
 			uploadRoboflowBtn.disabled = true;
@@ -1430,8 +1560,10 @@
 				imageStore.forEach((data) => {
 					if (!data.annotated) return;
 					if (payload.find(p => p.image_filename === data.filename)) {
-						formData.append("images", data.file, data.filename);
-						fileCount++;
+						if (data.file) {
+							formData.append("images", data.file, data.filename);
+							fileCount++;
+						}
 					}
 				});
 
@@ -1448,27 +1580,27 @@
 					throw new Error(err.detail || "Error al subir dataset a Roboflow");
 				}
 
-				const uploadRes = await uploadResp.json();
 				progressFill.style.width = "65%";
-				progressTextEl.textContent = `[2/3] Generando versión y preparando entrenamiento YOLOv8...`;
+				progressTextEl.textContent = `[2/3] Unificando versión y generando código de descarga...`;
 
-				// Step 2: Trigger training (which generates version if needed)
-				const trainResp = await fetch(`${API_URL}/train-roboflow`, {
+				// Step 2: Export dataset
+				const exportResp = await fetch(`${API_URL}/export-roboflow-dataset`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ model_type: "yolov8" }),
+					body: JSON.stringify({ model_type: selectedModel, version: selectedVersion }),
 				});
 
-				if (!trainResp.ok) {
-					const err = await trainResp.json();
-					throw new Error(err.detail || "Error iniciando entrenamiento YOLO");
+				if (!exportResp.ok) {
+					const err = await exportResp.json();
+					throw new Error(err.detail || "Error al exportar dataset");
 				}
 
-				const trainRes = await trainResp.json();
+				const exportRes = await exportResp.json();
 				progressFill.style.width = "100%";
-				progressTextEl.textContent = `🎉 ¡Éxito! ${trainRes.message}`;
+				progressTextEl.textContent = `🎉 ¡Éxito! Versión v${exportRes.version} lista`;
 
-				setTimeout(() => { progressArea.style.display = "none"; }, 10000);
+				showSnippetModal(exportRes);
+				setTimeout(() => { progressArea.style.display = "none"; }, 5000);
 
 			} catch (e) {
 				alert(`Error en el pipeline: ${e.message}`);
@@ -1477,6 +1609,43 @@
 				fullPipelineBtn.disabled = false;
 				uploadRoboflowBtn.disabled = false;
 				trainRoboflowBtn.disabled = false;
+			}
+		});
+	}
+
+	// ======================= ROBOFLOW SNIPPET MODAL =======================
+	const snippetModal = document.getElementById("roboflow-snippet-modal");
+	const modalVersionNum = document.getElementById("modal-version-num");
+	const snippetCodeBlock = document.getElementById("snippet-code-block");
+	const modalExportPath = document.getElementById("modal-export-path");
+	const copySnippetBtn = document.getElementById("copy-snippet-btn");
+	const closeModalBtn = document.getElementById("close-modal-btn");
+
+	function showSnippetModal(result) {
+		if (modalVersionNum) modalVersionNum.textContent = result.version;
+		if (snippetCodeBlock) snippetCodeBlock.textContent = result.python_snippet;
+		if (modalExportPath) modalExportPath.textContent = result.export_dir;
+		if (snippetModal) snippetModal.style.display = "flex";
+	}
+
+	if (closeModalBtn) {
+		closeModalBtn.addEventListener("click", () => {
+			if (snippetModal) snippetModal.style.display = "none";
+		});
+	}
+
+	if (snippetModal) {
+		snippetModal.addEventListener("click", (e) => {
+			if (e.target === snippetModal && snippetModal) snippetModal.style.display = "none";
+		});
+	}
+
+	if (copySnippetBtn) {
+		copySnippetBtn.addEventListener("click", () => {
+			if (snippetCodeBlock) {
+				navigator.clipboard.writeText(snippetCodeBlock.textContent);
+				copySnippetBtn.textContent = "✓ ¡Copiado!";
+				setTimeout(() => { copySnippetBtn.textContent = "📋 Copiar Código"; }, 2500);
 			}
 		});
 	}
@@ -1496,7 +1665,37 @@
 					<span>Conectado: <strong>${data.workspace}</strong> / ${data.project?.name || data.project?.id || ""}</span>
 				`;
 				uploadRoboflowBtn.disabled = false;
+				if (unifyVersionsBtn) unifyVersionsBtn.disabled = false;
 				trainRoboflowBtn.disabled = false;
+
+				// Fetch versions and supported model architectures
+				try {
+					const modelsResp = await fetch(`${API_URL}/roboflow-models`);
+					if (modelsResp.ok) {
+						const modelsData = await modelsResp.json();
+						const versionSelect = document.getElementById("roboflow-version-select");
+						const modelSelect = document.getElementById("roboflow-model-select");
+
+						if (versionSelect && modelsData.versions && modelsData.versions.length > 0) {
+							const nextVer = modelsData.versions.length + 1;
+							let html = `<option value="new">⚡ UNIFICAR TODAS LAS IMÁGENES (Nueva Versión v${nextVer})</option>`;
+							modelsData.versions.forEach(v => {
+								html += `<option value="${v.version}">${v.name} (Existente)</option>`;
+							});
+							versionSelect.innerHTML = html;
+						}
+
+						if (modelSelect && modelsData.supported_models && modelsData.supported_models.length > 0) {
+							let mHtml = "";
+							modelsData.supported_models.forEach(m => {
+								mHtml += `<option value="${m.id}">${m.name}</option>`;
+							});
+							modelSelect.innerHTML = mHtml;
+						}
+					}
+				} catch (me) {
+					console.warn("No se pudieron consultar modelos/versiones de Roboflow:", me);
+				}
 			} else {
 				roboflowStatus.innerHTML = `
 					<span class="status-dot error"></span>

@@ -22,6 +22,9 @@ import cv2
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
+from contextlib import asynccontextmanager
+from typing import List, Dict, Any, AsyncGenerator
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sam3-backend")
@@ -37,15 +40,48 @@ except ImportError as e:
 # Import Roboflow integration
 from roboflow_integration import (
     check_connection as rf_check_connection,
+    get_roboflow_models_and_versions,
     build_coco_json,
     build_multi_image_coco,
     upload_dataset_to_roboflow,
     trigger_training,
+    export_dataset_version,
 )
+
+# Global variables for model and processor
+processor = None
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global processor
+    logger.info("Initializing SAM 3 model...")
+    start_time = time.time()
+
+    # Enable bfloat16 autocast globally, as recommended by the official SAM3 notebooks
+    torch.autocast(device_type=device, dtype=torch.bfloat16).__enter__()
+    torch.inference_mode().__enter__()
+
+    try:
+        model = build_sam3_image_model(device=device)
+        # Very low internal threshold so processor returns all detections
+        processor = Sam3Processor(model, device=device, confidence_threshold=0.01)
+        logger.info(f"SAM 3 loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
+    except Exception as e:
+        logger.error(f"Failed to load SAM 3 model: {e}")
+        processor = None
+
+    yield
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
 
 app = FastAPI(
     title="SAM 3 Histological & Universal Segmenter API",
-    description="Backend for Segment Anything Model v3 automated cell & structure segmentation with Roboflow integration"
+    description="Backend for Segment Anything Model v3 automated cell & structure segmentation with Roboflow integration",
+    lifespan=lifespan,
 )
 
 # Enable CORS for frontend communication (Astro usually runs on 4321)
@@ -56,10 +92,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global variables for model and processor
-processor = None
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Universal prompts for automatic image partition & segmentation (works for general photos & histology).
 # The user receives pure generic classes (Clase 1, Clase 2...) without domain identification.
@@ -77,25 +109,6 @@ AUTO_SEGMENT_PROMPTS = [
 ]
 
 MAX_INFERENCE_DIM = 1440  # Max dimension for SAM3 inference interpolation to prevent VRAM OOM
-
-@app.on_event("startup")
-def load_model() -> None:
-    global processor
-    logger.info("Initializing SAM 3 model...")
-    start_time = time.time()
-
-    # Enable bfloat16 autocast globally, as recommended by the official SAM3 notebooks
-    torch.autocast(device_type=device, dtype=torch.bfloat16).__enter__()
-    torch.inference_mode().__enter__()
-
-    try:
-        model = build_sam3_image_model(device=device)
-        # Very low internal threshold so processor returns all detections
-        processor = Sam3Processor(model, device=device, confidence_threshold=0.01)
-        logger.info(f"SAM 3 loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
-    except Exception as e:
-        logger.error(f"Failed to load SAM 3 model: {e}")
-        processor = None
 
 def clean_value(val: Any) -> Any:
     """Helper to convert tensors/arrays/scalars to standard Python serializable types."""
@@ -420,8 +433,8 @@ async def export_coco(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
 
 @app.post("/api/upload-roboflow")
 async def upload_roboflow(
-    annotations: str = Form(...),
-    images: List[UploadFile] = File(...)
+    annotations: str = Form(default=""),
+    images: List[UploadFile] = File(default=[])
 ) -> Dict[str, Any]:
     """
     Upload annotated images to Roboflow.
@@ -429,40 +442,78 @@ async def upload_roboflow(
     - annotations: JSON string with the multi-image annotation payload
     - images: list of image files
     """
+    logger.info(f"Received upload-roboflow request: {len(images)} files attached, annotations len={len(annotations)}")
+
+    if not annotations or not annotations.strip():
+        logger.error("Upload error: annotations payload is empty")
+        raise HTTPException(status_code=400, detail="El campo de anotaciones ('annotations') está vacío.")
+
     try:
         annotations_data = json.loads(annotations)
-        images_list = annotations_data.get("images", [annotations_data])
+        if isinstance(annotations_data, dict):
+            images_list = annotations_data.get("images", [annotations_data])
+        else:
+            images_list = annotations_data
 
         # Read image files
         image_files = {}
         for img_file in images:
-            img_bytes = await img_file.read()
-            image_files[img_file.filename] = img_bytes
+            if img_file and img_file.filename:
+                img_bytes = await img_file.read()
+                if len(img_bytes) > 0:
+                    image_files[img_file.filename] = img_bytes
+
+        logger.info(f"Read {len(image_files)} image files from upload payload.")
 
         result = upload_dataset_to_roboflow(images_list, image_files)
 
-        if result["success"]:
+        if result.get("success"):
             return result
         else:
-            raise HTTPException(status_code=500, detail=result.get("error", "Upload failed"))
+            err_msg = result.get("error", "Upload failed")
+            logger.error(f"Roboflow upload failed: {err_msg}")
+            raise HTTPException(status_code=500, detail=err_msg)
 
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON in annotations: {e}")
+        logger.error(f"JSONDecodeError in upload_roboflow: {e}")
+        raise HTTPException(status_code=400, detail=f"JSON de anotaciones inválido: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Upload error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/roboflow-models")
+def roboflow_models() -> Dict[str, Any]:
+    """Get available dataset versions and supported model architectures from Roboflow."""
+    return get_roboflow_models_and_versions()
+
+
 @app.post("/api/train-roboflow")
 async def train_roboflow(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Trigger model training on Roboflow."""
+    """Trigger model training on Roboflow for specified model_type and dataset version."""
     model_type = payload.get("model_type", "yolov8")
-    result = trigger_training(model_type=model_type)
+    version = payload.get("version", None)
+    result = trigger_training(model_type=model_type, version=version)
 
-    if result["success"]:
+    if result.get("success"):
         return result
     else:
         raise HTTPException(status_code=500, detail=result.get("error", "Training trigger failed"))
+
+
+@app.post("/api/export-roboflow-dataset")
+async def export_roboflow_dataset(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
+    """Generate version snapshot in Roboflow and download dataset locally for GPU training on PC."""
+    model_format = payload.get("model_type", "yolov8")
+    version = payload.get("version", None)
+    result = export_dataset_version(model_format=model_format, version=version)
+
+    if result.get("success"):
+        return result
+    else:
+        raise HTTPException(status_code=500, detail=result.get("error", "Export failed"))
 
 
 if __name__ == "__main__":

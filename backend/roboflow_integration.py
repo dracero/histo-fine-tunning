@@ -35,15 +35,68 @@ def _get_rf():
     return roboflow.Roboflow(api_key=ROBOFLOW_API_KEY)
 
 
+def _get_rf_project() -> Any:
+    """
+    Get or create the Roboflow project instance.
+    Resolves project names (e.g. 'agent') to their actual Roboflow URL slug (e.g. 'agent-m51wr').
+    """
+    import requests
+    rf = _get_rf()
+    workspace = rf.workspace(ROBOFLOW_WORKSPACE)
+    target = ROBOFLOW_PROJECT.strip()
+
+    # Query workspace projects list to find real slug
+    try:
+        url = f"https://api.roboflow.com/{ROBOFLOW_WORKSPACE}?api_key={ROBOFLOW_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            projects = resp.json().get("workspace", {}).get("projects", [])
+            for p_info in projects:
+                p_id = str(p_info.get("id", ""))
+                p_slug = p_id.rsplit("/", 1)[-1]
+                p_name = str(p_info.get("name", ""))
+                if target in (p_id, p_slug, p_name):
+                    logger.info(f"Resolved Roboflow project target '{target}' to slug '{p_slug}'")
+                    return workspace.project(p_slug)
+    except Exception as e:
+        logger.warning(f"Could not resolve Roboflow project slug dynamically: {e}")
+
+    # Fallback to direct lookup or create project if it does not exist
+    try:
+        return workspace.project(target)
+    except Exception:
+        logger.info(f"Creating new Roboflow project '{target}' in workspace '{ROBOFLOW_WORKSPACE}'...")
+        return workspace.create_project(
+            project_name=target,
+            project_type="object-detection",
+            project_license="MIT",
+            annotation="cells",
+        )
+
+
+SUPPORTED_MODEL_TYPES = [
+    {"id": "yolov8-obb", "name": "YOLOv8-OBB (Oriented Bounding Boxes)"},
+    {"id": "yolov8", "name": "YOLOv8 PyTorch / Ultralytics"},
+    {"id": "yolov11", "name": "YOLOv11 PyTorch"},
+    {"id": "yolov9", "name": "YOLOv9 PyTorch"},
+    {"id": "yolov7", "name": "YOLOv7 PyTorch"},
+    {"id": "yolov5", "name": "YOLOv5 PyTorch"},
+    {"id": "coco", "name": "COCO JSON Format"},
+    {"id": "coco-segmentation", "name": "COCO Instance Segmentation"},
+    {"id": "pascal_voc", "name": "Pascal VOC XML"},
+    {"id": "yolact", "name": "YOLACT Segmentation"},
+    {"id": "tfrecord", "name": "TensorFlow TFRecord"},
+    {"id": "coreml", "name": "Apple CoreML"},
+]
+
+
 def check_connection() -> Dict[str, Any]:
     """Verify Roboflow connectivity and return workspace/project info."""
     if not ROBOFLOW_API_KEY:
         return {"connected": False, "error": "ROBOFLOW_API_KEY not set in .env"}
 
     try:
-        rf = _get_rf()
-        ws = rf.workspace(ROBOFLOW_WORKSPACE)
-        project = ws.project(ROBOFLOW_PROJECT)
+        project = _get_rf_project()
         return {
             "connected": True,
             "workspace": ROBOFLOW_WORKSPACE,
@@ -56,6 +109,50 @@ def check_connection() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Roboflow connection failed: {e}")
         return {"connected": False, "error": str(e)}
+
+
+def get_roboflow_models_and_versions() -> Dict[str, Any]:
+    """Retrieve available Roboflow project dataset versions and supported model architectures."""
+    if not ROBOFLOW_API_KEY:
+        return {
+            "connected": False,
+            "error": "ROBOFLOW_API_KEY no configurada en .env",
+            "versions": [],
+            "supported_models": SUPPORTED_MODEL_TYPES,
+        }
+
+    try:
+        project = _get_rf_project()
+
+        versions_info = []
+        try:
+            versions = project.versions()
+            for v in versions:
+                v_num = str(getattr(v, "version", v))
+                v_id = getattr(v, "id", f"{project.id}/{v_num}")
+                versions_info.append({
+                    "version": v_num,
+                    "id": v_id,
+                    "name": f"Versión {v_num}",
+                })
+        except Exception as ve:
+            logger.warning(f"Could not list project versions: {ve}")
+
+        return {
+            "connected": True,
+            "project_id": project.id,
+            "project_name": project.name,
+            "versions": versions_info,
+            "supported_models": SUPPORTED_MODEL_TYPES,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching Roboflow models/versions: {e}")
+        return {
+            "connected": False,
+            "error": str(e),
+            "versions": [],
+            "supported_models": SUPPORTED_MODEL_TYPES,
+        }
 
 
 def build_coco_json(annotations_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -206,7 +303,7 @@ def upload_dataset_to_roboflow(
     image_files: Dict[str, bytes],
 ) -> Dict[str, Any]:
     """
-    Upload a set of annotated images to Roboflow.
+    Upload a set of annotated images to Roboflow using project.upload().
 
     Args:
         images_data: list of annotation payloads (one per image)
@@ -215,93 +312,126 @@ def upload_dataset_to_roboflow(
     if not ROBOFLOW_API_KEY:
         return {"success": False, "error": "ROBOFLOW_API_KEY not set"}
 
+    tmp_dir = None
     try:
-        # Create temporary directory with COCO structure
         tmp_dir = tempfile.mkdtemp(prefix="sam3_roboflow_")
-        train_dir = os.path.join(tmp_dir, "train")
-        os.makedirs(train_dir, exist_ok=True)
+        project = _get_rf_project()
 
-        # Save image files
-        for filename, img_bytes in image_files.items():
-            filepath = os.path.join(train_dir, filename)
-            with open(filepath, "wb") as f:
+        uploaded_count = 0
+        total_annotations = 0
+
+        # Process and upload each image
+        for img_data in images_data:
+            filename = img_data.get("image_filename", "")
+            if not filename or filename not in image_files:
+                # Try finding matching file by basename if full path differs
+                base = os.path.basename(filename)
+                matching_file = next((k for k in image_files.keys() if os.path.basename(k) == base), None)
+                if matching_file:
+                    filename = matching_file
+                elif image_files:
+                    # Fallback to first available file if only 1 image in batch
+                    filename = list(image_files.keys())[0]
+                else:
+                    logger.warning(f"Image file {filename} not provided in payload, skipping.")
+                    continue
+
+            img_bytes = image_files[filename]
+            clean_name = os.path.basename(filename)
+            img_path = os.path.join(tmp_dir, clean_name)
+            with open(img_path, "wb") as f:
                 f.write(img_bytes)
 
-        # Build and save COCO JSON
-        coco_json = build_multi_image_coco(images_data)
-        coco_path = os.path.join(train_dir, "_annotations.coco.json")
-        with open(coco_path, "w") as f:
-            json.dump(coco_json, f, indent=2)
+            # Build single-image COCO JSON
+            coco_dict = build_coco_json(img_data)
+            ann_path = os.path.join(tmp_dir, f"{clean_name}.json")
+            with open(ann_path, "w") as f:
+                json.dump(coco_dict, f, indent=2)
 
-        logger.info(f"Prepared dataset at {tmp_dir}: {len(image_files)} images, {len(coco_json['annotations'])} annotations")
+            logger.info(f"Uploading {clean_name} to Roboflow ({len(coco_dict.get('annotations', []))} annotations)...")
 
-        # Upload via Roboflow SDK
-        rf = _get_rf()
-        project = rf.workspace(ROBOFLOW_WORKSPACE).project(ROBOFLOW_PROJECT)
+            # Upload via official Roboflow project.upload method
+            project.upload(
+                image_path=img_path,
+                annotation_path=ann_path,
+                split="train",
+                num_retry_uploads=3,
+            )
 
-        project.upload_dataset(
-            dataset_path=tmp_dir,
-            num_workers=4,
-            dataset_format="coco",
-            project_license="MIT",
-            project_type="instance-segmentation",
-        )
+            uploaded_count += 1
+            total_annotations += len(coco_dict.get("annotations", []))
 
-        # Cleanup
+        # Cleanup temporary files
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
         return {
             "success": True,
-            "images_uploaded": len(image_files),
-            "annotations_uploaded": len(coco_json["annotations"]),
-            "categories": len(coco_json["categories"]),
+            "images_uploaded": uploaded_count,
+            "annotations_uploaded": total_annotations,
         }
 
     except Exception as e:
         logger.error(f"Upload to Roboflow failed: {e}", exc_info=True)
-        # Cleanup on error
-        if 'tmp_dir' in locals():
+        if tmp_dir and os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir, ignore_errors=True)
         return {"success": False, "error": str(e)}
 
 
-def trigger_training(model_type: str = "yolov8", auto_generate_version: bool = True) -> Dict[str, Any]:
-    """Trigger model training on Roboflow (generates a version automatically if needed)."""
+def trigger_training(model_type: str = "yolov8", version: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Trigger model training on Roboflow for a specified model architecture and dataset version.
+
+    If version is provided (e.g. "1"), trains that specific version.
+    If version is None or "new", generates a new expanded dataset version.
+    """
     if not ROBOFLOW_API_KEY:
         return {"success": False, "error": "ROBOFLOW_API_KEY no configurada en .env"}
 
     try:
-        rf = _get_rf()
-        project = rf.workspace(ROBOFLOW_WORKSPACE).project(ROBOFLOW_PROJECT)
-
-        versions = []
-        try:
-            versions = project.versions()
-        except Exception as ve:
-            logger.warning(f"Could not fetch existing versions: {ve}")
+        project = _get_rf_project()
 
         version_obj = None
-        if not versions:
-            if auto_generate_version:
-                logger.info("No dataset versions found. Generating a new dataset version in Roboflow...")
-                settings = {
-                    "preprocessing": {
-                        "auto-orient": {"enabled": True},
-                        "resize": {"width": 640, "height": 640, "format": "stretch"}
-                    },
-                    "augmentation": {}
-                }
-                try:
-                    version_obj = project.generate_version(settings=settings)
-                except Exception as ge:
-                    logger.error(f"Failed to generate version: {ge}")
-                    return {"success": False, "error": f"No se pudo generar la versión del dataset: {str(ge)}"}
-            else:
-                return {"success": False, "error": "No hay versiones de dataset generadas en Roboflow. Genera una primero."}
-        else:
-            version_obj = versions[-1]
+        settings = {
+            "preprocessing": {
+                "auto-orient": True,
+                "resize": {"width": 640, "height": 640, "format": "Stretch to"}
+            },
+            "augmentation": {}
+        }
 
-        # Trigger train
+        if version and version not in ("new", "auto", "latest"):
+            logger.info(f"Targeting specified Roboflow version: {version}")
+            try:
+                version_obj = project.version(version)
+            except Exception as ve:
+                logger.warning(f"Could not fetch version {version} directly: {ve}")
+                versions = project.versions()
+                for v in versions:
+                    if str(getattr(v, "version", "")) == str(version):
+                        version_obj = v
+                        break
+            if not version_obj:
+                return {"success": False, "error": f"La versión '{version}' no existe en Roboflow."}
+        else:
+            logger.info("Generating a new expanded dataset version in Roboflow...")
+            try:
+                version_obj = project.generate_version(settings=settings)
+            except Exception as ge:
+                logger.warning(f"Could not generate new version, trying latest version: {ge}")
+                try:
+                    versions = project.versions()
+                    if versions:
+                        version_obj = versions[-1]
+                except Exception:
+                    return {"success": False, "error": f"Error al acceder a versiones de Roboflow: {str(ge)}"}
+
+        # Ensure version_obj is a Version instance with .train() method
+        if not hasattr(version_obj, "train"):
+            v_str = str(version_obj)
+            logger.info(f"Resolving Version object for version string '{v_str}'...")
+            version_obj = project.version(v_str)
+
+        # Trigger training on the target version
         version_obj.train(model_type=model_type)
 
         version_num = getattr(version_obj, "version", str(version_obj))
@@ -309,10 +439,93 @@ def trigger_training(model_type: str = "yolov8", auto_generate_version: bool = T
             "success": True,
             "version": version_num,
             "model_type": model_type,
-            "message": f"Entrenamiento YOLO ({model_type}) iniciado en Roboflow para la Versión {version_num}.",
+            "message": f"Entrenamiento ({model_type}) iniciado con éxito en Roboflow para la versión {version_num}.",
         }
 
     except Exception as e:
         logger.error(f"Training trigger failed: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
 
+
+def export_dataset_version(
+    model_format: str = "yolov8",
+    version: Optional[str] = None,
+    download_local: bool = True,
+) -> Dict[str, Any]:
+    """
+    Generate/freeze a Roboflow dataset version snapshot and download it locally
+    for local training on GPU without requiring Roboflow cloud training credits.
+    """
+    if not ROBOFLOW_API_KEY:
+        return {"success": False, "error": "ROBOFLOW_API_KEY no configurada en .env"}
+
+    try:
+        project = _get_rf_project()
+        version_obj = None
+
+        settings = {
+            "preprocessing": {
+                "auto-orient": True,
+                "resize": {"width": 640, "height": 640, "format": "Stretch to"}
+            },
+            "augmentation": {}
+        }
+
+        if version and version not in ("new", "auto", "latest"):
+            logger.info(f"Obteniendo versión existente {version} de Roboflow...")
+            v_str = str(version)
+            version_obj = project.version(v_str)
+        else:
+            logger.info("Generando nueva versión congelada del dataset en Roboflow...")
+            res = project.generate_version(settings=settings)
+            v_str = str(res)
+            version_obj = project.version(v_str)
+
+        version_num = getattr(version_obj, "version", str(version_obj))
+
+        # Extract workspace name and real project slug
+        workspace_name = ROBOFLOW_WORKSPACE
+        project_slug = getattr(project, "id", f"{workspace_name}/{ROBOFLOW_PROJECT}").rsplit("/", 1)[-1]
+
+        # Generate exact python snippet requested by user
+        key_var = "api_key"
+        python_snippet = (
+            f"!pip install roboflow\n\n"
+            f"from roboflow import Roboflow\n\n"
+            f'rf = Roboflow({key_var}="{ROBOFLOW_API_KEY}")\n'
+            f'project = rf.workspace("{workspace_name}").project("{project_slug}")\n'
+            f"version = project.version({version_num})\n"
+            f'dataset = version.download("{model_format}")'
+        )
+
+        export_dir = os.path.abspath(os.path.join("datasets", f"roboflow_v{version_num}_{model_format}"))
+
+        if download_local:
+            try:
+                os.makedirs(export_dir, exist_ok=True)
+                logger.info(f"Descargando versión {version_num} ({model_format}) en {export_dir}...")
+                dl_res = version_obj.download(model_format=model_format, location=export_dir, overwrite=True)
+                export_dir = dl_res.location
+            except Exception as dle:
+                logger.warning(f"Could not download dataset locally: {dle}")
+
+        data_yaml_path = os.path.join(export_dir, "data.yaml")
+        cli_command = f"yolo task=detect mode=train model={model_format}n.pt data={data_yaml_path} epochs=50 device=0"
+
+        return {
+            "success": True,
+            "version": version_num,
+            "model_format": model_format,
+            "workspace": workspace_name,
+            "project_slug": project_slug,
+            "api_key": ROBOFLOW_API_KEY,
+            "export_dir": export_dir,
+            "data_yaml": data_yaml_path if os.path.exists(data_yaml_path) else export_dir,
+            "cli_command": cli_command,
+            "python_snippet": python_snippet,
+            "message": f"Versión unificada v{version_num} generada con éxito.",
+        }
+
+    except Exception as e:
+        logger.error(f"Error exporting dataset version: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}

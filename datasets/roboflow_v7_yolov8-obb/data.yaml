@@ -1,0 +1,10 @@
+train: train/images
+val: valid/images
+test: test/images
+
+names: 
+  0: Clase 1
+  1: Clase 10
+  2: Clase 7
+  3: Clase 8
+  4: Clase 9

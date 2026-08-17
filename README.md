@@ -57,6 +57,70 @@ Meta_SAM_V3/
 
 ---
 
+## 📐 Arquitectura, Patrones de Diseño y Complejidad
+
+### 🧩 1. Patrones de Diseño Aplicados
+
+- **Singleton / Resource Holder (Carga Única del Modelo)**:
+  - En `backend/main.py` ([main.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/main.py#L56-L75)), el modelo SAM 3 (`build_sam3_image_model`) y su procesador (`Sam3Processor`) se instancian una sola vez durante el evento de inicio (`lifespan`) de FastAPI y se mantienen residentes globalmente en VRAM. Esto evita la penalización severa de recargar el modelo de varios GB en cada petición HTTP.
+
+- **Multi-Prompt Visual Strategy (Estrategia de Prompting en Cascada)**:
+  - Definición de una tabla de estrategias de prompts universales (`AUTO_SEGMENT_PROMPTS` en `backend/main.py`) que ejecutan de forma secuencial descripciones geométricas y biológicas (*"cell or nucleus"*, *"elongated dark nucleus"*, *"circular tissue structure"*, etc.) sobre una misma imagen para lograr la partición y segmentación automática multi-clase sin requerir pre-etiquetado manual.
+
+- **State Pattern / In-Memory Store (Frontend)**:
+  - En `frontend/src/pages/index.astro`, se implementa una tienda centralizada en memoria mediante JavaScript `Map` (`imageStore`). Almacena los metadatos, archivos base, dimensiones y grupos de detecciones de cada imagen subida, permitiendo cambios reactivos instantáneos de imagen activa, clases y selección sin persistencia redundante en servidor.
+
+- **Factory Method**:
+  - `build_coco_json` y `build_multi_image_coco` en `backend/roboflow_integration.py` ([roboflow_integration.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/roboflow_integration.py#L158-L298)) encapsulan la construcción dinámica de payloads estructurados en formato estándar COCO Dataset (categorías, imágenes, bounding boxes y polígonos `segmentation`), permitiendo exportación individual o en lote.
+
+- **Facade / Adapter Pattern**:
+  - El módulo `roboflow_integration.py` actúa como fachada entre la API REST/UI y los servicios remotos de Roboflow. Oculta la complejidad del SDK de Roboflow, gestionando la resolución dinámica de slugs de proyectos, la subida multipart de imágenes con JSON de anotación, el versionado del dataset y el disparo de entrenamientos remotos.
+
+- **Decoupled Vector Layer Overlay (Capa de Renderizado Vectorial)**:
+  - En la interfaz web (`index.astro`), la visualización de la imagen base (`<img>`) está desglosada de la capa vectorial SVG (`<svg viewBox>`). Las modificaciones de umbral de confianza, visibilidad de clase o selección múltiple interactúan con el DOM SVG en tiempo real sin requerir renderizados en Canvas rasterizado ni re-descarga de imágenes.
+
+---
+
+### ⏱️ 2. Controles de Complejidad Temporal (Time Complexity)
+
+- **Caché de Embeddings Visuales en SAM 3 (\(O(1)\) para prompts secundarios)**:
+  - `processor.set_image(inf_image)` en `backend/main.py` procesa el Vision Transformer (ViT) de SAM 3 sobre la imagen **una única vez**. 
+  - Las consultas consecutivas de la suite multi-prompt ejecutan `reset_all_prompts` y `set_text_prompt`, reutilizando las características visuales extraídas previamente. Esto reduce la complejidad temporal de prompts adicionales de \(O(\text{ViT Backbone Heavy Forward})\) a \(O(\text{Text Encoder} + \text{Cross-Attention})\), acelerando la inferencia multi-clase de segundos a milisegundos por prompt.
+
+- **Filtrado de Umbral en Tiempo Real en Cliente (\(O(N)\) local vs. \(O(\text{Inferencia HTTP})\))**:
+  - El backend retorna todas las detecciones candidatas a un umbral bajo (0.01). El frontend almacena las \(N\) detecciones en memoria y aplica filtrado instantáneo al mover el slider de confianza mediante iteración lineal simple (\(O(N)\) en JavaScript). Esto elimina la latencia de red y evita re-ejecutar la inferencia del modelo PyTorch.
+
+- **Simplificación Poligonal Ramer-Douglas-Peucker (\(O(P_{\text{denso}}) \to O(P_{\text{aprox}})\))**:
+  - Uso de `cv2.approxPolyDP` en `mask_to_polygons` ([main.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/main.py#L124-L171)) con tolerancia `epsilon=1.5`. Reduce el número de vértices de los contornos extraídos de miles de píxeles contiguos (\(O(P_{\text{denso}})\)) a listas compactas de 10-30 puntos (\(O(P_{\text{aprox}})\)). Esto acelera drásticamente el renderizado SVG en el cliente, la serialización JSON y la velocidad de transferencia HTTP.
+
+- **Estructuras de Datos con Búsqueda en Tiempo Constante (\(O(1)\))**:
+  - Uso intensivo de `Set` (`selectedDetections`, `hiddenCategories`) y `Map` (`imageStore`) en el cliente para operaciones de adición, borrado y verificación de visibilidad/selección en \(O(1)\) sin recorridos de arreglos \(O(N)\).
+  - Deduplicación de categorías en COCO mediante búsquedas por llave en diccionarios Python (\(O(1)\)).
+
+---
+
+### 💾 3. Controles de Complejidad Espacial y Optimización VRAM (Space Complexity)
+
+- **Redimensionamiento Controlado para Inferencia (`MAX_INFERENCE_DIM = 1440`)**:
+  - En `_prepare_image_for_inference` ([main.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/main.py#L234-L255)), las imágenes gigapíxel o de alta resolución se redimensionan proporcionalmente a un máximo de 1440px antes de pasar a la red neuronal.
+  - Mantiene el consumo espacial de memoria VRAM acotado en \(O(\text{MAX\_DIM}^2)\) en lugar de escalar cuadráticamente con resoluciones arbitrarias del usuario (\(O(W \times H)\)), evitando errores de Out-Of-Memory (OOM) en la GPU. Las coordenadas de detecciones se reescalan linealmente (`scale_x`, `scale_y`) a las dimensiones originales sin pérdida de precisión.
+
+- **Gestión de Segmentos de Memoria CUDA (`PYTORCH_CUDA_ALLOC_CONF`)**:
+  - Configuración inicial `os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"` para prevenir la fragmentación de memoria en la VRAM de la GPU (ej. NVIDIA RTX 3060) durante múltiples peticiones consecutivas.
+
+- **Inferencia en Precisión Mixta (`bfloat16` + `torch.inference_mode()`)**:
+  - **`torch.bfloat16`**: Reduce en un 50% el espacio ocupado por tensores y mapas de activación en VRAM en comparación con `float32`.
+  - **`torch.inference_mode()`**: Inhabilitación total del rastreo del grafo de autograd y gradientes de PyTorch, fijando la complejidad espacial del pase forward en estricto \(O(1)\) respecto a la memoria retenida.
+
+- **Liberación Activa de Caché VRAM (`torch.cuda.empty_cache()`)**:
+  - Invocación explícita de `torch.cuda.empty_cache()` al finalizar cada endpoint de inferencia (`/api/segment-auto`, `/api/segment-point`) y en el apagado del servidor (`lifespan`), previniendo fugas de memoria en la GPU.
+
+- **Stream en Memoria y Limpieza de Disco**:
+  - Procesamiento de archivos de imagen vía `io.BytesIO` sin persistencia temporal redundante en disco durante las llamadas a la API.
+  - Creación de directorios aislados con `tempfile.mkdtemp` para la subida a Roboflow, asegurando la eliminación garantizada mediante `shutil.rmtree` en bloques `try...finally`.
+
+---
+
 ## 🛠️ Requisitos Previos
 
 1. **Python**: Version 3.10 o 3.12 con soporte PyTorch y CUDA (GPU recomendada para SAM 3).

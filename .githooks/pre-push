@@ -1,0 +1,21 @@
+#!/bin/bash
+# Pre-push git hook enforcing AGENTS.md rules before code reaches GitHub
+
+echo "---------------------------------------------------"
+echo " Running AGENTS.md Pre-Push Compliance Check..."
+echo "---------------------------------------------------"
+
+# Run the auditor script
+python3 scripts/agents_audit.py
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo ""
+    echo "❌ Git Push Aborted! Code violates rules in .agents/AGENTS.md."
+    echo "Please fix the error(s) above before pushing to GitHub."
+    exit 1
+fi
+
+echo "✅ Pre-push audit passed. Proceeding with push."
+exit 0

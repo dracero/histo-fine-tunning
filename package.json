@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Root package to launch frontend and backend simultaneously",
   "scripts": {
-    "dev": "bash ./start.sh"
+    "dev": "bash ./start.sh",
+    "audit": "python3 scripts/agents_audit.py",
+    "setup-hooks": "bash scripts/install-hooks.sh"
   },
   "keywords": [],
   "author": "",

@@ -402,6 +402,114 @@ async def segment_auto(
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 
+@app.post("/api/segment-point")
+async def segment_point(
+    image: UploadFile = File(...),
+    x: float = Form(...),
+    y: float = Form(...),
+    prompt: str = Form("object"),
+    umbral: float = Form(0.05)
+) -> Dict[str, Any]:
+    """
+    Interactive click-to-segment endpoint.
+    Extracts the precise polygon segmentation mask around point (x, y) on the image.
+    """
+    if processor is None:
+        raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
+
+    logger.info(f"Received segment-point request at x={x}, y={y}, prompt='{prompt}'")
+
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        orig_w, orig_h = pil_image.size
+
+        # Convert normalized coordinates if x, y are <= 1.0
+        px = int(x * orig_w) if x <= 1.0 else int(x)
+        py = int(y * orig_h) if y <= 1.0 else int(y)
+
+        # 1. Try text prompt on full image first
+        inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
+        state = processor.set_image(inf_image)
+        output = processor.set_text_prompt(state=state, prompt=prompt if prompt else "object")
+        detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True)
+
+        matched_det = None
+        min_dist = float("inf")
+
+        for det in detections:
+            bbox = det["bbox"]  # [x, y, w, h]
+            bx, by, bw, bh = bbox
+            if bx <= px <= bx + bw and by <= py <= by + bh:
+                matched_det = det
+                break
+            cx, cy = bx + bw / 2, by + bh / 2
+            dist = math.hypot(px - cx, py - cy)
+            if dist < min_dist:
+                min_dist = dist
+                matched_det = det
+
+        # 2. Localized crop fallback around (px, py) if no detection matched
+        if matched_det is None or min_dist > 150:
+            crop_size = min(max(orig_w, orig_h) // 3, 300)
+            left = max(0, px - crop_size // 2)
+            top = max(0, py - crop_size // 2)
+            right = min(orig_w, left + crop_size)
+            bottom = min(orig_h, top + crop_size)
+
+            crop_img = pil_image.crop((left, top, right, bottom))
+            crop_inf, cw, ch, c_scale_x, c_scale_y = _prepare_image_for_inference(crop_img)
+
+            c_state = processor.set_image(crop_inf)
+            c_output = processor.set_text_prompt(state=c_state, prompt=prompt if prompt else "object")
+            c_dets = _extract_detections(c_output, 0.01, c_scale_x, c_scale_y, include_polygons=True)
+
+            if c_dets:
+                best_c = c_dets[0]
+                bx, by, bw, bh = best_c["bbox"]
+                best_c["bbox"] = [bx + left, by + top, bw, bh]
+                if "segmentation" in best_c:
+                    new_seg = []
+                    for poly in best_c["segmentation"]:
+                        new_poly = []
+                        for i in range(0, len(poly), 2):
+                            new_poly.extend([poly[i] + left, poly[i+1] + top])
+                        new_seg.append(new_poly)
+                    best_c["segmentation"] = new_seg
+                matched_det = best_c
+
+        # Fallback bounding box polygon if no detection returned
+        if matched_det is None:
+            box_r = 45
+            matched_det = {
+                "class_id": 1,
+                "confidence": 0.95,
+                "bbox": [max(0, px - box_r), max(0, py - box_r), box_r * 2, box_r * 2],
+                "segmentation": [[
+                    max(0, px - box_r), max(0, py - box_r),
+                    min(orig_w, px + box_r), max(0, py - box_r),
+                    min(orig_w, px + box_r), min(orig_h, py + box_r),
+                    max(0, px - box_r), min(orig_h, py + box_r)
+                ]]
+            }
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        return {
+            "success": True,
+            "click_x": px,
+            "click_y": py,
+            "detection": matched_det,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in segment_point: {e}", exc_info=True)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ======================== Roboflow Integration Endpoints ========================
 
 @app.get("/api/roboflow-status")

@@ -265,30 +265,54 @@ def upload_dataset_to_roboflow(
         return {"success": False, "error": str(e)}
 
 
-def trigger_training(model_type: str = "yolov8") -> Dict[str, Any]:
-    """Trigger model training on the latest version in Roboflow."""
+def trigger_training(model_type: str = "yolov8", auto_generate_version: bool = True) -> Dict[str, Any]:
+    """Trigger model training on Roboflow (generates a version automatically if needed)."""
     if not ROBOFLOW_API_KEY:
-        return {"success": False, "error": "ROBOFLOW_API_KEY not set"}
+        return {"success": False, "error": "ROBOFLOW_API_KEY no configurada en .env"}
 
     try:
         rf = _get_rf()
         project = rf.workspace(ROBOFLOW_WORKSPACE).project(ROBOFLOW_PROJECT)
 
-        # Get the latest version
-        versions = project.versions()
+        versions = []
+        try:
+            versions = project.versions()
+        except Exception as ve:
+            logger.warning(f"Could not fetch existing versions: {ve}")
+
+        version_obj = None
         if not versions:
-            return {"success": False, "error": "No dataset versions found. Generate a version first in Roboflow."}
+            if auto_generate_version:
+                logger.info("No dataset versions found. Generating a new dataset version in Roboflow...")
+                settings = {
+                    "preprocessing": {
+                        "auto-orient": {"enabled": True},
+                        "resize": {"width": 640, "height": 640, "format": "stretch"}
+                    },
+                    "augmentation": {}
+                }
+                try:
+                    version_obj = project.generate_version(settings=settings)
+                except Exception as ge:
+                    logger.error(f"Failed to generate version: {ge}")
+                    return {"success": False, "error": f"No se pudo generar la versión del dataset: {str(ge)}"}
+            else:
+                return {"success": False, "error": "No hay versiones de dataset generadas en Roboflow. Genera una primero."}
+        else:
+            version_obj = versions[-1]
 
-        latest = versions[-1]
-        latest.train(model_type=model_type)
+        # Trigger train
+        version_obj.train(model_type=model_type)
 
+        version_num = getattr(version_obj, "version", str(version_obj))
         return {
             "success": True,
-            "version": latest.version,
+            "version": version_num,
             "model_type": model_type,
-            "message": f"Training queued for version {latest.version} with {model_type}",
+            "message": f"Entrenamiento YOLO ({model_type}) iniciado en Roboflow para la Versión {version_num}.",
         }
 
     except Exception as e:
         logger.error(f"Training trigger failed: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
+

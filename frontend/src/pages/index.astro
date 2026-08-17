@@ -132,12 +132,19 @@
 
 							<button type="button" id="upload-roboflow-btn" class="btn-action btn-roboflow" disabled>
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-								Subir a Roboflow
+								1. Subir Dataset a Roboflow
 							</button>
 
 							<button type="button" id="train-roboflow-btn" class="btn-action btn-train" disabled>
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-								Entrenar Modelo
+								2. Entrenar Modelo YOLOv8
+							</button>
+
+							<div class="divider"></div>
+
+							<button type="button" id="full-pipeline-btn" class="btn-action btn-primary-action" disabled>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+								🚀 Subir Batch y Entrenar YOLO
 							</button>
 
 							<div class="progress-area" id="progress-area" style="display:none;">
@@ -489,6 +496,7 @@
 	const exportCocoBtn = document.getElementById("export-coco-btn");
 	const uploadRoboflowBtn = document.getElementById("upload-roboflow-btn");
 	const trainRoboflowBtn = document.getElementById("train-roboflow-btn");
+	const fullPipelineBtn = document.getElementById("full-pipeline-btn");
 	const roboflowStatus = document.getElementById("roboflow-status");
 	const progressArea = document.getElementById("progress-area");
 	const progressFill = document.getElementById("progress-fill");
@@ -1222,6 +1230,7 @@
 		exportCocoBtn.disabled = !hasData;
 		uploadRoboflowBtn.disabled = !hasData || !roboflowConnected;
 		trainRoboflowBtn.disabled = !roboflowConnected;
+		if (fullPipelineBtn) fullPipelineBtn.disabled = !hasData || !roboflowConnected;
 	}
 
 	// Build export payload
@@ -1324,7 +1333,6 @@
 			let fileCount = 0;
 			imageStore.forEach((data) => {
 				if (!data.annotated) return;
-				// Only include images that have annotations
 				if (payload.find(p => p.image_filename === data.filename)) {
 					formData.append("images", data.file, data.filename);
 					fileCount++;
@@ -1396,6 +1404,82 @@
 			trainRoboflowBtn.disabled = false;
 		}
 	});
+
+	// Full Pipeline (Upload Batch + Generate Version + Train YOLO)
+	if (fullPipelineBtn) {
+		fullPipelineBtn.addEventListener("click", async () => {
+			const payload = buildExportPayload();
+			if (payload.length === 0) { alert("No hay anotaciones en el lote para subir."); return; }
+
+			if (!confirm(`¿Subir ${payload.length} imágenes anotadas a Roboflow e iniciar el entrenamiento del modelo YOLOv8?`)) return;
+
+			fullPipelineBtn.disabled = true;
+			uploadRoboflowBtn.disabled = true;
+			trainRoboflowBtn.disabled = true;
+
+			progressArea.style.display = "block";
+			progressFill.style.width = "15%";
+			progressTextEl.textContent = `[1/3] Empaquetando dataset de ${payload.length} imágenes...`;
+
+			try {
+				// Step 1: Upload dataset
+				const formData = new FormData();
+				formData.append("annotations", JSON.stringify({ images: payload }));
+
+				let fileCount = 0;
+				imageStore.forEach((data) => {
+					if (!data.annotated) return;
+					if (payload.find(p => p.image_filename === data.filename)) {
+						formData.append("images", data.file, data.filename);
+						fileCount++;
+					}
+				});
+
+				progressFill.style.width = "35%";
+				progressTextEl.textContent = `[1/3] Subiendo ${fileCount} imágenes a Roboflow...`;
+
+				const uploadResp = await fetch(`${API_URL}/upload-roboflow`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (!uploadResp.ok) {
+					const err = await uploadResp.json();
+					throw new Error(err.detail || "Error al subir dataset a Roboflow");
+				}
+
+				const uploadRes = await uploadResp.json();
+				progressFill.style.width = "65%";
+				progressTextEl.textContent = `[2/3] Generando versión y preparando entrenamiento YOLOv8...`;
+
+				// Step 2: Trigger training (which generates version if needed)
+				const trainResp = await fetch(`${API_URL}/train-roboflow`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ model_type: "yolov8" }),
+				});
+
+				if (!trainResp.ok) {
+					const err = await trainResp.json();
+					throw new Error(err.detail || "Error iniciando entrenamiento YOLO");
+				}
+
+				const trainRes = await trainResp.json();
+				progressFill.style.width = "100%";
+				progressTextEl.textContent = `🎉 ¡Éxito! ${trainRes.message}`;
+
+				setTimeout(() => { progressArea.style.display = "none"; }, 10000);
+
+			} catch (e) {
+				alert(`Error en el pipeline: ${e.message}`);
+				progressTextEl.textContent = `❌ Error: ${e.message}`;
+			} finally {
+				fullPipelineBtn.disabled = false;
+				uploadRoboflowBtn.disabled = false;
+				trainRoboflowBtn.disabled = false;
+			}
+		});
+	}
 
 	// ======================= ROBOFLOW STATUS =======================
 	let roboflowConnected = false;

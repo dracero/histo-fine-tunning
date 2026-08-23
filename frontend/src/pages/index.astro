@@ -773,6 +773,30 @@
 	const progressFill = document.getElementById("progress-fill");
 	const progressTextEl = document.getElementById("progress-text");
 
+	// PDF & Ontology Elements & Modals
+	const pdfDropZone = document.getElementById("pdf-drop-zone");
+	const pdfFileInput = document.getElementById("pdf-file-input");
+	const pdfResults = document.getElementById("pdf-results");
+	const ontologyWorkbench = document.getElementById("ontology-workbench");
+	const generateOntologyBtn = document.getElementById("generate-ontology-btn");
+	const ontologyGenerating = document.getElementById("ontology-generating");
+	const batchSegmentPdfBtn = document.getElementById("batch-segment-pdf-btn");
+
+	const imagePreviewModal = document.getElementById("image-preview-modal");
+	const closeImgModalBtn = document.getElementById("close-img-modal-btn");
+	const modalImgTitle = document.getElementById("modal-img-title");
+	const modalImgPreview = document.getElementById("modal-img-preview");
+	const modalImgMeta = document.getElementById("modal-img-meta");
+	const modalImgCaptionInput = document.getElementById("modal-img-caption-input");
+	const modalSaveCaptionBtn = document.getElementById("modal-save-caption-btn");
+	const modalUseSingleImgBtn = document.getElementById("modal-use-single-img-btn");
+
+	const batchProgressModal = document.getElementById("batch-progress-modal");
+	const batchStepTitle = document.getElementById("batch-step-title");
+	const batchStepDesc = document.getElementById("batch-step-desc");
+	const batchProgressFill = document.getElementById("batch-progress-fill");
+	const batchProgressText = document.getElementById("batch-progress-text");
+
 	// ======================= TABS =======================
 	document.querySelectorAll(".tab-btn").forEach(btn => {
 		btn.addEventListener("click", () => {
@@ -2495,7 +2519,7 @@
 			renderPdfImagesCrud(data.images || [], data.pdf_id);
 
 			// Show workbench
-			ontologyWorkbench.style.display = "block";
+			if (ontologyWorkbench) ontologyWorkbench.style.display = "block";
 
 			// Step-by-step real-time progress
 			if (uploadContent) {
@@ -2573,8 +2597,8 @@
 	generateOntologyBtn?.addEventListener("click", async () => {
 		if (!_currentPdfData) return alert("Primero subí un PDF.");
 
-		generateOntologyBtn.style.display = "none";
-		ontologyGenerating.style.display = "flex";
+		if (generateOntologyBtn) generateOntologyBtn.style.display = "none";
+		if (ontologyGenerating) ontologyGenerating.style.display = "flex";
 
 		try {
 			const payload = {
@@ -2582,7 +2606,7 @@
 				filename: _currentPdfData.filename,
 				text: _currentPdfData.text_preview,
 				images: _currentPdfData.images || [],
-				domain_name: document.getElementById("domain-name-input").value.trim() || null,
+				domain_name: document.getElementById("domain-name-input")?.value?.trim() || null,
 			};
 
 			const res = await fetch(`${API_URL}/generate-ontology`, {
@@ -2603,8 +2627,8 @@
 		} catch (e) {
 			alert("Error: " + e.message);
 		} finally {
-			generateOntologyBtn.style.display = "block";
-			ontologyGenerating.style.display = "none";
+			if (generateOntologyBtn) generateOntologyBtn.style.display = "block";
+			if (ontologyGenerating) ontologyGenerating.style.display = "none";
 		}
 	});
 
@@ -2952,10 +2976,10 @@
 		const images = _currentPdfData.images;
 		const total = images.length;
 
-		batchProgressModal.style.display = "flex";
-		batchProgressFill.style.width = "0%";
-		batchProgressText.textContent = `0 / ${total} procesadas (0%)`;
-		batchStepTitle.textContent = `Iniciando segmentación en lote (${total} imágenes)...`;
+		if (batchProgressModal) batchProgressModal.style.display = "flex";
+		if (batchProgressFill) batchProgressFill.style.width = "0%";
+		if (batchProgressText) batchProgressText.textContent = `0 / ${total} procesadas (0%)`;
+		if (batchStepTitle) batchStepTitle.textContent = `Iniciando segmentación en lote (${total} imágenes)...`;
 
 		let firstAddedKey = null;
 

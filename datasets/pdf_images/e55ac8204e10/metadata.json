@@ -1,0 +1,241 @@
+{
+  "pdf_id": "e55ac8204e10",
+  "filename": "arch3.pdf",
+  "total_pages": 8,
+  "total_images": 29,
+  "text_length": 5152,
+  "images": [
+    {
+      "filename": "e55ac8204e10_p1_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img2.png",
+      "page": 1,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img3.png",
+      "page": 1,
+      "width": 165,
+      "height": 31,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img4.png",
+      "page": 1,
+      "width": 1412,
+      "height": 794,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img5.png",
+      "page": 1,
+      "width": 838,
+      "height": 547,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img6.png",
+      "page": 1,
+      "width": 115,
+      "height": 194,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img7.png",
+      "page": 1,
+      "width": 225,
+      "height": 115,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img8.png",
+      "page": 1,
+      "width": 153,
+      "height": 136,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img9.png",
+      "page": 1,
+      "width": 63,
+      "height": 152,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img10.png",
+      "page": 1,
+      "width": 921,
+      "height": 493,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img11.png",
+      "page": 1,
+      "width": 778,
+      "height": 673,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img13.png",
+      "page": 1,
+      "width": 1628,
+      "height": 1226,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img14.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img14.png",
+      "page": 1,
+      "width": 1879,
+      "height": 1409,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img16.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img16.png",
+      "page": 1,
+      "width": 964,
+      "height": 1415,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img2.png",
+      "page": 2,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img4.png",
+      "page": 2,
+      "width": 1412,
+      "height": 794,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img10.png",
+      "page": 2,
+      "width": 921,
+      "height": 493,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img11.png",
+      "page": 2,
+      "width": 778,
+      "height": 673,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img13.png",
+      "page": 2,
+      "width": 1628,
+      "height": 1226,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img14.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img14.png",
+      "page": 2,
+      "width": 1879,
+      "height": 1409,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img16.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img16.png",
+      "page": 2,
+      "width": 964,
+      "height": 1415,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img2.png",
+      "page": 3,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img4.png",
+      "page": 3,
+      "width": 1412,
+      "height": 794,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img5.png",
+      "page": 3,
+      "width": 838,
+      "height": 547,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img10.png",
+      "page": 3,
+      "width": 921,
+      "height": 493,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img11.png",
+      "page": 3,
+      "width": 778,
+      "height": 673,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img13.png",
+      "page": 3,
+      "width": 1628,
+      "height": 1226,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img14.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img14.png",
+      "page": 3,
+      "width": 1879,
+      "height": 1409,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img16.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img16.png",
+      "page": 3,
+      "width": 964,
+      "height": 1415,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p4_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p4_img2.png",
+      "page": 4,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    }
+  ]
+}

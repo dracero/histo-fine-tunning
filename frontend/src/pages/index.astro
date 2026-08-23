@@ -179,14 +179,15 @@
 							<h3 class="section-title-sm">Subir PDF Académico</h3>
 							<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Subí un PDF de histología o microscopía. Se extrae el texto, se generan las ontologías con IA y podés gestionar y segmentar todas sus imágenes.</p>
 
-							<div class="upload-zone" id="pdf-drop-zone" style="min-height: 90px; padding: 1rem; border: 2px dashed rgba(6,182,212,0.3); background: rgba(6,182,212,0.03); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;">
-								<div class="upload-content" id="pdf-upload-content" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
-									<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" style="width: 28px; height: 28px; color: var(--accent-cyan);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<div class="upload-zone" id="pdf-drop-zone" style="min-height: 100px; padding: 1.25rem; border: 2px dashed rgba(6,182,212,0.4); background: rgba(6,182,212,0.03); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; transition: all 0.2s ease;">
+								<div class="upload-content" id="pdf-upload-content" style="display: flex; flex-direction: column; align-items: center; width: 100%; pointer-events: none;">
+									<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" style="width: 32px; height: 32px; color: var(--accent-cyan);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
 									</svg>
-									<p class="upload-text" style="font-size: 0.8rem; margin-bottom: 0.4rem;">Arrastrá un PDF acá o elegí el archivo:</p>
+									<p class="upload-text" style="font-size: 0.82rem; font-weight: 600; margin-bottom: 0.25rem;">Arrastrá un PDF acá o hacé click para elegirlo</p>
+									<p class="upload-subtext" style="font-size: 0.72rem; color: var(--text-muted);">Soporta documentos científicos y papers histológicos (.pdf)</p>
 								</div>
-								<input type="file" id="pdf-file-input" accept=".pdf" onchange="window._handlePdfUpload && window._handlePdfUpload(this)" style="font-size: 0.75rem; color: var(--text-main); background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.35rem 0.5rem; cursor: pointer; max-width: 100%;" />
+								<input type="file" id="pdf-file-input" accept=".pdf,application/pdf" style="display: none;" />
 							</div>
 
 							<!-- PDF extraction results summary -->
@@ -717,6 +718,7 @@
 
 	// Hidden categories
 	let hiddenCategories = new Set();
+	let _ontologiesLoaded = false;
 
 	// ======================= DOM =======================
 	const dropZone = document.getElementById("drop-zone");
@@ -764,14 +766,14 @@
 	const finishPolygonBtn = document.getElementById("finish-polygon-btn");
 
 	const exportCocoBtn = document.getElementById("export-coco-btn");
-	const uploadRoboflowBtn = document.getElementById("upload-roboflow-btn");
+	const uploadRoboflowBtn = document.getElementById("rf-upload-btn") || document.getElementById("upload-roboflow-btn");
 	const unifyVersionsBtn = document.getElementById("unify-versions-btn");
-	const trainRoboflowBtn = document.getElementById("train-roboflow-btn");
+	const trainRoboflowBtn = document.getElementById("rf-train-btn") || document.getElementById("train-roboflow-btn");
 	const fullPipelineBtn = document.getElementById("full-pipeline-btn");
-	const roboflowStatus = document.getElementById("roboflow-status");
-	const progressArea = document.getElementById("progress-area");
+	const roboflowStatus = document.getElementById("rf-status") || document.getElementById("roboflow-status");
+	const progressArea = document.getElementById("rf-log-area") || document.getElementById("progress-area");
 	const progressFill = document.getElementById("progress-fill");
-	const progressTextEl = document.getElementById("progress-text");
+	const progressTextEl = document.getElementById("rf-log-content") || document.getElementById("progress-text");
 
 	// ======================= TABS =======================
 	document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -1771,12 +1773,14 @@
 	// ======================= EXPORT =======================
 	function updateExportStats() {
 		const threshold = parseFloat(thresholdSlider.value);
-		let totalImages = 0, totalAnnotations = 0;
+		let totalImages = imageStore.size;
+		let annotatedImages = 0;
+		let totalAnnotations = 0;
 		const classSet = new Set();
 
 		imageStore.forEach(data => {
 			if (!data.annotated) return;
-			totalImages++;
+			annotatedImages++;
 			data.groups.forEach(group => {
 				group.detections.forEach(det => {
 					if (det.score >= threshold && !det._deleted) {
@@ -1798,10 +1802,10 @@
 		if (totalClassesEl) totalClassesEl.textContent = classSet.size;
 
 		// Enable/disable buttons
-		const hasData = totalImages > 0 && totalAnnotations > 0;
-		exportCocoBtn.disabled = !hasData;
-		uploadRoboflowBtn.disabled = !hasData || !roboflowConnected;
-		trainRoboflowBtn.disabled = !roboflowConnected;
+		const hasData = annotatedImages > 0 && totalAnnotations > 0;
+		if (exportCocoBtn) exportCocoBtn.disabled = !hasData;
+		if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = !hasData || !roboflowConnected;
+		if (trainRoboflowBtn) trainRoboflowBtn.disabled = !roboflowConnected;
 		if (fullPipelineBtn) fullPipelineBtn.disabled = !hasData || !roboflowConnected;
 	}
 
@@ -1861,7 +1865,7 @@
 	}
 
 	// Download COCO JSON
-	exportCocoBtn.addEventListener("click", async () => {
+	exportCocoBtn?.addEventListener("click", async () => {
 		const payload = buildExportPayload();
 		if (payload.length === 0) { alert("No hay anotaciones para exportar."); return; }
 
@@ -1888,14 +1892,14 @@
 	});
 
 	// Upload to Roboflow
-	uploadRoboflowBtn.addEventListener("click", async () => {
+	uploadRoboflowBtn?.addEventListener("click", async () => {
 		const payload = buildExportPayload();
 		if (payload.length === 0) { alert("No hay anotaciones para subir."); return; }
 
-		uploadRoboflowBtn.disabled = true;
-		progressArea.style.display = "block";
-		progressFill.style.width = "10%";
-		progressTextEl.textContent = "Preparando dataset...";
+		if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = true;
+		if (progressArea) progressArea.style.display = "block";
+		if (progressFill) progressFill.style.width = "10%";
+		if (progressTextEl) progressTextEl.textContent = "Preparando dataset...";
 
 		try {
 			const formData = new FormData();
@@ -1913,15 +1917,15 @@
 					}
 				});
 
-			progressFill.style.width = "30%";
-			progressTextEl.textContent = `Subiendo ${fileCount} imágenes a Roboflow...`;
+			if (progressFill) progressFill.style.width = "30%";
+			if (progressTextEl) progressTextEl.textContent = `Subiendo ${fileCount} imágenes a Roboflow...`;
 
 			const response = await fetch(`${API_URL}/upload-roboflow`, {
 				method: "POST",
 				body: formData,
 			});
 
-			progressFill.style.width = "90%";
+			if (progressFill) progressFill.style.width = "90%";
 
 			if (!response.ok) {
 				const err = await response.json();
@@ -1929,18 +1933,18 @@
 			}
 
 			const result = await response.json();
-			progressFill.style.width = "100%";
-			progressTextEl.textContent = `✓ Subidas ${result.images_uploaded} imágenes con ${result.annotations_uploaded} anotaciones`;
+			if (progressFill) progressFill.style.width = "100%";
+			if (progressTextEl) progressTextEl.textContent = `✓ Subidas ${result.images_uploaded} imágenes con ${result.annotations_uploaded} anotaciones`;
 
-			trainRoboflowBtn.disabled = false;
+			if (trainRoboflowBtn) trainRoboflowBtn.disabled = false;
 
-			setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+			setTimeout(() => { if (progressArea) progressArea.style.display = "none"; }, 5000);
 
 		} catch (e) {
 			alert(`Error: ${e.message}`);
-			progressTextEl.textContent = `Error: ${e.message}`;
+			if (progressTextEl) progressTextEl.textContent = `Error: ${e.message}`;
 		} finally {
-			uploadRoboflowBtn.disabled = false;
+			if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = false;
 		}
 	});
 
@@ -1951,9 +1955,9 @@
 			if (!confirm(`¿Unificar todas las imágenes en una nueva versión snapshot en Roboflow (${selectedModel})?`)) return;
 
 			unifyVersionsBtn.disabled = true;
-			progressArea.style.display = "block";
-			progressFill.style.width = "50%";
-			progressTextEl.textContent = "Unificando imágenes y congelando nueva versión en Roboflow...";
+			if (progressArea) progressArea.style.display = "block";
+			if (progressFill) progressFill.style.width = "50%";
+			if (progressTextEl) progressTextEl.textContent = "Unificando imágenes y congelando nueva versión en Roboflow...";
 
 			try {
 				const response = await fetch(`${API_URL}/export-roboflow-dataset`, {
@@ -1968,16 +1972,16 @@
 				}
 
 				const result = await response.json();
-				progressFill.style.width = "100%";
-				progressTextEl.textContent = `✓ Versión unificada v${result.version} creada con éxito`;
+				if (progressFill) progressFill.style.width = "100%";
+				if (progressTextEl) progressTextEl.textContent = `✓ Versión unificada v${result.version} creada con éxito`;
 
 				showSnippetModal(result);
-				setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+				setTimeout(() => { if (progressArea) progressArea.style.display = "none"; }, 5000);
 				checkRoboflow();
 
 			} catch (e) {
 				alert(`Error: ${e.message}`);
-				progressTextEl.textContent = `Error: ${e.message}`;
+				if (progressTextEl) progressTextEl.textContent = `Error: ${e.message}`;
 			} finally {
 				unifyVersionsBtn.disabled = false;
 			}
@@ -1985,16 +1989,16 @@
 	}
 
 	// Export dataset for local GPU training
-	trainRoboflowBtn.addEventListener("click", async () => {
+	trainRoboflowBtn?.addEventListener("click", async () => {
 		const selectedModel = document.getElementById("roboflow-model-select")?.value || "yolov8";
 		const selectedVersion = document.getElementById("roboflow-version-select")?.value || "new";
 
 		if (!confirm(`¿Generar versión y descargar dataset (${selectedModel}) para entrenar en tu PC?`)) return;
 
-		trainRoboflowBtn.disabled = true;
-		progressArea.style.display = "block";
-		progressFill.style.width = "40%";
-		progressTextEl.textContent = "Generando versión y descargando dataset en tu PC...";
+		if (trainRoboflowBtn) trainRoboflowBtn.disabled = true;
+		if (progressArea) progressArea.style.display = "block";
+		if (progressFill) progressFill.style.width = "40%";
+		if (progressTextEl) progressTextEl.textContent = "Generando versión y descargando dataset en tu PC...";
 
 		try {
 			const response = await fetch(`${API_URL}/export-roboflow-dataset`, {
@@ -2009,17 +2013,17 @@
 			}
 
 			const result = await response.json();
-			progressFill.style.width = "100%";
-			progressTextEl.textContent = `✓ Dataset v${result.version} listo en ${result.export_dir}`;
+			if (progressFill) progressFill.style.width = "100%";
+			if (progressTextEl) progressTextEl.textContent = `✓ Dataset v${result.version} listo en ${result.export_dir}`;
 
 			showSnippetModal(result);
-			setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+			setTimeout(() => { if (progressArea) progressArea.style.display = "none"; }, 5000);
 
 		} catch (e) {
 			alert(`Error: ${e.message}`);
-			progressTextEl.textContent = `Error: ${e.message}`;
+			if (progressTextEl) progressTextEl.textContent = `Error: ${e.message}`;
 		} finally {
-			trainRoboflowBtn.disabled = false;
+			if (trainRoboflowBtn) trainRoboflowBtn.disabled = false;
 		}
 	});
 
@@ -2035,12 +2039,12 @@
 			if (!confirm(`¿Subir ${payload.length} imágenes a Roboflow, unificar versión y generar código de descarga (${selectedModel})?`)) return;
 
 			fullPipelineBtn.disabled = true;
-			uploadRoboflowBtn.disabled = true;
-			trainRoboflowBtn.disabled = true;
+			if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = true;
+			if (trainRoboflowBtn) trainRoboflowBtn.disabled = true;
 
-			progressArea.style.display = "block";
-			progressFill.style.width = "15%";
-			progressTextEl.textContent = `[1/3] Empaquetando dataset de ${payload.length} imágenes...`;
+			if (progressArea) progressArea.style.display = "block";
+			if (progressFill) progressFill.style.width = "15%";
+			if (progressTextEl) progressTextEl.textContent = `[1/3] Empaquetando dataset de ${payload.length} imágenes...`;
 
 			try {
 				// Step 1: Upload dataset
@@ -2149,55 +2153,35 @@
 			const response = await fetch(`${API_URL}/roboflow-status`);
 			const data = await response.json();
 
+			const rfStatusTextEl = document.getElementById("rf-status-text");
+			const rfDotEl = document.getElementById("rf-dot");
+			const rfProjectInput = document.getElementById("rf-project-name");
+
 			if (data.connected) {
 				roboflowConnected = true;
-				roboflowStatus.innerHTML = `
-					<span class="status-dot connected"></span>
-					<span>Conectado: <strong>${data.workspace}</strong> / ${data.project?.name || data.project?.id || ""}</span>
-				`;
-				uploadRoboflowBtn.disabled = false;
-				if (unifyVersionsBtn) unifyVersionsBtn.disabled = false;
-				trainRoboflowBtn.disabled = false;
-
-				// Fetch versions and supported model architectures
-				try {
-					const modelsResp = await fetch(`${API_URL}/roboflow-models`);
-					if (modelsResp.ok) {
-						const modelsData = await modelsResp.json();
-						const versionSelect = document.getElementById("roboflow-version-select");
-						const modelSelect = document.getElementById("roboflow-model-select");
-
-						if (versionSelect && modelsData.versions && modelsData.versions.length > 0) {
-							const nextVer = modelsData.versions.length + 1;
-							let html = `<option value="new">⚡ UNIFICAR TODAS LAS IMÁGENES (Nueva Versión v${nextVer})</option>`;
-							modelsData.versions.forEach(v => {
-								html += `<option value="${v.version}">${v.name} (Existente)</option>`;
-							});
-							versionSelect.innerHTML = html;
-						}
-
-						if (modelSelect && modelsData.supported_models && modelsData.supported_models.length > 0) {
-							let mHtml = "";
-							modelsData.supported_models.forEach(m => {
-								mHtml += `<option value="${m.id}">${m.name}</option>`;
-							});
-							modelSelect.innerHTML = mHtml;
-						}
-					}
-				} catch (me) {
-					console.warn("No se pudieron consultar modelos/versiones de Roboflow:", me);
+				if (rfDotEl) rfDotEl.className = "status-dot green";
+				if (rfStatusTextEl) {
+					rfStatusTextEl.innerHTML = `Conectado: <strong>${data.workspace}</strong> / ${data.project?.name || data.project?.id || ""}`;
 				}
+				if (rfProjectInput && (data.project?.name || data.project?.id)) {
+					rfProjectInput.value = data.project.name || data.project.id;
+				}
+				if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = false;
+				if (unifyVersionsBtn) unifyVersionsBtn.disabled = false;
+				if (trainRoboflowBtn) trainRoboflowBtn.disabled = false;
 			} else {
-				roboflowStatus.innerHTML = `
-					<span class="status-dot error"></span>
-					<span>Error: ${data.error || "No conectado"}</span>
-				`;
+				if (rfDotEl) rfDotEl.className = "status-dot red";
+				if (rfStatusTextEl) {
+					rfStatusTextEl.textContent = `Error: ${data.error || "No conectado"}`;
+				}
 			}
 		} catch (e) {
-			roboflowStatus.innerHTML = `
-				<span class="status-dot error"></span>
-				<span>Backend no disponible</span>
-			`;
+			const rfStatusTextEl = document.getElementById("rf-status-text");
+			const rfDotEl = document.getElementById("rf-dot");
+			if (rfDotEl) rfDotEl.className = "status-dot red";
+			if (rfStatusTextEl) {
+				rfStatusTextEl.textContent = "Backend no disponible";
+			}
 		}
 		updateExportStats();
 	}
@@ -2424,17 +2408,38 @@
 
 	// --- 3. PDF Upload & Content Extraction ---
 	["dragenter", "dragover"].forEach(ev => {
-		pdfDropZone?.addEventListener(ev, (e) => { e.preventDefault(); pdfDropZone.classList.add("dragover"); }, false);
+		pdfDropZone?.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); pdfDropZone.classList.add("dragover"); }, false);
 	});
-	["dragleave", "drop"].forEach(ev => {
-		pdfDropZone?.addEventListener(ev, (e) => { e.preventDefault(); pdfDropZone.classList.remove("dragover"); }, false);
+	["dragleave"].forEach(ev => {
+		pdfDropZone?.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); pdfDropZone.classList.remove("dragover"); }, false);
 	});
 	pdfDropZone?.addEventListener("drop", (e) => {
-		const files = e.dataTransfer.files;
-		if (files.length > 0 && files[0].name.toLowerCase().endsWith(".pdf")) {
+		e.preventDefault();
+		e.stopPropagation();
+		pdfDropZone?.classList.remove("dragover");
+		const files = e.dataTransfer ? e.dataTransfer.files : [];
+		if (files.length > 0) {
 			handlePdfUpload(files[0]);
 		}
 	});
+
+	// Global window drag-and-drop handler to prevent browser navigating away when dropping a PDF
+	window.addEventListener("dragover", (e) => e.preventDefault(), false);
+	window.addEventListener("drop", (e) => {
+		const files = e.dataTransfer ? Array.from(e.dataTransfer.files) : [];
+		if (files.length > 0) {
+			const pdfs = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
+			if (pdfs.length > 0) {
+				e.preventDefault();
+				document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+				document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+				document.querySelector('[data-tab="pdf-tab"]')?.classList.add("active");
+				document.getElementById("pdf-tab")?.classList.add("active");
+				handlePdfUpload(pdfs[0]);
+			}
+		}
+	}, false);
+
 	window._handlePdfUpload = function(input) {
 		console.log("[PDF] window._handlePdfUpload called, files:", input.files);
 		if (input.files && input.files.length > 0) {
@@ -2442,9 +2447,14 @@
 		}
 	};
 
-	pdfFileInput?.addEventListener("change", () => {
-		if (pdfFileInput.files && pdfFileInput.files.length > 0) {
-			handlePdfUpload(pdfFileInput.files[0]);
+	pdfDropZone?.addEventListener("click", () => {
+		pdfFileInput?.click();
+	});
+
+	pdfFileInput?.addEventListener("change", (e) => {
+		const target = e.target;
+		if (target && target.files && target.files.length > 0) {
+			handlePdfUpload(target.files[0]);
 		}
 	});
 
@@ -2464,13 +2474,21 @@
 		formData.append("file", file);
 
 		try {
+			console.log("[PDF] Uploading to backend...");
 			const res = await fetch(`${API_URL}/upload-pdf`, { method: "POST", body: formData });
+			console.log("[PDF] Upload response status:", res.status);
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({ detail: "Error al procesar PDF" }));
 				throw new Error(err.detail || "Error al procesar PDF");
 			}
 
 			const data = await res.json();
+			console.log("[PDF] Extraction result:", {
+				pdf_id: data.pdf_id,
+				pages: data.total_pages,
+				images: data.total_images,
+				text_len: data.text_length,
+			});
 			_currentPdfData = {
 				...data,
 				_file: file,
@@ -2498,44 +2516,94 @@
 			if (ontologyWorkbench) ontologyWorkbench.style.display = "block";
 
 			// Step-by-step real-time progress
+			const mergeTarget = window._activeOntologyName || null;
+			const mergeLabel = mergeTarget
+				? `[2/3] Generando ontología con Gemini IA (merge → ${mergeTarget})...`
+				: `[2/3] Generando ontología temática con Gemini IA...`;
 			if (uploadContent) {
 				uploadContent.innerHTML = `
 					<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
 						<span class="spinner-small"></span>
-						<span style="font-size: 0.78rem; color: var(--accent-cyan);">[2/3] Generando ontología temática con Gemini IA...</span>
+						<span style="font-size: 0.78rem; color: var(--accent-cyan);">${mergeLabel}</span>
 					</div>
 				`;
 			}
 
-			// Automatically trigger Gemini ontology extraction
+			// Automatically trigger Gemini ontology extraction with timeout
 			try {
+				const ontologyPayload = {
+					pdf_id: data.pdf_id,
+					filename: data.filename,
+					text: data.text_preview,
+					images: data.images || [],
+					domain_name: mergeTarget || null,
+				};
+				// If there's an active ontology, merge into it
+				if (mergeTarget) {
+					ontologyPayload.merge_into_ontology = mergeTarget;
+				}
+
+				console.log("[PDF] Generating ontology, payload:", {
+					pdf_id: ontologyPayload.pdf_id,
+					merge_into: mergeTarget || "(new)",
+					text_len: ontologyPayload.text?.length || 0,
+					images_count: ontologyPayload.images?.length || 0,
+				});
+
+				// Use AbortController with 120s timeout to prevent silent hangs
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 120000);
+
 				const ontRes = await fetch(`${API_URL}/generate-ontology`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						pdf_id: data.pdf_id,
-						filename: data.filename,
-						text: data.text_preview,
-						images: data.images || [],
-						domain_name: null,
-					}),
+					body: JSON.stringify(ontologyPayload),
+					signal: controller.signal,
 				});
+				clearTimeout(timeoutId);
+
+				console.log("[PDF] Ontology generation response status:", ontRes.status);
 
 				if (ontRes.ok) {
 					const ontResult = await ontRes.json();
+					console.log("[PDF] Ontology generated successfully:", {
+						domain: ontResult.ontology?.domain,
+						structures: ontResult.ontology?.structures?.length,
+						merge_stats: ontResult.merge_stats || null,
+					});
 					displayOntologyEditor(ontResult.ontology);
 					loadSavedOntologies();
+
+					// Show merge stats if applicable
+					if (ontResult.merge_stats) {
+						const ms = ontResult.merge_stats;
+						const statsMsg = `✅ Ontología "${ms.merged_into}" actualizada: +${ms.added} nuevas estructuras (${ms.total_after_merge} total)`;
+						console.log("[PDF]", statsMsg);
+						if (uploadContent) {
+							uploadContent.innerHTML = `
+								<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap;">
+									<span style="font-size: 0.78rem; color: #10b981; font-weight: 600;">${statsMsg}</span>
+								</div>
+							`;
+						}
+					}
 				} else {
 					const ontErrData = await ontRes.json().catch(() => ({ detail: "Error al generar ontología" }));
-					console.error("Auto ontology generation error:", ontErrData);
+					console.error("[PDF] Ontology generation error:", ontErrData);
 					alert("⚠️ No se pudo generar la ontología con Gemini: " + (ontErrData.detail || "Verifique la API Key de Gemini en .env"));
 				}
 			} catch (ontErr) {
-				console.warn("Auto ontology generation warning:", ontErr);
-				alert("⚠️ Error de conexión al generar ontología: " + ontErr.message);
+				if (ontErr.name === "AbortError") {
+					console.error("[PDF] Ontology generation timed out (120s)");
+					alert("⚠️ La generación de ontología tardó más de 2 minutos. Intentá de nuevo con el botón 'Generar Ontología con IA'.");
+				} else {
+					console.error("[PDF] Ontology generation exception:", ontErr);
+					alert("⚠️ Error de conexión al generar ontología: " + ontErr.message);
+				}
 			}
 
-			if (uploadContent) {
+			// Step 3: Load first image into canvas
+			if (uploadContent && !uploadContent.innerHTML.includes("✅")) {
 				uploadContent.innerHTML = `
 					<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
 						<span class="spinner-small"></span>
@@ -2545,7 +2613,7 @@
 			}
 
 			if (data.images && data.images.length > 0) {
-				await transferPdfImageToGallery(data.images[0], data.pdf_id, true);
+				await transferPdfImageToGallery(data.images[0], data.pdf_id, false);
 			}
 
 			if (uploadContent) {
@@ -2558,6 +2626,7 @@
 			}
 
 		} catch (e) {
+			console.error("[PDF] handlePdfUpload error:", e);
 			if (uploadContent) {
 				uploadContent.innerHTML = `
 					<p style="color: #ef4444; font-size: 0.78rem; margin-bottom: 0.3rem;">❌ ${e.message}</p>
@@ -2577,19 +2646,31 @@
 		if (ontologyGenerating) ontologyGenerating.style.display = "flex";
 
 		try {
+			const mergeTarget = window._activeOntologyName || null;
 			const payload = {
 				pdf_id: _currentPdfData.pdf_id,
 				filename: _currentPdfData.filename,
 				text: _currentPdfData.text_preview,
 				images: _currentPdfData.images || [],
-				domain_name: document.getElementById("domain-name-input")?.value?.trim() || null,
+				domain_name: document.getElementById("domain-name-input")?.value?.trim() || mergeTarget || null,
 			};
+			// Auto-merge into active ontology if one exists
+			if (mergeTarget) {
+				payload.merge_into_ontology = mergeTarget;
+			}
+
+			console.log("[PDF] Manual generate-ontology, merge_into:", mergeTarget || "(new)");
+
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), 120000);
 
 			const res = await fetch(`${API_URL}/generate-ontology`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(payload),
+				signal: controller.signal,
 			});
+			clearTimeout(timeoutId);
 
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({ detail: "Error generando ontología" }));
@@ -2600,8 +2681,17 @@
 			displayOntologyEditor(result.ontology);
 			loadSavedOntologies();
 
+			if (result.merge_stats) {
+				const ms = result.merge_stats;
+				alert(`✅ Ontología "${ms.merged_into}" actualizada: +${ms.added} nuevas estructuras (${ms.total_after_merge} total)`);
+			}
+
 		} catch (e) {
-			alert("Error: " + e.message);
+			if (e.name === "AbortError") {
+				alert("⚠️ La generación de ontología tardó más de 2 minutos. Intentá de nuevo.");
+			} else {
+				alert("Error: " + e.message);
+			}
 		} finally {
 			if (generateOntologyBtn) generateOntologyBtn.style.display = "block";
 			if (ontologyGenerating) ontologyGenerating.style.display = "none";
@@ -2649,7 +2739,7 @@
 				prompt: s.prompt,
 				color: s.color || "#8b5cf6"
 			}));
-			renderClasses();
+			updateClassesList();
 		}
 
 		// Also load images if available in the ontology document or backend disk
@@ -2921,7 +3011,7 @@
 		await transferPdfImageToGallery(img, pdf_id, true);
 	});
 
-	async function transferPdfImageToGallery(img, pdf_id, autoSegment = false) {
+	async function transferPdfImageToGallery(img, pdf_id, switchTab = false) {
 		try {
 			const imgUrl = `${API_URL}/pdf-image/${pdf_id}/${img.filename}`;
 			const response = await fetch(imgUrl);
@@ -2930,11 +3020,13 @@
 
 			await handleFiles([file]);
 
-			// Switch to images tab
-			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-			document.querySelector('[data-tab="images-tab"]').classList.add("active");
-			document.getElementById("images-tab").classList.add("active");
+			if (switchTab) {
+				// Switch to images tab only when explicitly requested
+				document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+				document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+				document.querySelector('[data-tab="images-tab"]').classList.add("active");
+				document.getElementById("images-tab").classList.add("active");
+			}
 		} catch (e) {
 			alert("Error al cargar imagen en galería: " + e.message);
 		}
@@ -3107,8 +3199,6 @@
 		alert(`✅ Segmentación en lote completada: ${total} imágenes procesadas con SAM 3.1 y clasificadas con CONCH.`);
 	});
 	// --- 7. Load and display saved ontologies ---
-	let _ontologiesLoaded = false;
-
 	function renderOntologyList(list) {
 		console.log("[ONT] renderOntologyList called with", list.length, "items");
 		const container = document.getElementById("saved-ontologies-list");
@@ -3216,6 +3306,13 @@
 			// Always render the list (even if auto-load later fails)
 			renderOntologyList(list);
 			_ontologiesLoaded = true;
+
+			if (list.length === 0) {
+				const ontPillName = document.getElementById("ont-pill-name");
+				if (ontPillName && (!window._activeOntologyName || ontPillName.textContent === "Cargando...")) {
+					ontPillName.textContent = "Ninguna";
+				}
+			}
 
 			// Auto-load first ontology into workbench
 			if (autoLoadFirst && list.length > 0 && !window._activeOntologyName) {

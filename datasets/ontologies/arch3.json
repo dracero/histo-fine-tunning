@@ -1,0 +1,1627 @@
+{
+  "domain": "arch3",
+  "source_pdf": "arch4.pdf",
+  "pdf_id": "af51e67a2f47",
+  "structures": [
+    {
+      "key": "muscular_artery",
+      "name": "Arteria muscular",
+      "label": "Arteria muscular",
+      "prompt": "circular vessel with thick wall",
+      "color": "#e11d48"
+    },
+    {
+      "key": "small_muscular_artery",
+      "name": "Arteria muscular pequeña",
+      "label": "Arteria muscular pequeña",
+      "prompt": "small vessel with thick pink wall",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "vein",
+      "name": "Vena",
+      "label": "Vena",
+      "prompt": "thin-walled vessel with wide lumen",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "venule",
+      "name": "Vénula",
+      "label": "Vénula",
+      "prompt": "small thin-walled vessel",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "arteriole",
+      "name": "Arteriola",
+      "label": "Arteriola",
+      "prompt": "small artery with few smooth muscle layers",
+      "color": "#10b981"
+    },
+    {
+      "key": "lumen",
+      "name": "Luz",
+      "label": "Luz",
+      "prompt": "empty space within vessel",
+      "color": "#ec4899"
+    },
+    {
+      "key": "erythrocyte",
+      "name": "Eritrocitos",
+      "label": "Eritrocitos",
+      "prompt": "small round red cells in lumen",
+      "color": "#6366f1"
+    },
+    {
+      "key": "simple_squamous_epithelium",
+      "name": "Epitelio plano simple",
+      "label": "Epitelio plano simple",
+      "prompt": "single layer of flat cells",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "tunica_intima",
+      "name": "Túnica íntima",
+      "label": "Túnica íntima",
+      "prompt": "innermost layer lining vessel lumen",
+      "color": "#f97316"
+    },
+    {
+      "key": "endothelial_cell",
+      "name": "Células endoteliales",
+      "label": "Células endoteliales",
+      "prompt": "flat cells lining vessel lumen",
+      "color": "#84cc16"
+    },
+    {
+      "key": "endothelial_nucleus",
+      "name": "Núcleos del endotelio",
+      "label": "Núcleos del endotelio",
+      "prompt": "spindle-shaped dark violet nuclei",
+      "color": "#a855f7"
+    },
+    {
+      "key": "internal_elastic_lamina",
+      "name": "Lámina elástica interna",
+      "label": "Lámina elástica interna",
+      "prompt": "wavy translucent pink elastic line",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "tunica_media",
+      "name": "Túnica media",
+      "label": "Túnica media",
+      "prompt": "thick middle layer of smooth muscle",
+      "color": "#ef4444"
+    },
+    {
+      "key": "smooth_muscle",
+      "name": "Músculo liso",
+      "label": "Músculo liso",
+      "prompt": "pink eosinophilic muscle tissue layers",
+      "color": "#22c55e"
+    },
+    {
+      "key": "smooth_muscle_nucleus",
+      "name": "Núcleos de músculo liso",
+      "label": "Núcleos de músculo liso",
+      "prompt": "elongated pale violet nuclei, blunt ends",
+      "color": "#eab308"
+    },
+    {
+      "key": "external_elastic_lamina",
+      "name": "Lámina elástica externa",
+      "label": "Lámina elástica externa",
+      "prompt": "outer wavy elastic line",
+      "color": "#d946ef"
+    },
+    {
+      "key": "tunica_adventitia",
+      "name": "Túnica adventicia",
+      "label": "Túnica adventicia",
+      "prompt": "outermost layer of dense connective tissue",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "dense_irregular_collagen_connective_tissue",
+      "name": "Tejido conectivo colágeno denso no modelado",
+      "label": "Tejido conectivo colágeno denso no modelado",
+      "prompt": "disordered pink collagen fiber bundles",
+      "color": "#fb923c"
+    },
+    {
+      "key": "collagen_fiber_bundles",
+      "name": "Haces de fibras colágenas",
+      "label": "Haces de fibras colágenas",
+      "prompt": "disordered pink collagen fiber bundles",
+      "color": "#4ade80"
+    },
+    {
+      "key": "fibroblast",
+      "name": "Fibroblasto",
+      "label": "Fibroblasto",
+      "prompt": "spindle-shaped cell in connective tissue",
+      "color": "#facc15"
+    },
+    {
+      "key": "fibroblast_nucleus",
+      "name": "Núcleos de fibroblastos",
+      "label": "Núcleos de fibroblastos",
+      "prompt": "dark violet elongated nuclei in adventitia",
+      "color": "#e11d48"
+    },
+    {
+      "key": "fibrocyte",
+      "name": "Fibrocito",
+      "label": "Fibrocito",
+      "prompt": "small cell in connective tissue",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "fibrocyte_nucleus",
+      "name": "Núcleos de fibrocitos",
+      "label": "Núcleos de fibrocitos",
+      "prompt": "dark violet small nuclei in adventitia",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "artery_lumen",
+      "name": "Luz de la arteria",
+      "label": "Luz de la arteria",
+      "prompt": "empty central cavity of vessel",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "erythrocytes",
+      "name": "Eritrocitos",
+      "label": "Eritrocitos",
+      "prompt": "small red round blood cells",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "blood_cells",
+      "name": "Células de la sangre",
+      "label": "Células de la sangre",
+      "prompt": "small dark cells in lumen",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "endothelium",
+      "name": "Endotelio",
+      "label": "Endotelio",
+      "prompt": "single layer of flat cells",
+      "color": "#ec4899"
+    },
+    {
+      "key": "endothelial_nuclei",
+      "name": "Núcleos del endotelio",
+      "label": "Núcleos del endotelio",
+      "prompt": "dark violet elongated or punctate nuclei",
+      "color": "#6366f1"
+    },
+    {
+      "key": "dense_chromatin",
+      "name": "Cromatina densa",
+      "label": "Cromatina densa",
+      "prompt": "dark violet compact nuclear material",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "smooth_muscle_fibers",
+      "name": "Fibras musculares lisas",
+      "label": "Fibras musculares lisas",
+      "prompt": "elongated pink eosinophilic fibers",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "smooth_muscle_nuclei",
+      "name": "Núcleos de músculo liso",
+      "label": "Núcleos de músculo liso",
+      "prompt": "elongated pale violet nuclei with blunt ends",
+      "color": "#ef4444"
+    },
+    {
+      "key": "lax_chromatin",
+      "name": "Cromatina laxa",
+      "label": "Cromatina laxa",
+      "prompt": "pale violet granular nuclear material",
+      "color": "#22c55e"
+    },
+    {
+      "key": "dense_collagenous_connective_tissue",
+      "name": "Tejido conectivo colágeno denso",
+      "label": "Tejido conectivo colágeno denso",
+      "prompt": "dense pink collagen fiber bundles",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "collagen_fibers",
+      "name": "Fibras colágenas",
+      "label": "Fibras colágenas",
+      "prompt": "pink wavy extracellular fibers",
+      "color": "#4ade80"
+    },
+    {
+      "key": "fibroblast_fibrocyte_nuclei",
+      "name": "Núcleos de fibroblastos y fibrocitos",
+      "label": "Núcleos de fibroblastos y fibrocitos",
+      "prompt": "dark violet elongated nuclei in adventitia",
+      "color": "#facc15"
+    },
+    {
+      "key": "testis",
+      "name": "Testículo",
+      "label": "Testículo",
+      "prompt": "whole organ section",
+      "color": "#e11d48"
+    },
+    {
+      "key": "testicular_lobule",
+      "name": "Lobulillo testicular",
+      "label": "Lobulillo testicular",
+      "prompt": "region containing seminiferous tubules",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "seminiferous_tubule",
+      "name": "Túbulo seminífero",
+      "label": "Túbulo seminífero",
+      "prompt": "circular or oval tubule cross-section",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "tubular_lumen",
+      "name": "Luz tubular",
+      "label": "Luz tubular",
+      "prompt": "central empty space in tubule",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "seminiferous_epithelium",
+      "name": "Epitelio seminífero",
+      "label": "Epitelio seminífero",
+      "prompt": "stratified cell layers lining tubule",
+      "color": "#10b981"
+    },
+    {
+      "key": "germ_cell",
+      "name": "Células germinales",
+      "label": "Células germinales",
+      "prompt": "cells within seminiferous epithelium",
+      "color": "#ec4899"
+    },
+    {
+      "key": "spermatogonia_a_pale",
+      "name": "Espermatogonia A clara",
+      "label": "Espermatogonia A clara",
+      "prompt": "round pale nucleus at basal lamina",
+      "color": "#6366f1"
+    },
+    {
+      "key": "spermatogonia_a_dark",
+      "name": "Espermatogonia A oscura",
+      "label": "Espermatogonia A oscura",
+      "prompt": "dark nucleus with central pale zone",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "spermatogonia_b",
+      "name": "Espermatogonia B",
+      "label": "Espermatogonia B",
+      "prompt": "round nucleus, heterogeneous chromatin, luminal",
+      "color": "#f97316"
+    },
+    {
+      "key": "primary_spermatocyte",
+      "name": "Espermatocito primario",
+      "label": "Espermatocito primario",
+      "prompt": "large central nucleus, filamentous chromatin",
+      "color": "#84cc16"
+    },
+    {
+      "key": "secondary_spermatocyte",
+      "name": "Espermatocito secundario",
+      "label": "Espermatocito secundario",
+      "prompt": "small spherical nucleus, pale granular chromatin",
+      "color": "#a855f7"
+    },
+    {
+      "key": "early_spermatid",
+      "name": "Espermátide inmadura o temprana",
+      "label": "Espermátide inmadura o temprana",
+      "prompt": "small round cell, spherical pale nucleus",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "late_spermatid",
+      "name": "Espermátide madura o tardía",
+      "label": "Espermátide madura o tardía",
+      "prompt": "spindle-shaped dark condensed nucleus",
+      "color": "#ef4444"
+    },
+    {
+      "key": "spermatozoon",
+      "name": "Espermatozoide",
+      "label": "Espermatozoide",
+      "prompt": "small dark oval head with flagellum",
+      "color": "#22c55e"
+    },
+    {
+      "key": "sperm_head",
+      "name": "Cabeza del espermatozoide",
+      "label": "Cabeza del espermatozoide",
+      "prompt": "small oval dark condensed structure",
+      "color": "#eab308"
+    },
+    {
+      "key": "acrosome",
+      "name": "Acrosoma",
+      "label": "Acrosoma",
+      "prompt": "cap covering anterior sperm head",
+      "color": "#d946ef"
+    },
+    {
+      "key": "flagellum",
+      "name": "Flagelo",
+      "label": "Flagelo",
+      "prompt": "thin elongated tail-like structure",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "flagellum_midpiece",
+      "name": "Pieza intermedia del flagelo",
+      "label": "Pieza intermedia del flagelo",
+      "prompt": "basophilic spiral structure near head",
+      "color": "#fb923c"
+    },
+    {
+      "key": "sertoli_cell",
+      "name": "Célula de Sertoli o sustentacular",
+      "label": "Célula de Sertoli o sustentacular",
+      "prompt": "large triangular nucleus, prominent nucleolus",
+      "color": "#4ade80"
+    },
+    {
+      "key": "basal_lamina",
+      "name": "Lámina basal del epitelio",
+      "label": "Lámina basal del epitelio",
+      "prompt": "thin linear layer at tubule base",
+      "color": "#facc15"
+    },
+    {
+      "key": "tubular_wall",
+      "name": "Pared tubular",
+      "label": "Pared tubular",
+      "prompt": "thin outer layer of seminiferous tubule",
+      "color": "#e11d48"
+    },
+    {
+      "key": "peritubular_myoid_cell",
+      "name": "Célula peritubular o mioide",
+      "label": "Célula peritubular o mioide",
+      "prompt": "elongated spindle cell, condensed nucleus",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "testicular_interstitium",
+      "name": "Intersticio testicular",
+      "label": "Intersticio testicular",
+      "prompt": "space between seminiferous tubules",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "loose_connective_tissue_stroma",
+      "name": "Estroma de tejido conectivo laxo",
+      "label": "Estroma de tejido conectivo laxo",
+      "prompt": "pale pink extracellular matrix, scattered cells",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "blood_vessel",
+      "name": "Vaso sanguíneo",
+      "label": "Vaso sanguíneo",
+      "prompt": "circular structure with red blood cells",
+      "color": "#10b981"
+    },
+    {
+      "key": "leydig_cell",
+      "name": "Célula de Leydig o intersticial",
+      "label": "Célula de Leydig o intersticial",
+      "prompt": "large polygonal cell cluster, eosinophilic cytoplasm",
+      "color": "#ec4899"
+    },
+    {
+      "key": "reinke_crystalloid",
+      "name": "Cristaloide de Reinke",
+      "label": "Cristaloide de Reinke",
+      "prompt": "eosinophilic rod-shaped inclusion in Leydig cell",
+      "color": "#6366f1"
+    }
+  ],
+  "extracted_images": [
+    {
+      "filename": "e55ac8204e10_p1_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img1.png",
+      "page": 1,
+      "width": 124,
+      "height": 34,
+      "caption": "Imagen 1: Arteria muscular en corte transversal."
+    },
+    {
+      "filename": "e55ac8204e10_p1_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img2.png",
+      "page": 1,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img3.png",
+      "page": 1,
+      "width": 165,
+      "height": 31,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img4.png",
+      "page": 1,
+      "width": 1412,
+      "height": 794,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img5.png",
+      "page": 1,
+      "width": 838,
+      "height": 547,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img6.png",
+      "page": 1,
+      "width": 115,
+      "height": 194,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img7.png",
+      "page": 1,
+      "width": 225,
+      "height": 115,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img8.png",
+      "page": 1,
+      "width": 153,
+      "height": 136,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img9.png",
+      "page": 1,
+      "width": 63,
+      "height": 152,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img10.png",
+      "page": 1,
+      "width": 921,
+      "height": 493,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img11.png",
+      "page": 1,
+      "width": 778,
+      "height": 673,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img12.png",
+      "page": 1,
+      "width": 116,
+      "height": 37,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img13.png",
+      "page": 1,
+      "width": 1628,
+      "height": 1226,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img14.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img14.png",
+      "page": 1,
+      "width": 1879,
+      "height": 1409,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img15.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img15.png",
+      "page": 1,
+      "width": 161,
+      "height": 38,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p1_img16.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p1_img16.png",
+      "page": 1,
+      "width": 964,
+      "height": 1415,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img1.png",
+      "page": 2,
+      "width": 124,
+      "height": 34,
+      "caption": "Imagen 2: Arteria muscular en corte transversal."
+    },
+    {
+      "filename": "e55ac8204e10_p2_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img2.png",
+      "page": 2,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img3.png",
+      "page": 2,
+      "width": 165,
+      "height": 31,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img4.png",
+      "page": 2,
+      "width": 1412,
+      "height": 794,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img5.png",
+      "page": 2,
+      "width": 838,
+      "height": 547,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img6.png",
+      "page": 2,
+      "width": 115,
+      "height": 194,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img7.png",
+      "page": 2,
+      "width": 225,
+      "height": 115,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img8.png",
+      "page": 2,
+      "width": 153,
+      "height": 136,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img9.png",
+      "page": 2,
+      "width": 63,
+      "height": 152,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img10.png",
+      "page": 2,
+      "width": 921,
+      "height": 493,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img11.png",
+      "page": 2,
+      "width": 778,
+      "height": 673,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img12.png",
+      "page": 2,
+      "width": 116,
+      "height": 37,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img13.png",
+      "page": 2,
+      "width": 1628,
+      "height": 1226,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img14.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img14.png",
+      "page": 2,
+      "width": 1879,
+      "height": 1409,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img15.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img15.png",
+      "page": 2,
+      "width": 161,
+      "height": 38,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p2_img16.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p2_img16.png",
+      "page": 2,
+      "width": 964,
+      "height": 1415,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img1.png",
+      "page": 3,
+      "width": 124,
+      "height": 34,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img2.png",
+      "page": 3,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img3.png",
+      "page": 3,
+      "width": 165,
+      "height": 31,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img4.png",
+      "page": 3,
+      "width": 1412,
+      "height": 794,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img5.png",
+      "page": 3,
+      "width": 838,
+      "height": 547,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img6.png",
+      "page": 3,
+      "width": 115,
+      "height": 194,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img7.png",
+      "page": 3,
+      "width": 225,
+      "height": 115,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img8.png",
+      "page": 3,
+      "width": 153,
+      "height": 136,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img9.png",
+      "page": 3,
+      "width": 63,
+      "height": 152,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img10.png",
+      "page": 3,
+      "width": 921,
+      "height": 493,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img11.png",
+      "page": 3,
+      "width": 778,
+      "height": 673,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img12.png",
+      "page": 3,
+      "width": 116,
+      "height": 37,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img13.png",
+      "page": 3,
+      "width": 1628,
+      "height": 1226,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img14.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img14.png",
+      "page": 3,
+      "width": 1879,
+      "height": 1409,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img15.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img15.png",
+      "page": 3,
+      "width": 161,
+      "height": 38,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p3_img16.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p3_img16.png",
+      "page": 3,
+      "width": 964,
+      "height": 1415,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p4_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p4_img1.png",
+      "page": 4,
+      "width": 124,
+      "height": 34,
+      "caption": null
+    },
+    {
+      "filename": "e55ac8204e10_p4_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/e55ac8204e10/e55ac8204e10_p4_img2.png",
+      "page": 4,
+      "width": 1379,
+      "height": 775,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img1.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img2.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img3.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img4.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img5.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img6.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img7.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img8.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img9.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img10.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img11.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img12.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p1_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img13.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img1.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img2.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img3.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img4.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img5.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img6.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img7.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img8.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img9.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img10.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img11.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img12.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p2_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p2_img13.png",
+      "page": 2,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img1.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img2.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img3.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img4.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img5.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img6.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img7.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img8.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img9.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img10.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img11.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img12.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p3_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p3_img13.png",
+      "page": 3,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img1.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img2.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img3.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img4.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img5.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img6.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img7.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img8.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img9.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img10.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    },
+    {
+      "filename": "af51e67a2f47_p4_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p4_img11.png",
+      "page": 4,
+      "width": 1300,
+      "height": 731,
+      "caption": null
+    }
+  ],
+  "prompts": [
+    {
+      "key": "muscular_artery",
+      "prompt": "circular vessel with thick wall",
+      "label": "Arteria muscular",
+      "color": "#e11d48"
+    },
+    {
+      "key": "small_muscular_artery",
+      "prompt": "small vessel with thick pink wall",
+      "label": "Arteria muscular pequeña",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "vein",
+      "prompt": "thin-walled vessel with wide lumen",
+      "label": "Vena",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "venule",
+      "prompt": "small thin-walled vessel",
+      "label": "Vénula",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "arteriole",
+      "prompt": "small artery with few smooth muscle layers",
+      "label": "Arteriola",
+      "color": "#10b981"
+    },
+    {
+      "key": "lumen",
+      "prompt": "empty space within vessel",
+      "label": "Luz",
+      "color": "#ec4899"
+    },
+    {
+      "key": "erythrocyte",
+      "prompt": "small round red cells in lumen",
+      "label": "Eritrocitos",
+      "color": "#6366f1"
+    },
+    {
+      "key": "simple_squamous_epithelium",
+      "prompt": "single layer of flat cells",
+      "label": "Epitelio plano simple",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "tunica_intima",
+      "prompt": "innermost layer lining vessel lumen",
+      "label": "Túnica íntima",
+      "color": "#f97316"
+    },
+    {
+      "key": "endothelial_cell",
+      "prompt": "flat cells lining vessel lumen",
+      "label": "Células endoteliales",
+      "color": "#84cc16"
+    },
+    {
+      "key": "endothelial_nucleus",
+      "prompt": "spindle-shaped dark violet nuclei",
+      "label": "Núcleos del endotelio",
+      "color": "#a855f7"
+    },
+    {
+      "key": "internal_elastic_lamina",
+      "prompt": "wavy translucent pink elastic line",
+      "label": "Lámina elástica interna",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "tunica_media",
+      "prompt": "thick middle layer of smooth muscle",
+      "label": "Túnica media",
+      "color": "#ef4444"
+    },
+    {
+      "key": "smooth_muscle",
+      "prompt": "pink eosinophilic muscle tissue layers",
+      "label": "Músculo liso",
+      "color": "#22c55e"
+    },
+    {
+      "key": "smooth_muscle_nucleus",
+      "prompt": "elongated pale violet nuclei, blunt ends",
+      "label": "Núcleos de músculo liso",
+      "color": "#eab308"
+    },
+    {
+      "key": "external_elastic_lamina",
+      "prompt": "outer wavy elastic line",
+      "label": "Lámina elástica externa",
+      "color": "#d946ef"
+    },
+    {
+      "key": "tunica_adventitia",
+      "prompt": "outermost layer of dense connective tissue",
+      "label": "Túnica adventicia",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "dense_irregular_collagen_connective_tissue",
+      "prompt": "disordered pink collagen fiber bundles",
+      "label": "Tejido conectivo colágeno denso no modelado",
+      "color": "#fb923c"
+    },
+    {
+      "key": "collagen_fiber_bundles",
+      "prompt": "disordered pink collagen fiber bundles",
+      "label": "Haces de fibras colágenas",
+      "color": "#4ade80"
+    },
+    {
+      "key": "fibroblast",
+      "prompt": "spindle-shaped cell in connective tissue",
+      "label": "Fibroblasto",
+      "color": "#facc15"
+    },
+    {
+      "key": "fibroblast_nucleus",
+      "prompt": "dark violet elongated nuclei in adventitia",
+      "label": "Núcleos de fibroblastos",
+      "color": "#e11d48"
+    },
+    {
+      "key": "fibrocyte",
+      "prompt": "small cell in connective tissue",
+      "label": "Fibrocito",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "fibrocyte_nucleus",
+      "prompt": "dark violet small nuclei in adventitia",
+      "label": "Núcleos de fibrocitos",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "artery_lumen",
+      "prompt": "empty central cavity of vessel",
+      "label": "Luz de la arteria",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "erythrocytes",
+      "prompt": "small red round blood cells",
+      "label": "Eritrocitos",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "blood_cells",
+      "prompt": "small dark cells in lumen",
+      "label": "Células de la sangre",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "endothelium",
+      "prompt": "single layer of flat cells",
+      "label": "Endotelio",
+      "color": "#ec4899"
+    },
+    {
+      "key": "endothelial_nuclei",
+      "prompt": "dark violet elongated or punctate nuclei",
+      "label": "Núcleos del endotelio",
+      "color": "#6366f1"
+    },
+    {
+      "key": "dense_chromatin",
+      "prompt": "dark violet compact nuclear material",
+      "label": "Cromatina densa",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "smooth_muscle_fibers",
+      "prompt": "elongated pink eosinophilic fibers",
+      "label": "Fibras musculares lisas",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "smooth_muscle_nuclei",
+      "prompt": "elongated pale violet nuclei with blunt ends",
+      "label": "Núcleos de músculo liso",
+      "color": "#ef4444"
+    },
+    {
+      "key": "lax_chromatin",
+      "prompt": "pale violet granular nuclear material",
+      "label": "Cromatina laxa",
+      "color": "#22c55e"
+    },
+    {
+      "key": "dense_collagenous_connective_tissue",
+      "prompt": "dense pink collagen fiber bundles",
+      "label": "Tejido conectivo colágeno denso",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "collagen_fibers",
+      "prompt": "pink wavy extracellular fibers",
+      "label": "Fibras colágenas",
+      "color": "#4ade80"
+    },
+    {
+      "key": "fibroblast_fibrocyte_nuclei",
+      "prompt": "dark violet elongated nuclei in adventitia",
+      "label": "Núcleos de fibroblastos y fibrocitos",
+      "color": "#facc15"
+    },
+    {
+      "key": "testis",
+      "prompt": "whole organ section",
+      "label": "Testículo",
+      "color": "#e11d48"
+    },
+    {
+      "key": "testicular_lobule",
+      "prompt": "region containing seminiferous tubules",
+      "label": "Lobulillo testicular",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "seminiferous_tubule",
+      "prompt": "circular or oval tubule cross-section",
+      "label": "Túbulo seminífero",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "tubular_lumen",
+      "prompt": "central empty space in tubule",
+      "label": "Luz tubular",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "seminiferous_epithelium",
+      "prompt": "stratified cell layers lining tubule",
+      "label": "Epitelio seminífero",
+      "color": "#10b981"
+    },
+    {
+      "key": "germ_cell",
+      "prompt": "cells within seminiferous epithelium",
+      "label": "Células germinales",
+      "color": "#ec4899"
+    },
+    {
+      "key": "spermatogonia_a_pale",
+      "prompt": "round pale nucleus at basal lamina",
+      "label": "Espermatogonia A clara",
+      "color": "#6366f1"
+    },
+    {
+      "key": "spermatogonia_a_dark",
+      "prompt": "dark nucleus with central pale zone",
+      "label": "Espermatogonia A oscura",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "spermatogonia_b",
+      "prompt": "round nucleus, heterogeneous chromatin, luminal",
+      "label": "Espermatogonia B",
+      "color": "#f97316"
+    },
+    {
+      "key": "primary_spermatocyte",
+      "prompt": "large central nucleus, filamentous chromatin",
+      "label": "Espermatocito primario",
+      "color": "#84cc16"
+    },
+    {
+      "key": "secondary_spermatocyte",
+      "prompt": "small spherical nucleus, pale granular chromatin",
+      "label": "Espermatocito secundario",
+      "color": "#a855f7"
+    },
+    {
+      "key": "early_spermatid",
+      "prompt": "small round cell, spherical pale nucleus",
+      "label": "Espermátide inmadura o temprana",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "late_spermatid",
+      "prompt": "spindle-shaped dark condensed nucleus",
+      "label": "Espermátide madura o tardía",
+      "color": "#ef4444"
+    },
+    {
+      "key": "spermatozoon",
+      "prompt": "small dark oval head with flagellum",
+      "label": "Espermatozoide",
+      "color": "#22c55e"
+    },
+    {
+      "key": "sperm_head",
+      "prompt": "small oval dark condensed structure",
+      "label": "Cabeza del espermatozoide",
+      "color": "#eab308"
+    },
+    {
+      "key": "acrosome",
+      "prompt": "cap covering anterior sperm head",
+      "label": "Acrosoma",
+      "color": "#d946ef"
+    },
+    {
+      "key": "flagellum",
+      "prompt": "thin elongated tail-like structure",
+      "label": "Flagelo",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "flagellum_midpiece",
+      "prompt": "basophilic spiral structure near head",
+      "label": "Pieza intermedia del flagelo",
+      "color": "#fb923c"
+    },
+    {
+      "key": "sertoli_cell",
+      "prompt": "large triangular nucleus, prominent nucleolus",
+      "label": "Célula de Sertoli o sustentacular",
+      "color": "#4ade80"
+    },
+    {
+      "key": "basal_lamina",
+      "prompt": "thin linear layer at tubule base",
+      "label": "Lámina basal del epitelio",
+      "color": "#facc15"
+    },
+    {
+      "key": "tubular_wall",
+      "prompt": "thin outer layer of seminiferous tubule",
+      "label": "Pared tubular",
+      "color": "#e11d48"
+    },
+    {
+      "key": "peritubular_myoid_cell",
+      "prompt": "elongated spindle cell, condensed nucleus",
+      "label": "Célula peritubular o mioide",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "testicular_interstitium",
+      "prompt": "space between seminiferous tubules",
+      "label": "Intersticio testicular",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "loose_connective_tissue_stroma",
+      "prompt": "pale pink extracellular matrix, scattered cells",
+      "label": "Estroma de tejido conectivo laxo",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "blood_vessel",
+      "prompt": "circular structure with red blood cells",
+      "label": "Vaso sanguíneo",
+      "color": "#10b981"
+    },
+    {
+      "key": "leydig_cell",
+      "prompt": "large polygonal cell cluster, eosinophilic cytoplasm",
+      "label": "Célula de Leydig o intersticial",
+      "color": "#ec4899"
+    },
+    {
+      "key": "reinke_crystalloid",
+      "prompt": "eosinophilic rod-shaped inclusion in Leydig cell",
+      "label": "Cristaloide de Reinke",
+      "color": "#6366f1"
+    }
+  ],
+  "source_pdfs": [
+    {
+      "pdf_id": "e55ac8204e10",
+      "filename": "arch3.pdf"
+    },
+    {
+      "pdf_id": "af51e67a2f47",
+      "filename": "arch4.pdf"
+    }
+  ]
+}

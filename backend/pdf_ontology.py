@@ -337,25 +337,44 @@ def generate_ontology_with_gemini(
 
     contents: List[Any] = [user_prompt]
 
-    # Multimodal fallback: If text is empty or very short (< 50 chars), load page images / figures for Gemini Vision
-    if len(text_for_llm.strip()) < 50 and pdf_id:
+    # Multimodal: Send representative PDF images to Gemini alongside text.
+    # This allows the LLM to see actual histological structures in figures
+    # and generate more accurate visual prompts for SAM 3.
+    if pdf_id:
         img_dir = PDF_IMAGES_DIR / pdf_id
         if img_dir.exists():
             img_files = sorted(
                 list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg")) + list(img_dir.glob("*.jpeg"))
             )
-            # Pick up to 3 representative page images / figures
-            for img_path in img_files[:3]:
-                if img_path.name in ("metadata.json", "extracted_text.txt"):
-                    continue
+            # Filter non-image auxiliary files
+            img_files = [f for f in img_files if f.name not in ("metadata.json", "extracted_text.txt")]
+            # Sample up to 8 representative images to avoid latency / token overload
+            max_gemini_images = 8
+            if len(img_files) > max_gemini_images:
+                step = len(img_files) / max_gemini_images
+                selected_files = [img_files[int(i * step)] for i in range(max_gemini_images)]
+            else:
+                selected_files = img_files
+
+            attached_count = 0
+            for img_path in selected_files:
                 try:
                     pil_im = Image.open(img_path)
                     if pil_im.mode != "RGB":
                         pil_im = pil_im.convert("RGB")
+                    # Resize large images to save bandwidth / token cost
+                    max_dim = 1024
+                    if max(pil_im.size) > max_dim:
+                        ratio = max_dim / max(pil_im.size)
+                        new_size = (int(pil_im.width * ratio), int(pil_im.height * ratio))
+                        pil_im = pil_im.resize(new_size, Image.LANCZOS)
                     contents.append(pil_im)
+                    attached_count += 1
                     logger.info(f"Attached image {img_path.name} to Gemini multimodal prompt")
                 except Exception as img_err:
                     logger.warning(f"Error loading image {img_path} for Gemini vision prompt: {img_err}")
+            if attached_count > 0:
+                logger.info(f"Attached {attached_count} images to Gemini prompt for pdf_id={pdf_id}")
 
     response = client.models.generate_content(
         model=model_name,
@@ -435,6 +454,108 @@ def save_ontology(ontology: Dict[str, Any]) -> str:
         json.dump(ontology, f, ensure_ascii=False, indent=2)
     logger.info(f"Saved ontology to {filepath}")
     return str(filepath)
+
+
+def merge_ontology_structures(
+    existing_ontology: Dict[str, Any],
+    new_structures: List[Dict[str, Any]],
+    new_pdf_id: str,
+    new_filename: str,
+    new_images: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Incrementally merge new structures into an existing ontology.
+
+    - Structures with the same ``key`` are updated (new prompt/name wins).
+    - Structures with new keys are appended.
+    - ``source_pdfs`` accumulates all PDF sources.
+    - ``extracted_images`` from the new PDF are appended (deduped by filename).
+
+    Args:
+        existing_ontology: The currently saved ontology document.
+        new_structures: Structures generated from the new PDF.
+        new_pdf_id: pdf_id of the newly uploaded PDF.
+        new_filename: Filename of the new PDF.
+        new_images: Extracted images from the new PDF.
+
+    Returns:
+        The merged ontology document (not yet saved to disk).
+    """
+    # Build a lookup of existing structures by key
+    existing_by_key: Dict[str, Dict[str, Any]] = {
+        s["key"]: s for s in existing_ontology.get("structures", [])
+    }
+
+    added_count = 0
+    updated_count = 0
+
+    for ns in new_structures:
+        key = ns["key"]
+        if key in existing_by_key:
+            # Merge: update prompt/name/label/color from new, keep parent if set
+            existing_by_key[key]["prompt"] = ns.get("prompt", existing_by_key[key].get("prompt"))
+            existing_by_key[key]["name"] = ns.get("name", existing_by_key[key].get("name"))
+            existing_by_key[key]["name_en"] = ns.get("name_en", existing_by_key[key].get("name_en"))
+            existing_by_key[key]["label"] = ns.get("label", ns.get("name", existing_by_key[key].get("label")))
+            if "parent" in ns:
+                existing_by_key[key]["parent"] = ns["parent"]
+            updated_count += 1
+        else:
+            # Assign a new color from the palette
+            color_idx = len(existing_by_key)
+            if "color" not in ns:
+                ns["color"] = DEFAULT_COLORS[color_idx % len(DEFAULT_COLORS)]
+            if "label" not in ns:
+                ns["label"] = ns.get("name", ns.get("key", f"Clase {color_idx + 1}"))
+            existing_by_key[key] = ns
+            added_count += 1
+
+    merged_structures = list(existing_by_key.values())
+
+    # Accumulate source PDFs
+    source_pdfs: List[Dict[str, str]] = existing_ontology.get("source_pdfs", [])
+    # Migrate legacy single source_pdf field
+    if not source_pdfs and existing_ontology.get("source_pdf"):
+        source_pdfs.append({
+            "pdf_id": existing_ontology.get("pdf_id", "unknown"),
+            "filename": existing_ontology["source_pdf"],
+        })
+    # Add new source if not already present
+    if not any(sp.get("pdf_id") == new_pdf_id for sp in source_pdfs):
+        source_pdfs.append({"pdf_id": new_pdf_id, "filename": new_filename})
+
+    # Merge images (deduplicate by filename)
+    existing_images = existing_ontology.get("extracted_images", [])
+    existing_img_filenames = {im.get("filename") for im in existing_images}
+    for img in (new_images or []):
+        if img.get("filename") not in existing_img_filenames:
+            existing_images.append(img)
+            existing_img_filenames.add(img.get("filename"))
+
+    # Rebuild the ontology document
+    existing_ontology["structures"] = merged_structures
+    existing_ontology["source_pdfs"] = source_pdfs
+    existing_ontology["extracted_images"] = existing_images
+    # Keep the legacy source_pdf pointing to the latest
+    existing_ontology["source_pdf"] = new_filename
+    existing_ontology["pdf_id"] = new_pdf_id
+
+    # Regenerate prompts
+    existing_ontology["prompts"] = [
+        {
+            "key": s["key"],
+            "prompt": s["prompt"],
+            "label": s.get("label", s.get("name", s["key"])),
+            "color": s.get("color", DEFAULT_COLORS[i % len(DEFAULT_COLORS)]),
+        }
+        for i, s in enumerate(merged_structures)
+    ]
+
+    logger.info(
+        f"Merge complete: {added_count} new + {updated_count} updated = "
+        f"{len(merged_structures)} total structures from {len(source_pdfs)} PDFs"
+    )
+    return existing_ontology
 
 
 def load_ontology(name: str) -> Optional[Dict[str, Any]]:

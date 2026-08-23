@@ -26,13 +26,26 @@ fi
 PYTHONPATH=backend:sam3 ./.venv/bin/python backend/main.py &
 BACKEND_PID=$!
 
-# Esperar un momento para verificar si se inicia o si falla de inmediato
-sleep 3
-if ! kill -0 $BACKEND_PID 2>/dev/null; then
-    echo -e "${RED}Error: El backend falló al iniciar. Revisa los logs.${NC}"
-    exit 1
+# Esperar a que el backend inicialice el modelo SAM 3 y responda HTTP
+echo -e "${YELLOW}Esperando inicialización del backend y carga del modelo SAM 3 en GPU...${NC}"
+READY=false
+for i in {1..30}; do
+    if ! kill -0 $BACKEND_PID 2>/dev/null; then
+        echo -e "${RED}Error: El backend falló al iniciar. Revisa los logs.${NC}"
+        exit 1
+    fi
+    if curl -s http://127.0.0.1:8000/api/ontologies >/dev/null 2>&1; then
+        READY=true
+        break
+    fi
+    sleep 1
+done
+
+if [ "$READY" = true ]; then
+    echo -e "${GREEN}✔ Backend y modelo SAM 3 listos (PID: $BACKEND_PID)${NC}"
+else
+    echo -e "${YELLOW}⚠ El backend sigue iniciando, continuando con el frontend...${NC}"
 fi
-echo -e "${GREEN}✔ Backend corriendo con PID: $BACKEND_PID${NC}"
 
 # 2. Iniciar el Frontend Astro
 echo -e "${YELLOW}[2/2] Iniciando Frontend Astro en el puerto 4321...${NC}"

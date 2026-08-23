@@ -22,7 +22,7 @@ def run() -> None:
             time.sleep(2)
             
             # Take screenshot and save it to the conversation artifacts directory
-            screenshot_path = "/home/dracero/.gemini/antigravity-ide/brain/2a31e7da-6f5a-4e99-af1e-3f226e69fe61/ui_screenshot.png"
+            screenshot_path = "/home/dracero/.gemini/antigravity-ide/brain/aa7be603-3969-482f-92d6-c37fd02fe0af/ui_screenshot.png"
             page.screenshot(path=screenshot_path, full_page=False)
             print(f"✔ Captura de pantalla guardada en: {screenshot_path}")
             

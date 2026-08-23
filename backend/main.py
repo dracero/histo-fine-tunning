@@ -67,6 +67,7 @@ from pdf_ontology import (
     add_pdf_image,
     update_pdf_image_metadata,
     delete_pdf_image,
+    merge_ontology_structures,
     PDF_IMAGES_DIR,
 )
 
@@ -725,6 +726,7 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
       - text: str (full extracted text — frontend sends it back)
       - images: list (extracted images metadata)
       - domain_name: str (optional, auto-derived from filename if omitted)
+      - merge_into_ontology: str (optional, name of existing ontology to merge into)
     """
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not gemini_key:
@@ -735,7 +737,10 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
 
     pdf_id = payload.get("pdf_id", "unknown")
     text = payload.get("text", "")
-    
+    filename = payload.get("filename", "unknown.pdf")
+    images = payload.get("images", [])
+    merge_into = payload.get("merge_into_ontology", "").strip() or None
+
     # Always prefer full cached text extracted from PDF file if available
     cached_text = get_extracted_text(pdf_id)
     if cached_text:
@@ -749,21 +754,66 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
             pdf_id=pdf_id,
         )
 
-        ontology = build_ontology_document(
-            pdf_id=pdf_id,
-            filename=payload.get("filename", "unknown.pdf"),
-            structures=structures,
-            extracted_images=payload.get("images", []),
-            domain_name=payload.get("domain_name"),
-        )
+        merge_stats: Optional[Dict[str, Any]] = None
+
+        if merge_into:
+            # Incremental merge into an existing ontology
+            existing = load_ontology(merge_into)
+            if existing:
+                existing_count = len(existing.get("structures", []))
+                ontology = merge_ontology_structures(
+                    existing_ontology=existing,
+                    new_structures=structures,
+                    new_pdf_id=pdf_id,
+                    new_filename=filename,
+                    new_images=images,
+                )
+                new_count = len(ontology.get("structures", []))
+                merge_stats = {
+                    "merged_into": merge_into,
+                    "previous_structures": existing_count,
+                    "new_structures_from_pdf": len(structures),
+                    "total_after_merge": new_count,
+                    "added": new_count - existing_count,
+                }
+                logger.info(
+                    f"Merged {len(structures)} structures from {filename} "
+                    f"into '{merge_into}': {existing_count} → {new_count}"
+                )
+            else:
+                # Target ontology not found — create as new with requested name
+                logger.warning(
+                    f"Ontology '{merge_into}' not found for merge, creating new."
+                )
+                ontology = build_ontology_document(
+                    pdf_id=pdf_id,
+                    filename=filename,
+                    structures=structures,
+                    extracted_images=images,
+                    domain_name=merge_into,
+                )
+        else:
+            # Create a brand-new ontology
+            ontology = build_ontology_document(
+                pdf_id=pdf_id,
+                filename=filename,
+                structures=structures,
+                extracted_images=images,
+                domain_name=payload.get("domain_name"),
+            )
 
         filepath = save_ontology(ontology)
 
-        return {
+        result: Dict[str, Any] = {
             "success": True,
             "ontology": ontology,
             "saved_to": filepath,
         }
+        if merge_stats:
+            result["merge_stats"] = merge_stats
+
+        return result
+
     except ImportError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except json.JSONDecodeError as e:
@@ -1077,4 +1127,11 @@ async def export_roboflow_dataset(payload: Dict[str, Any] = Body(default={})) ->
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_dirs=["backend"],
+        reload_excludes=["datasets", "datasets/*", "datasets/**/*"],
+    )

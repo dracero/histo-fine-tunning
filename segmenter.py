@@ -40,8 +40,8 @@ PROMPTS_SUGERIDOS = {
 
 
 def cargar_modelo() -> Sam3Processor:
-    print("Cargando SAM3 (esto puede tardar la primera vez)...")
-    model = build_sam3_image_model()
+    print("Cargando SAM 3.1 (esto puede tardar la primera vez)...")
+    model = build_sam3_image_model(version="sam3.1")
     processor = Sam3Processor(model)
     return processor
 

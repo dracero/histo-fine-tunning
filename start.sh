@@ -12,6 +12,10 @@ echo -e "${CYAN}===================================================${NC}"
 echo -e "${CYAN}      SAM 3 Histology Segmenter - Launching...     ${NC}"
 echo -e "${CYAN}===================================================${NC}"
 
+# Limpiar puertos si ya están en uso
+fuser -k 8000/tcp 4321/tcp 2>/dev/null || true
+sleep 1
+
 # 1. Iniciar el Backend FastAPI
 echo -e "${YELLOW}[1/2] Iniciando Backend FastAPI en el puerto 8000...${NC}"
 if [ ! -d ".venv" ]; then
@@ -19,7 +23,7 @@ if [ ! -d ".venv" ]; then
     exit 1
 fi
 
-./.venv/bin/python backend/main.py &
+PYTHONPATH=backend:sam3 ./.venv/bin/python backend/main.py &
 BACKEND_PID=$!
 
 # Esperar un momento para verificar si se inicia o si falla de inmediato
@@ -38,7 +42,7 @@ if [ ! -d "frontend/node_modules" ]; then
 fi
 
 cd frontend
-npm run dev -- --port 4321 &
+npm run dev -- --port 4321 --force &
 FRONTEND_PID=$!
 cd ..
 

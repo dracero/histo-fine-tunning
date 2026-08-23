@@ -8,28 +8,42 @@ Diseñada especialmente para imágenes complejas (como histología o microscopí
 
 ## 🌟 Características Principales
 
-### 🧠 1. Segmentación Automática con SAM 3 (Meta AI)
-- **Multi-Prompt Automático**: Ejecuta automáticamente una suite de prompts visuales universales (*cell or nucleus, elongated dark nucleus, circular tissue structure, object, etc.*) para detectar cientos de instancias por imagen.
+### 🧠 1. Segmentación Automática con SAM 3.1 (Meta AI)
+- **Multi-Prompt Automático**: Ejecuta automáticamente una suite de prompts visuales universales (*cell or nucleus, elongated dark nucleus, circular tissue structure, object, etc.*) o personalizados basados en ontologías biológicas.
 - **Extracción de Polígonos de Alta Precisión**: Convierte las máscaras binarias generadas por SAM 3 en contornos poligonales (formato COCO) simplificados mediante OpenCV (`findContours` + `approxPolyDP`).
 - **Ajuste de Umbral en Tiempo Real**: Slider para filtrar la confianza de las detecciones al instante sin re-ejecutar el modelo.
 
-### 🖼️ 2. Soporte Multi-Imagen
+### 🔬 2. Clasificación Zero-Shot con CONCH y Embeddings UNI (MahmoodLab)
+- **CONCH (512-d Vision-Language)**: Clasificador histológico zero-shot que analiza los recortes (*crops*) de las células segmentadas por SAM 3 y las asigna automáticamente a las clases biológicas más afines de la ontología.
+- **UNI (1024-d ViT-Large)**: Extracción de vectores morfológicos densos de alta dimensionalidad para cada objeto segmentado.
+
+### 📄 3. Extracción de Ontología y CRUD de Imágenes de PDFs
+- **Extracción Inteligente**: Extrae texto e imágenes embebidas de papers o libros en PDF vía `pymupdf`.
+- **Generación de Ontologías con Gemini**: Diseña estructuras jerárquicas con nombres canónicos y prompts visuales optimizados para segmentación.
+- **CRUD Completo de Imágenes Extraídas**:
+  - **Visualización en Galería y Lightbox**: Zoom de alta resolución, dimensiones y página de origen.
+  - **Edición de Captions**: Actualización y persistencia de pies de figura.
+  - **Eliminación y Depuración**: Borrado de esquemas o figuras no deseadas antes de anotar.
+  - **Carga de Imágenes**: Posibilidad de adjuntar imágenes histológicas adicionales al conjunto.
+- **Segmentación en Lote**: Botón para procesar automáticamente todas las imágenes del PDF con SAM 3.1 + CONCH.
+
+### 🖼️ 4. Soporte Multi-Imagen
 - Carga de múltiples imágenes (Drag & Drop o selector).
 - Galería con estado en tiempo real (🔴 Pendiente / 🟢 Anotada).
 - Preservación independiente del estado de anotación y correcciones por cada imagen.
 
-### ✂️ 3. Edición Fina e Individual de Detecciones
+### ✂️ 5. Edición Fina e Individual de Detecciones
 - **Selección Individual y Múltiple**: Click sobre cualquier celda/polígono para seleccionarla, `Shift + Click` para selección múltiple, o `Ctrl + A` para seleccionar todas las detecciones visibles.
 - **Reasignación de Clases**: Menú contextual con click derecho o dropdown en la barra superior para mover detecciones individuales o en lote entre clases.
 - **Eliminación Rápida**: Tecla `Delete` / `Backspace` o botón en pantalla para borrar falsos positivos o elementos no deseados.
 
-### 🏷️ 4. Gestión Completa de Clases
+### 🏷️ 6. Gestión Completa de Clases
 - **Renombrado Inline**: Edita el nombre genérico (*Clase 1*, *Clase 2*) a nombres semánticos (*Espermatogonia B*, *Célula de Sertoli*, etc.).
 - **Selector de Color**: Color picker por clase para ajustar el tono de visualización.
 - **Visibilidad Toggle**: Muestra u oculta clases específicas para facilitar el trabajo en zonas muy pobladas.
 - **Creación y Eliminación de Clases**: Agrega clases personalizadas vacías o elimina clases enteras.
 
-### 🚀 5. Exportación e Integración con Roboflow
+### 🚀 7. Exportación e Integración con Roboflow
 - **Exportación Local COCO JSON**: Descarga directa de anotaciones consolidadas (imágenes, categorías, bboxes y polígonos `segmentation`).
 - **Subida Directa a Roboflow**: Envío de imágenes y dataset anotado a tu workspace y proyecto de Roboflow vía API.
 - **Disparo de Entrenamiento**: Lanza el entrenamiento de tu modelo (ej. YOLOv8) en Roboflow con un solo click desde la interfaz web.
@@ -41,8 +55,26 @@ Diseñada especialmente para imágenes complejas (como histología o microscopí
 ```text
 Meta_SAM_V3/
 ├── backend/
-│   ├── main.py                  # API FastAPI para inferencia de SAM 3 y endpoints REST
-│   └── roboflow_integration.py  # Módulo de conversión COCO, upload y training en Roboflow
+│   ├── main.py                  # API FastAPI para inferencia de SAM 3, CONCH, UNI y endpoints REST
+│   ├── pathology_models.py      # Módulo de modelos fundacionales (CONCH 512d + UNI 1024d)
+│   ├── pdf_ontology.py          # Extracción de PDFs, ontología con Gemini y CRUD de imágenes
+│   ├── roboflow_integration.py  # Módulo de conversión COCO, upload y training en Roboflow
+│   ├── test_pathology_models.py # Tests unitarios de CONCH, UNI y CRUD de imágenes
+│   └── test_pdf_ontology.py     # Tests unitarios de ontología
+├── frontend/
+│   ├── src/
+│   │   └── pages/
+│   │       └── index.astro      # Interfaz de usuario interactiva (Astro + Vanilla JS + CSS)
+│   ├── package.json
+│   └── astro.config.mjs
+├── datasets/
+│   ├── ontologies/              # Almacenamiento JSON de ontologías generadas
+│   └── pdf_images/              # Imágenes y textos extraídos de PDFs
+├── .env                         # Credenciales (Roboflow, Gemini API Key)
+├── .env.example                 # Plantilla de variables de entorno
+├── package.json                 # Script principal (npm run dev)
+└── start.sh                     # Script Bash de lanzamiento simultáneo de servidores
+```
 ├── frontend/
 │   ├── src/
 │   │   └── pages/

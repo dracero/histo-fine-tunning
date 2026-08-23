@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
 from contextlib import asynccontextmanager
-from typing import List, Dict, Any, AsyncGenerator
+from typing import List, Dict, Any, AsyncGenerator, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +48,32 @@ from roboflow_integration import (
     export_dataset_version,
 )
 
+# Import PDF ontology pipeline
+from pdf_ontology import (
+    extract_pdf_content,
+    generate_ontology_with_gemini,
+    build_ontology_document,
+    save_ontology,
+    load_ontology,
+    list_ontologies,
+    update_ontology_structures,
+    get_ontology_prompts,
+    get_pdf_image_path,
+    get_extracted_text,
+    get_pdf_metadata,
+    add_pdf_image,
+    update_pdf_image_metadata,
+    delete_pdf_image,
+    PDF_IMAGES_DIR,
+)
+
+# Import Pathology Foundation Models (CONCH & UNI)
+from pathology_models import (
+    get_pathology_models_status,
+    classify_detections_with_conch,
+    extract_detection_embeddings_uni,
+)
+
 # Global variables for model and processor
 processor = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -64,9 +90,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     torch.inference_mode().__enter__()
 
     try:
-        model = build_sam3_image_model(device=device)
-        # Very low internal threshold so processor returns all detections
-        processor = Sam3Processor(model, device=device, confidence_threshold=0.01)
+        model = build_sam3_image_model(device=device, version="sam3.1")
+        # Use a reasonable threshold — too low generates hundreds of garbage
+        # detections that waste VRAM during mask interpolation. The official
+        # default is 0.5; 0.35 balances recall vs. precision for histology.
+        processor = Sam3Processor(model, device=device, confidence_threshold=0.35)
         logger.info(f"SAM 3 loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
     except Exception as e:
         logger.error(f"Failed to load SAM 3 model: {e}")
@@ -93,20 +121,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Universal prompts for automatic image partition & segmentation (works for general photos & histology).
-# The user receives pure generic classes (Clase 1, Clase 2...) without domain identification.
+# Fine-grained visual prompts for automatic histology & cell instance segmentation.
+# Replaces generic macro-prompts ("object", "person", "animal") that cause SAM3 to select the whole image frame.
 AUTO_SEGMENT_PROMPTS = [
-    {"key": "clase_1", "prompt": "object",                         "label": "Clase 1", "color": "#8b5cf6"},
-    {"key": "clase_2", "prompt": "person",                         "label": "Clase 2", "color": "#38bdf8"},
-    {"key": "clase_3", "prompt": "animal",                         "label": "Clase 3", "color": "#f59e0b"},
-    {"key": "clase_4", "prompt": "clothing",                       "label": "Clase 4", "color": "#ec4899"},
-    {"key": "clase_5", "prompt": "head",                           "label": "Clase 5", "color": "#06b6d4"},
-    {"key": "clase_6", "prompt": "plant or tree",                  "label": "Clase 6", "color": "#10b981"},
-    {"key": "clase_7", "prompt": "structure or shape",             "label": "Clase 7", "color": "#fb7185"},
-    {"key": "clase_8", "prompt": "cell or nucleus",                "label": "Clase 8", "color": "#f43f5e"},
-    {"key": "clase_9", "prompt": "elongated dark nucleus",         "label": "Clase 9", "color": "#e11d48"},
-    {"key": "clase_10","prompt": "circular tissue structure",      "label": "Clase 10","color": "#6366f1"},
+    {"key": "clase_1", "prompt": "small dark round cell nucleus",             "label": "Núcleos oscuros",     "color": "#f43f5e"},
+    {"key": "clase_2", "prompt": "round cell with pale nucleus",              "label": "Células claras",      "color": "#38bdf8"},
+    {"key": "clase_3", "prompt": "elongated spindle cell nucleus",            "label": "Núcleos alargados",   "color": "#e11d48"},
+    {"key": "clase_4", "prompt": "circular tubule lumen cavity",             "label": "Lumen tubular",       "color": "#6366f1"},
+    {"key": "clase_5", "prompt": "dense connective tissue band",             "label": "Tejido conectivo",    "color": "#8b5cf6"},
+    {"key": "clase_6", "prompt": "red blood cell in vessel",                 "label": "Eritrocitos",         "color": "#ef4444"},
+    {"key": "clase_7", "prompt": "large Leydig cell in intertubular space",  "label": "Células intersticiales", "color": "#f59e0b"},
+    {"key": "clase_8", "prompt": "spermatogonium near basement membrane",    "label": "Espermatogonias",     "color": "#10b981"},
 ]
+
+SPANISH_PROMPT_TRANSLATION_MAP = {
+    "células germinales": "small round cell nucleus in seminiferous epithelium",
+    "celulas germinales": "small round cell nucleus in seminiferous epithelium",
+    "espermatogonia": "small round cell nucleus near basement membrane",
+    "espermatogonia a clara": "round cell with pale chromatin near tubule basement membrane",
+    "espermatogonia b": "small dark round nucleus at tubule wall",
+    "espermatocito": "large round cell with mottled nucleus in tubule wall",
+    "espermátida": "small dense dark nucleus near tubule lumen",
+    "célula de sertoli": "tall cell with pale triangular nucleus",
+    "celula de sertoli": "tall cell with pale triangular nucleus",
+    "célula de leydig": "polygonal cell with eosinophilic cytoplasm in interstitial space",
+    "celula de leydig": "polygonal cell with eosinophilic cytoplasm in interstitial space",
+    "túbulo seminífero": "circular tissue structure with central lumen",
+    "tubulo seminifero": "circular tissue structure with central lumen",
+    "lumen": "empty circular lumen cavity",
+    "núcleos": "dark round cell nucleus",
+    "nucleos": "dark round cell nucleus",
+}
+
+
+def translate_prompt_if_needed(prompt_text: str) -> str:
+    """Translates common Spanish medical/histology terms into visual English prompts for SAM 3."""
+    if not prompt_text:
+        return "cell nucleus"
+    cleaned = prompt_text.strip().lower()
+    if cleaned in SPANISH_PROMPT_TRANSLATION_MAP:
+        translated = SPANISH_PROMPT_TRANSLATION_MAP[cleaned]
+        logger.info(f"Translated Spanish prompt '{prompt_text}' -> '{translated}'")
+        return translated
+    return prompt_text
+
 
 MAX_INFERENCE_DIM = 1440  # Max dimension for SAM3 inference interpolation to prevent VRAM OOM
 
@@ -171,8 +229,22 @@ def mask_to_polygons(mask, scale_x: float = 1.0, scale_y: float = 1.0, simplify_
     return polygons
 
 
-def _extract_detections(output, umbral: float, scale_x: float = 1.0, scale_y: float = 1.0, include_polygons: bool = True) -> list:
-    """Extract detections from processor output state dict and rescale boxes to original image size."""
+def _extract_detections(
+    output,
+    umbral: float,
+    scale_x: float = 1.0,
+    scale_y: float = 1.0,
+    include_polygons: bool = True,
+    img_w: Optional[int] = None,
+    img_h: Optional[int] = None,
+    iou_threshold: float = 0.5,
+    **kwargs
+) -> list:
+    """
+    Extract detections from processor output state dict, apply NMS to remove
+    overlapping/duplicate masks, filter whole-frame artifacts, and rescale boxes
+    to original image coordinates.
+    """
     masks = output.get("masks")
     boxes = output.get("boxes")
     scores = output.get("scores")
@@ -193,66 +265,94 @@ def _extract_detections(output, umbral: float, scale_x: float = 1.0, scale_y: fl
     if isinstance(clean_boxes, list) and len(clean_boxes) > 0 and not isinstance(clean_boxes[0], list):
         clean_boxes = [clean_boxes]
 
+    # Filter indices by threshold
+    valid_indices = [i for i, s in enumerate(clean_scores) if float(s) >= umbral]
+    if not valid_indices:
+        return []
+
+    # Apply Non-Maximum Suppression (NMS) to eliminate duplicate/overlapping boxes
+    if len(valid_indices) > 1:
+        try:
+            import torchvision.ops
+            boxes_tensor = torch.tensor([clean_boxes[i] for i in valid_indices], dtype=torch.float32)
+            scores_tensor = torch.tensor([float(clean_scores[i]) for i in valid_indices], dtype=torch.float32)
+            keep = torchvision.ops.nms(boxes_tensor, scores_tensor, iou_threshold=iou_threshold)
+            valid_indices = [valid_indices[k] for k in keep.tolist()]
+        except Exception as nms_err:
+            logger.warning(f"NMS filtering skipped: {nms_err}")
+
+    total_img_area = (float(img_w) * float(img_h)) if (img_w and img_h and img_w > 0 and img_h > 0) else None
+
     detections = []
-    for i, score in enumerate(clean_scores):
-        s = float(score)
-        if s >= umbral:
-            box = clean_boxes[i]
-            # Rescale box from inference dimensions back to original image dimensions
-            rescaled_box = [
-                float(box[0] * scale_x),
-                float(box[1] * scale_y),
-                float(box[2] * scale_x),
-                float(box[3] * scale_y)
-            ]
+    for i in valid_indices:
+        s = float(clean_scores[i])
+        box = clean_boxes[i]
 
-            detection = {
-                "box": rescaled_box,
-                "score": round(s, 4)
-            }
+        # Rescale box from inference dimensions back to original image dimensions
+        x1 = float(box[0] * scale_x)
+        y1 = float(box[1] * scale_y)
+        x2 = float(box[2] * scale_x)
+        y2 = float(box[3] * scale_y)
 
-            # Extract polygon from mask
-            if include_polygons and masks is not None:
-                try:
-                    mask_i = masks[i]
-                    polys = mask_to_polygons(mask_i, scale_x, scale_y)
-                    if polys:
-                        detection["segmentation"] = polys
-                        # Compute area from mask
-                        if hasattr(mask_i, "cpu"):
-                            area = float(mask_i.cpu().numpy().sum()) * scale_x * scale_y
-                        else:
-                            area = float(np.array(mask_i).sum()) * scale_x * scale_y
-                        detection["area"] = round(area, 2)
-                except Exception as e:
-                    logger.warning(f"Failed to extract polygon for detection {i}: {e}")
+        if img_w is not None and img_w > 0:
+            x1 = max(0.0, min(float(img_w), x1))
+            x2 = max(0.0, min(float(img_w), x2))
+        if img_h is not None and img_h > 0:
+            y1 = max(0.0, min(float(img_h), y1))
+            y2 = max(0.0, min(float(img_h), y2))
 
-            detections.append(detection)
+        bw = max(0.0, x2 - x1)
+        bh = max(0.0, y2 - y1)
+        box_area = bw * bh
+
+        # Filter out macro-boxes covering almost the entire image (> 85% area),
+        # which occur when SAM 3 selects the whole slide/frame instead of cells
+        if total_img_area and total_img_area > 0 and (box_area / total_img_area) > 0.85:
+            continue
+
+        rescaled_box = [x1, y1, x2, y2]
+
+        detection = {
+            "box": rescaled_box,
+            "bbox": [x1, y1, bw, bh],
+            "score": round(s, 4)
+        }
+
+        # Extract polygon from mask
+        if include_polygons and masks is not None:
+            try:
+                mask_i = masks[i]
+                polys = mask_to_polygons(mask_i, scale_x, scale_y)
+                if polys:
+                    detection["segmentation"] = polys
+                    if hasattr(mask_i, "cpu"):
+                        area = float(mask_i.cpu().numpy().sum()) * scale_x * scale_y
+                    else:
+                        area = float(np.array(mask_i).sum()) * scale_x * scale_y
+                    detection["area"] = round(area, 2)
+            except Exception as e:
+                logger.warning(f"Failed to extract polygon for detection {i}: {e}")
+
+        detections.append(detection)
+
     return detections
 
 
 def _prepare_image_for_inference(pil_image: Image.Image):
     """
-    Resizes high-res images to MAX_INFERENCE_DIM to prevent CUDA VRAM OOM during mask interpolation.
-    Returns (inference_pil_image, orig_width, orig_height, scale_x, scale_y)
+    Prepares image for SAM3 inference.
+
+    IMPORTANT: Sam3Processor already resizes to its native 1008×1008 internally
+    with proper normalization. We do NOT pre-resize here to avoid double-resize
+    quality loss. We only record the original dimensions so that output boxes
+    and masks can be mapped back to original coordinates.
+
+    Returns (pil_image, orig_width, orig_height, scale_x, scale_y)
     """
     orig_w, orig_h = pil_image.size
-    max_dim = max(orig_w, orig_h)
-
-    if max_dim > MAX_INFERENCE_DIM:
-        scale = MAX_INFERENCE_DIM / float(max_dim)
-        new_w = max(1, int(orig_w * scale))
-        new_h = max(1, int(orig_h * scale))
-        inf_image = pil_image.resize((new_w, new_h), Image.Resampling.BILINEAR)
-        scale_x = orig_w / float(new_w)
-        scale_y = orig_h / float(new_h)
-        logger.info(f"Resized input from {orig_w}x{orig_h} to {new_w}x{new_h} for inference (scale factors: {scale_x:.3f}, {scale_y:.3f})")
-    else:
-        inf_image = pil_image
-        scale_x = 1.0
-        scale_y = 1.0
-
-    return inf_image, orig_w, orig_h, scale_x, scale_y
+    # Sam3Processor handles all resizing internally — scale factors are 1.0
+    # because the processor already maps outputs back to original_height/width.
+    return pil_image, orig_w, orig_h, 1.0, 1.0
 
 
 @app.get("/api/health")
@@ -287,10 +387,11 @@ async def segment_image(
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
 
+        translated_prompt = translate_prompt_if_needed(prompt)
         inference_state = processor.set_image(inf_image)
-        output = processor.set_text_prompt(state=inference_state, prompt=prompt)
+        output = processor.set_text_prompt(state=inference_state, prompt=translated_prompt)
 
-        detections = _extract_detections(output, umbral, scale_x, scale_y)
+        detections = _extract_detections(output, umbral, scale_x, scale_y, img_w=width, img_h=height)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -318,7 +419,8 @@ async def segment_image(
 async def segment_auto(
     image: UploadFile = File(...),
     umbral: float = Form(0.05),
-    custom_prompt: str = Form(None)
+    custom_prompt: str = Form(None),
+    ontology_name: str = Form(None)
 ) -> Dict[str, Any]:
     """
     Universal automatic multi-prompt segmentation for ANY image.
@@ -342,19 +444,31 @@ async def segment_auto(
         all_groups = []
         total_detections = 0
 
-        # Create active prompts list
-        prompts_to_run = list(AUTO_SEGMENT_PROMPTS)
+        # Use ontology prompts if specified, otherwise fall back to generic
+        if ontology_name and ontology_name.strip():
+            ont_prompts = get_ontology_prompts(ontology_name.strip())
+            if ont_prompts:
+                prompts_to_run = ont_prompts
+                logger.info(f"Using ontology '{ontology_name}' with {len(prompts_to_run)} prompts")
+            else:
+                logger.warning(f"Ontology '{ontology_name}' not found, using defaults")
+                prompts_to_run = list(AUTO_SEGMENT_PROMPTS)
+        else:
+            prompts_to_run = list(AUTO_SEGMENT_PROMPTS)
+
         if custom_prompt and custom_prompt.strip():
             cp_text = custom_prompt.strip()
+            translated_cp = translate_prompt_if_needed(cp_text)
             prompts_to_run.insert(0, {
                 "key": f"clase_custom_{len(prompts_to_run)+1}",
-                "prompt": cp_text,
-                "label": f"Clase {len(prompts_to_run)+1}",
+                "prompt": translated_cp,
+                "label": cp_text,  # Keep original user text for UI display
                 "color": "#a855f7"
             })
 
         for prompt_info in prompts_to_run:
-            prompt_text = prompt_info["prompt"]
+            raw_prompt_text = prompt_info["prompt"]
+            prompt_text = translate_prompt_if_needed(raw_prompt_text)
             prompt_key = prompt_info["key"]
             prompt_label = prompt_info["label"]
             prompt_color = prompt_info["color"]
@@ -365,12 +479,11 @@ async def segment_auto(
             # Run text prompt
             output = processor.set_text_prompt(state=inference_state, prompt=prompt_text)
 
-            detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True)
+            detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True, img_w=width, img_h=height)
             count = len(detections)
-            total_detections += count
 
             if count > 0:
-                logger.info(f"  '{prompt_text}' -> {count} detections (with polygons)")
+                logger.info(f"  '{prompt_text}' -> {count} raw detections (with polygons)")
                 all_groups.append({
                     "key": prompt_key,
                     "prompt": prompt_text,
@@ -379,6 +492,59 @@ async def segment_auto(
                     "detections": detections,
                     "count": count
                 })
+
+        # --- Pathology Foundation Model Refinement (CONCH Zero-Shot) ---
+        raw_candidates = []
+        for g in all_groups:
+            for d in g["detections"]:
+                d_copy = dict(d)
+                d_copy["initial_class_key"] = g["key"]
+                d_copy["initial_label"] = g["label"]
+                d_copy["color"] = g["color"]
+                raw_candidates.append(d_copy)
+
+        if raw_candidates and len(prompts_to_run) > 0:
+            try:
+                classified = classify_detections_with_conch(
+                    image=pil_image,
+                    detections=raw_candidates,
+                    candidate_classes=prompts_to_run,
+                    temperature=0.05
+                )
+
+                grouped_by_key = {}
+                for c in prompts_to_run:
+                    grouped_by_key[c["key"]] = {
+                        "key": c["key"],
+                        "prompt": c["prompt"],
+                        "label": c["label"],
+                        "color": c["color"],
+                        "detections": [],
+                        "count": 0
+                    }
+
+                for det in classified:
+                    target_key = det.get("class_key", det.get("initial_class_key"))
+                    if target_key not in grouped_by_key:
+                        grouped_by_key[target_key] = {
+                            "key": target_key,
+                            "prompt": det.get("prompt", target_key),
+                            "label": det.get("class_label", target_key),
+                            "color": det.get("color", "#8b5cf6"),
+                            "detections": [],
+                            "count": 0
+                        }
+                    grouped_by_key[target_key]["detections"].append(det)
+                    grouped_by_key[target_key]["count"] += 1
+
+                all_groups = [g for g in grouped_by_key.values() if g["count"] > 0]
+                total_detections = sum(g["count"] for g in all_groups)
+                logger.info(f"CONCH zero-shot verified {total_detections} detections across {len(all_groups)} categories")
+            except Exception as conch_err:
+                logger.warning(f"CONCH refinement skipped (fallback to raw SAM 3): {conch_err}")
+                total_detections = sum(g["count"] for g in all_groups)
+        else:
+            total_detections = sum(g["count"] for g in all_groups)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -507,6 +673,291 @@ async def segment_point(
         logger.error(f"Error in segment_point: {e}", exc_info=True)
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================== PDF Ontology Endpoints ========================
+
+@app.post("/api/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """
+    Upload a PDF and extract text + embedded images.
+    Returns a preview of the extracted content (text summary, image list).
+    """
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos PDF.")
+
+    try:
+        pdf_bytes = await file.read()
+        result = extract_pdf_content(pdf_bytes, file.filename)
+
+        # Return a summary (not the full text, to keep response light)
+        text_preview = result["text"][:2000] + ("..." if len(result["text"]) > 2000 else "")
+
+        return {
+            "success": True,
+            "pdf_id": result["pdf_id"],
+            "filename": result["filename"],
+            "total_pages": result["total_pages"],
+            "total_images": result["total_images"],
+            "text_length": result["text_length"],
+            "text_preview": text_preview,
+            "images": result["images"],
+        }
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"PDF extraction error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error al procesar PDF: {str(e)}")
+
+
+@app.post("/api/generate-ontology")
+async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """
+    Generate a domain ontology from previously extracted PDF text.
+
+    Expects:
+      - pdf_id: str (from upload-pdf response)
+      - filename: str (original PDF filename)
+      - text: str (full extracted text — frontend sends it back)
+      - images: list (extracted images metadata)
+      - domain_name: str (optional, auto-derived from filename if omitted)
+    """
+    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not gemini_key:
+        raise HTTPException(
+            status_code=500,
+            detail="GEMINI_API_KEY no está configurada en .env"
+        )
+
+    text = payload.get("text", "")
+    pdf_id = payload.get("pdf_id", "unknown")
+    if not text or len(text.strip()) < 50:
+        cached_text = get_extracted_text(pdf_id)
+        if cached_text and len(cached_text.strip()) >= 50:
+            text = cached_text
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="El texto extraído es demasiado corto para generar una ontología."
+            )
+
+    try:
+        structures = generate_ontology_with_gemini(
+            extracted_text=text,
+            api_key=gemini_key,
+            model_name="gemini-2.5-flash",
+        )
+
+        ontology = build_ontology_document(
+            pdf_id=pdf_id,
+            filename=payload.get("filename", "unknown.pdf"),
+            structures=structures,
+            extracted_images=payload.get("images", []),
+            domain_name=payload.get("domain_name"),
+        )
+
+        filepath = save_ontology(ontology)
+
+        return {
+            "success": True,
+            "ontology": ontology,
+            "saved_to": filepath,
+        }
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except json.JSONDecodeError as e:
+        logger.error(f"LLM returned invalid JSON: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"El LLM devolvió JSON inválido. Intentá de nuevo."
+        )
+    except Exception as e:
+        logger.error(f"Ontology generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error generando ontología: {str(e)}")
+
+
+@app.get("/api/ontologies")
+def get_ontologies() -> Dict[str, Any]:
+    """List all saved ontologies."""
+    return {"ontologies": list_ontologies()}
+
+
+@app.get("/api/ontology/{name}")
+def get_ontology(name: str) -> Dict[str, Any]:
+    """Get a specific ontology by domain name."""
+    ontology = load_ontology(name)
+    if ontology is None:
+        raise HTTPException(status_code=404, detail=f"Ontología '{name}' no encontrada.")
+    return ontology
+
+
+@app.put("/api/ontology/{name}")
+async def update_ontology(name: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """
+    Update the structures of a saved ontology.
+    Expects { "structures": [...] } in body.
+    """
+    structures = payload.get("structures")
+    if structures is None or not isinstance(structures, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Se requiere un array 'structures' en el body."
+        )
+
+    updated = update_ontology_structures(name, structures)
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Ontología '{name}' no encontrada.")
+
+    return {"success": True, "ontology": updated}
+
+
+@app.get("/api/pdf-images/{pdf_id}")
+def get_pdf_images(pdf_id: str) -> Dict[str, Any]:
+    """Get the current list of images and metadata for a PDF (CRUD: Read)."""
+    meta = get_pdf_metadata(pdf_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="PDF no encontrado.")
+    return {"success": True, "pdf_id": pdf_id, "images": meta.get("images", [])}
+
+
+@app.get("/api/pdf-image/{pdf_id}/{filename}")
+async def serve_pdf_image(pdf_id: str, filename: str):
+    """Serve an extracted PDF image for the frontend."""
+    from fastapi.responses import FileResponse
+
+    path = get_pdf_image_path(pdf_id, filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada.")
+    return FileResponse(path, media_type="image/png")
+
+
+@app.post("/api/pdf-image/{pdf_id}/upload")
+async def upload_custom_pdf_image(
+    pdf_id: str,
+    file: UploadFile = File(...),
+    caption: str = Form(None)
+) -> Dict[str, Any]:
+    """
+    Upload a new image to an existing PDF collection (CRUD: Create).
+    """
+    try:
+        contents = await file.read()
+        img_info = add_pdf_image(pdf_id, contents, file.filename or "image.png", caption)
+        return {"success": True, "image": img_info}
+    except Exception as e:
+        logger.error(f"Error uploading image to PDF {pdf_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/pdf-image/{pdf_id}/{filename}")
+async def update_pdf_image(
+    pdf_id: str,
+    filename: str,
+    payload: Dict[str, Any] = Body(...)
+) -> Dict[str, Any]:
+    """
+    Update caption/label of a PDF image (CRUD: Update).
+    """
+    caption = payload.get("caption")
+    label = payload.get("label")
+    updated = update_pdf_image_metadata(pdf_id, filename, caption=caption, label=label)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada.")
+    return {"success": True, "image": updated}
+
+
+@app.delete("/api/pdf-image/{pdf_id}/{filename}")
+def delete_extracted_pdf_image(pdf_id: str, filename: str) -> Dict[str, Any]:
+    """
+    Delete an image from a PDF collection (CRUD: Delete).
+    """
+    deleted = delete_pdf_image(pdf_id, filename)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada o no se pudo eliminar.")
+    return {"success": True, "filename": filename}
+
+
+# ======================== Pathology Foundation Models (CONCH & UNI) ========================
+
+@app.get("/api/pathology-models-status")
+def pathology_models_status() -> Dict[str, Any]:
+    """Check availability and device status for CONCH and UNI foundation models."""
+    return get_pathology_models_status()
+
+
+@app.post("/api/classify-detections-conch")
+async def classify_conch(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    classes: str = Form(...),
+    temperature: float = Form(0.05),
+) -> Dict[str, Any]:
+    """
+    Run Zero-Shot Pathology Classification with CONCH on segmented crops.
+
+    Expects:
+      - image: original image file
+      - detections: JSON string representing list of detection objects
+      - classes: JSON string representing candidate classes [{ key, prompt, label, color }]
+      - temperature: float (softmax scaling factor)
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        detections_list = json.loads(detections)
+        classes_list = json.loads(classes)
+
+        if not isinstance(detections_list, list) or not isinstance(classes_list, list):
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections o classes.")
+
+        classified = classify_detections_with_conch(
+            image=pil_image,
+            detections=detections_list,
+            candidate_classes=classes_list,
+            temperature=temperature,
+        )
+
+        return {
+            "success": True,
+            "total_classified": len(classified),
+            "detections": classified,
+        }
+    except Exception as e:
+        logger.error(f"Error in CONCH zero-shot classification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/extract-features-uni")
+async def extract_uni_features(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+) -> Dict[str, Any]:
+    """
+    Extract 1024-dim UNI pathology embeddings for all detection crops.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        detections_list = json.loads(detections)
+        if not isinstance(detections_list, list):
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections.")
+
+        embeddings = extract_detection_embeddings_uni(
+            image=pil_image,
+            detections=detections_list,
+        )
+
+        return {
+            "success": True,
+            "total_extracted": len(embeddings),
+            "embedding_dim": 1024,
+            "embeddings": embeddings,
+        }
+    except Exception as e:
+        logger.error(f"Error in UNI feature extraction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

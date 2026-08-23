@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[project]
+name = "meta-sam-v3"
+version = "0.1.0"
+description = "SAM 3 Histological & Universal Segmenter API with PDF Ontology Pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # SAM 3 local editable package
+    "sam3",
+    # Backend web framework
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "python-multipart>=0.0.9",
+    "requests>=2.31.0",
+    # Image & Signal Processing
+    "pillow>=10.2.0",
+    "numpy>=1.26.0,<2.0.0",
+    "opencv-python>=4.9.0",
+    # PyTorch
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+    # SAM 3 core dependencies
+    "timm>=1.0.17",
+    "ftfy==6.1.1",
+    "iopath>=0.1.10",
+    "einops>=0.7.0",
+    "pycocotools>=2.0.7",
+    "regex>=2023.12.25",
+    "tqdm>=4.66.0",
+    "psutil>=5.9.0",
+    # PDF Extraction & LLM Ontology
+    "pymupdf>=1.24.0",
+    "google-genai>=0.1.0",
+    # Roboflow & Utilities
+    "python-dotenv>=1.0.0",
+    "roboflow>=1.1.0",
+    "setuptools<70",
+]
+
+[tool.uv.sources]
+sam3 = { path = "./sam3", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]

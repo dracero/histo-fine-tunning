@@ -98,7 +98,7 @@ TEXT:
 def extract_pdf_content(
     pdf_bytes: bytes,
     filename: str,
-    min_image_size: int = 100,
+    min_image_size: int = 40,
     max_images: int = 50,
 ) -> Dict[str, Any]:
     """
@@ -155,11 +155,12 @@ def extract_pdf_content(
                     pix = None
                     continue
 
-                # Convert CMYK to RGB if necessary
-                if pix.n > 4:
-                    pix = fitz.Pixmap(fitz.csRGB, pix)
-                elif pix.n == 4:
-                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                # Convert CMYK / RGBA to RGB if necessary
+                if pix.n >= 4 or pix.alpha:
+                    try:
+                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                    except Exception as conv_err:
+                        logger.warning(f"Error converting image xref={xref} to RGB: {conv_err}")
 
                 img_filename = f"{pdf_id}_p{page_num + 1}_img{img_index + 1}.png"
                 img_path = images_dir / img_filename
@@ -183,6 +184,39 @@ def extract_pdf_content(
             except Exception as e:
                 logger.warning(f"Failed to extract image xref={xref} from page {page_num + 1}: {e}")
                 continue
+
+    # FALLBACK: If no embedded raster images were found in the document,
+    # render PDF pages as high-resolution images so the user has images to segment.
+    if image_count == 0 and len(doc) > 0:
+        logger.info(f"No embedded images found in {filename}. Rendering PDF pages as fallback images...")
+        max_page_renders = min(len(doc), 15)
+        for page_num in range(max_page_renders):
+            try:
+                page = doc[page_num]
+                pix = page.get_pixmap(dpi=150)
+
+                if pix.n >= 4 or pix.alpha:
+                    try:
+                        pix = fitz.Pixmap(fitz.csRGB, pix)
+                    except Exception as pix_err:
+                        logger.warning(f"Failed to convert rendered page {page_num + 1} pixmap to csRGB: {pix_err}")
+
+                img_filename = f"{pdf_id}_p{page_num + 1}_render.png"
+                img_path = images_dir / img_filename
+                pix.save(str(img_path))
+
+                extracted_images.append({
+                    "filename": img_filename,
+                    "path": str(img_path),
+                    "page": page_num + 1,
+                    "width": pix.width,
+                    "height": pix.height,
+                    "caption": f"Página {page_num + 1} (Vista completa)",
+                })
+                image_count += 1
+                pix = None
+            except Exception as render_err:
+                logger.warning(f"Failed to render page {page_num + 1} for {filename}: {render_err}")
 
     doc.close()
 

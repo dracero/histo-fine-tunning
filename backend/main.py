@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 # Configure PyTorch CUDA memory allocator before importing torch
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
@@ -730,17 +733,18 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
             detail="GEMINI_API_KEY no está configurada en .env"
         )
 
-    text = payload.get("text", "")
     pdf_id = payload.get("pdf_id", "unknown")
-    if not text or len(text.strip()) < 50:
-        cached_text = get_extracted_text(pdf_id)
-        if cached_text and len(cached_text.strip()) >= 50:
-            text = cached_text
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="El texto extraído es demasiado corto para generar una ontología."
-            )
+    text = payload.get("text", "")
+    
+    # Always prefer full cached text extracted from PDF file if available
+    cached_text = get_extracted_text(pdf_id)
+    if cached_text and len(cached_text.strip()) >= 50:
+        text = cached_text
+    elif not text or len(text.strip()) < 50:
+        raise HTTPException(
+            status_code=400,
+            detail="El texto extraído del PDF es demasiado corto o no contiene información temática suficiente."
+        )
 
     try:
         structures = generate_ontology_with_gemini(

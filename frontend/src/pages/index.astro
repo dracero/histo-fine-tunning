@@ -2525,9 +2525,14 @@
 					const ontResult = await ontRes.json();
 					displayOntologyEditor(ontResult.ontology);
 					loadSavedOntologies();
+				} else {
+					const ontErrData = await ontRes.json().catch(() => ({ detail: "Error al generar ontología" }));
+					console.error("Auto ontology generation error:", ontErrData);
+					alert("⚠️ No se pudo generar la ontología con Gemini: " + (ontErrData.detail || "Verifique la API Key de Gemini en .env"));
 				}
 			} catch (ontErr) {
 				console.warn("Auto ontology generation warning:", ontErr);
+				alert("⚠️ Error de conexión al generar ontología: " + ontErr.message);
 			}
 
 			if (uploadContent) {

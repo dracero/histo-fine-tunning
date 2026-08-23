@@ -738,19 +738,15 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
     
     # Always prefer full cached text extracted from PDF file if available
     cached_text = get_extracted_text(pdf_id)
-    if cached_text and len(cached_text.strip()) >= 50:
+    if cached_text:
         text = cached_text
-    elif not text or len(text.strip()) < 50:
-        raise HTTPException(
-            status_code=400,
-            detail="El texto extraído del PDF es demasiado corto o no contiene información temática suficiente."
-        )
 
     try:
         structures = generate_ontology_with_gemini(
             extracted_text=text,
             api_key=gemini_key,
             model_name="gemini-2.5-flash",
+            pdf_id=pdf_id,
         )
 
         ontology = build_ontology_document(

@@ -98,7 +98,7 @@ TEXT:
 def extract_pdf_content(
     pdf_bytes: bytes,
     filename: str,
-    min_image_size: int = 40,
+    min_image_size: int = 20,
     max_images: int = 50,
 ) -> Dict[str, Any]:
     """
@@ -148,24 +148,49 @@ def extract_pdf_content(
 
             xref = img_info[0]
             try:
-                pix = fitz.Pixmap(doc, xref)
+                saved_via_pil = False
+                width, height = 0, 0
 
-                # Skip very small images (icons, decorations)
-                if pix.width < min_image_size or pix.height < min_image_size:
+                # Primary extraction: direct raw stream via doc.extract_image + PIL
+                try:
+                    base_image = doc.extract_image(xref)
+                    if base_image and "image" in base_image:
+                        raw_bytes = base_image["image"]
+                        pil_img = Image.open(io.BytesIO(raw_bytes))
+                        width, height = pil_img.size
+
+                        if width >= min_image_size and height >= min_image_size:
+                            if pil_img.mode != "RGB":
+                                pil_img = pil_img.convert("RGB")
+                            img_filename = f"{pdf_id}_p{page_num + 1}_img{img_index + 1}.png"
+                            img_path = images_dir / img_filename
+                            pil_img.save(img_path, format="PNG")
+                            saved_via_pil = True
+                except Exception as extract_err:
+                    logger.debug(f"doc.extract_image failed for xref={xref}: {extract_err}")
+
+                # Secondary extraction: fallback to PyMuPDF Pixmap if raw stream failed
+                if not saved_via_pil:
+                    pix = fitz.Pixmap(doc, xref)
+
+                    # Skip very small images (icons, decorations)
+                    if pix.width < min_image_size or pix.height < min_image_size:
+                        pix = None
+                        continue
+
+                    # Convert CMYK / RGBA to RGB if necessary
+                    if pix.n >= 4 or pix.alpha:
+                        try:
+                            pix = fitz.Pixmap(fitz.csRGB, pix)
+                        except Exception as conv_err:
+                            logger.warning(f"Error converting image xref={xref} to RGB: {conv_err}")
+
+                    img_filename = f"{pdf_id}_p{page_num + 1}_img{img_index + 1}.png"
+                    img_path = images_dir / img_filename
+
+                    pix.save(str(img_path))
+                    width, height = pix.width, pix.height
                     pix = None
-                    continue
-
-                # Convert CMYK / RGBA to RGB if necessary
-                if pix.n >= 4 or pix.alpha:
-                    try:
-                        pix = fitz.Pixmap(fitz.csRGB, pix)
-                    except Exception as conv_err:
-                        logger.warning(f"Error converting image xref={xref} to RGB: {conv_err}")
-
-                img_filename = f"{pdf_id}_p{page_num + 1}_img{img_index + 1}.png"
-                img_path = images_dir / img_filename
-
-                pix.save(str(img_path))
 
                 # Try to find a caption near the image
                 caption = _find_image_caption(page_text, page_num + 1, img_index)
@@ -174,12 +199,11 @@ def extract_pdf_content(
                     "filename": img_filename,
                     "path": str(img_path),
                     "page": page_num + 1,
-                    "width": pix.width,
-                    "height": pix.height,
+                    "width": width,
+                    "height": height,
                     "caption": caption,
                 })
                 image_count += 1
-                pix = None
 
             except Exception as e:
                 logger.warning(f"Failed to extract image xref={xref} from page {page_num + 1}: {e}")
@@ -276,15 +300,17 @@ def generate_ontology_with_gemini(
     api_key: str,
     model_name: str = "gemini-2.5-flash",
     max_text_chars: int = 80000,
+    pdf_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Send extracted PDF text to Gemini and get back a structured ontology.
+    Send extracted PDF text (and optional page images) to Gemini and get back a structured ontology.
 
     Args:
         extracted_text: Full text extracted from PDF.
         api_key: Gemini API key.
         model_name: Gemini model to use.
         max_text_chars: Max characters to send (to stay within context limits).
+        pdf_id: Optional PDF ID to load page images if text is very short/scanned.
 
     Returns:
         List of ontology structure dicts.
@@ -305,11 +331,35 @@ def generate_ontology_with_gemini(
 
     client = genai.Client(api_key=api_key)
 
-    user_prompt = ONTOLOGY_USER_PROMPT_TEMPLATE.format(text=text_for_llm)
+    user_prompt = ONTOLOGY_USER_PROMPT_TEMPLATE.format(
+        text=text_for_llm if text_for_llm.strip() else "(Documento escaneado / sin texto extraído directamente. Analizar imágenes adjuntas.)"
+    )
+
+    contents: List[Any] = [user_prompt]
+
+    # Multimodal fallback: If text is empty or very short (< 50 chars), load page images / figures for Gemini Vision
+    if len(text_for_llm.strip()) < 50 and pdf_id:
+        img_dir = PDF_IMAGES_DIR / pdf_id
+        if img_dir.exists():
+            img_files = sorted(
+                list(img_dir.glob("*.png")) + list(img_dir.glob("*.jpg")) + list(img_dir.glob("*.jpeg"))
+            )
+            # Pick up to 3 representative page images / figures
+            for img_path in img_files[:3]:
+                if img_path.name in ("metadata.json", "extracted_text.txt"):
+                    continue
+                try:
+                    pil_im = Image.open(img_path)
+                    if pil_im.mode != "RGB":
+                        pil_im = pil_im.convert("RGB")
+                    contents.append(pil_im)
+                    logger.info(f"Attached image {img_path.name} to Gemini multimodal prompt")
+                except Exception as img_err:
+                    logger.warning(f"Error loading image {img_path} for Gemini vision prompt: {img_err}")
 
     response = client.models.generate_content(
         model=model_name,
-        contents=user_prompt,
+        contents=contents,
         config={
             "system_instruction": ONTOLOGY_SYSTEM_PROMPT,
             "temperature": 0.2,

@@ -63,6 +63,24 @@
 							</div>
 						</label>
 
+						<!-- PDF Extracted Images Import Bar -->
+						<div id="pdf-images-import-bar" style="margin-top: 0.6rem; padding: 0.6rem 0.75rem; background: rgba(6,182,212,0.05); border: 1px dashed rgba(6,182,212,0.3); border-radius: 8px;">
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+								<span style="font-size: 0.75rem; font-weight: 600; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.3rem;">
+									📄 Cargar de PDF / Ontología
+								</span>
+								<span id="pdf-import-count-badge" class="badge" style="font-size: 0.65rem;">0 disponibles</span>
+							</div>
+							<div style="display: flex; gap: 0.4rem; align-items: center;">
+								<select id="pdf-source-select" class="form-input" style="flex: 1; font-size: 0.72rem; padding: 0.3rem 0.5rem; background: var(--bg-tertiary);">
+									<option value="">Seleccionar PDF / Ontología...</option>
+								</select>
+								<button type="button" id="import-pdf-imgs-btn" class="btn-small btn-primary-action" style="font-size: 0.72rem; padding: 0.3rem 0.6rem; white-space: nowrap;">
+									📥 Cargar al Visor
+								</button>
+							</div>
+						</div>
+
 						<!-- Image Gallery -->
 						<div class="image-gallery" id="image-gallery"></div>
 
@@ -227,16 +245,21 @@
 
 							<!-- ONTOLOGY & PDF IMAGES SECTION (Visible together) -->
 							<div id="ontology-workbench" style="display: none; margin-top: 1rem;">
-								<!-- Top Action Bar for PDF Images Batch Segmentation -->
+								<!-- Top Action Bar for PDF Images Actions -->
 								<div class="batch-action-card" style="background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(6,182,212,0.15)); border: 1px solid var(--accent-cyan); border-radius: 10px; padding: 0.75rem; margin-bottom: 1rem;">
 									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-										<span style="font-size: 0.8rem; font-weight: 700; color: #fff;">🚀 Segmentación en Lote</span>
+										<span style="font-size: 0.8rem; font-weight: 700; color: #fff;">🚀 Acciones con Imágenes Extraídas</span>
 										<span id="batch-img-badge" class="badge">0 imágenes</span>
 									</div>
-									<p style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.6rem;">Envía todas las imágenes extraídas a la galería y ejecuta SAM 3 + clasificación CONCH con esta ontología.</p>
-									<button type="button" id="batch-segment-pdf-btn" class="btn-action btn-green" style="margin: 0; font-size: 0.8rem;">
-										⚡ Segmentar Todas las Imágenes con esta Ontología
-									</button>
+									<p style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.6rem;">Carga las imágenes extraídas a la sección Imágenes para anotarlas en el visor o ejecutá la segmentación en lote con SAM 3 + CONCH.</p>
+									<div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+										<button type="button" id="import-all-pdf-to-gallery-btn" class="btn-action btn-primary-action" style="margin: 0; flex: 1; font-size: 0.75rem; padding: 0.45rem 0.6rem;">
+											📥 Cargar en Sección Imágenes
+										</button>
+										<button type="button" id="batch-segment-pdf-btn" class="btn-action btn-green" style="margin: 0; flex: 1; font-size: 0.75rem; padding: 0.45rem 0.6rem;">
+											⚡ Segmentar en Lote (SAM 3)
+										</button>
+									</div>
 								</div>
 
 								<!-- 1. Ontology structures editor -->
@@ -803,7 +826,7 @@
 		if (fileInput.files.length > 0) handleFiles(Array.from(fileInput.files));
 	});
 
-	async function handleFiles(files) {
+	async function handleFiles(files, autoSegment = true) {
 		const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
 		if (pdfFiles.length > 0) {
 			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -817,8 +840,9 @@
 		const imageFiles = files.filter(f => f.type.startsWith("image/"));
 		if (imageFiles.length === 0) { alert("Selecciona archivos de imagen o un PDF."); return; }
 
+		let firstKey = null;
 		for (const file of imageFiles) {
-			const key = file.name + "_" + Date.now();
+			const key = file.name + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
 			const dataUrl = await readFileAsDataUrl(file);
 			const dims = await getImageDimensions(dataUrl);
 
@@ -831,16 +855,22 @@
 				groups: [],
 				annotated: false,
 			});
+			if (!firstKey) firstKey = key;
 		}
 
 		renderGallery();
+		if (firstKey) {
+			selectImage(firstKey);
+		}
 
-		// Auto-segment new images
-		for (const file of imageFiles) {
-			const key = [...imageStore.keys()].find(k => imageStore.get(k).file === file);
-			if (key) {
-				selectImage(key);
-				await runAutoSegmentation(key);
+		// Auto-segment new images only if explicitly requested
+		if (autoSegment) {
+			for (const file of imageFiles) {
+				const key = [...imageStore.keys()].find(k => imageStore.get(k).file === file);
+				if (key) {
+					selectImage(key);
+					await runAutoSegmentation(key);
+				}
 			}
 		}
 
@@ -1822,8 +1852,21 @@
 			let annId = 1;
 
 			data.groups.forEach(group => {
-				const cls = classRegistry.find(c => c.key === group.key);
-				if (!cls) return;
+				let cls = classRegistry.find(c => c.key === group.key);
+				if (!cls) {
+					const newId = classRegistry.length + 1;
+					cls = {
+						id: newId,
+						key: group.key,
+						name: group.label || group.key,
+						color: group.color || "#8b5cf6",
+					};
+					classRegistry.push(cls);
+				}
+
+				if (!cls.id) {
+					cls.id = classRegistry.indexOf(cls) + 1;
+				}
 
 				let hasAnnotations = false;
 				group.detections.forEach(det => {
@@ -2226,6 +2269,12 @@
 	const pdfAddImageBtn = document.getElementById("pdf-add-image-btn");
 	const pdfAddImageInput = document.getElementById("pdf-add-image-input");
 	const batchSegmentPdfBtn = document.getElementById("batch-segment-pdf-btn");
+	const importAllPdfToGalleryBtn = document.getElementById("import-all-pdf-to-gallery-btn");
+
+	// PDF Import bar in Images tab
+	const pdfSourceSelect = document.getElementById("pdf-source-select");
+	const importPdfImgsBtn = document.getElementById("import-pdf-imgs-btn");
+	const pdfImportCountBadge = document.getElementById("pdf-import-count-badge");
 
 	// Modals
 	const imagePreviewModal = document.getElementById("image-preview-modal");
@@ -2566,18 +2615,36 @@
 
 				if (ontRes.ok) {
 					const ontResult = await ontRes.json();
+					const updatedOntology = ontResult.ontology;
 					console.log("[PDF] Ontology generated successfully:", {
-						domain: ontResult.ontology?.domain,
-						structures: ontResult.ontology?.structures?.length,
+						domain: updatedOntology?.domain,
+						structures: updatedOntology?.structures?.length,
+						images: updatedOntology?.extracted_images?.length,
 						merge_stats: ontResult.merge_stats || null,
 					});
-					displayOntologyEditor(ontResult.ontology);
+					displayOntologyEditor(updatedOntology);
+					window._activeOntologyName = updatedOntology?.domain || mergeTarget;
 					loadSavedOntologies();
+
+					// CRITICAL: Update _currentPdfData with the full merged ontology data so the UI and batch operations have ALL accumulated images
+					if (updatedOntology && updatedOntology.extracted_images) {
+						_currentPdfData = {
+							pdf_id: updatedOntology.pdf_id,
+							filename: updatedOntology.source_pdf,
+							total_images: updatedOntology.extracted_images.length,
+							images: updatedOntology.extracted_images,
+							structures: updatedOntology.structures,
+							domain: updatedOntology.domain,
+							_file: file,
+						};
+						// Update the PDF gallery to render ALL accumulated images
+						renderPdfImagesCrud(updatedOntology.extracted_images, updatedOntology.pdf_id);
+					}
 
 					// Show merge stats if applicable
 					if (ontResult.merge_stats) {
 						const ms = ontResult.merge_stats;
-						const statsMsg = `✅ Ontología "${ms.merged_into}" actualizada: +${ms.added} nuevas estructuras (${ms.total_after_merge} total)`;
+						const statsMsg = `✅ Ontología "${ms.merged_into}" actualizada: +${ms.added} nuevas estructuras (${ms.total_after_merge} total, ${_currentPdfData?.images?.length || 0} imágenes acumuladas)`;
 						console.log("[PDF]", statsMsg);
 						if (uploadContent) {
 							uploadContent.innerHTML = `
@@ -2616,13 +2683,30 @@
 				await transferPdfImageToGallery(data.images[0], data.pdf_id, false);
 			}
 
+			updatePdfSourceSelect();
+
 			if (uploadContent) {
 				uploadContent.innerHTML = `
-					<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" style="width: 28px; height: 28px; color: #10b981;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-					</svg>
-					<p class="upload-text" style="font-size: 0.78rem;">✅ <strong>${data.filename}</strong> listo (${data.total_images || 0} imágenes). Arrastrá otro PDF o elegilo abajo.</p>
+					<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; width: 100%; padding: 0.25rem 0;">
+						<span style="font-size: 0.8rem; color: #10b981; font-weight: 600;">✅ PDF procesado y ontología lista</span>
+						<span style="font-size: 0.72rem; color: var(--text-muted);">${data.total_images || 0} imágenes extraídas</span>
+						<button type="button" id="go-to-annotate-btn" class="btn-small btn-primary-action" style="margin-top: 0.25rem; font-size: 0.75rem; padding: 0.35rem 0.75rem; pointer-events: auto; cursor: pointer;">
+							🎨 Ir a Anotar en Sección Imágenes ➔
+						</button>
+					</div>
 				`;
+				document.getElementById("go-to-annotate-btn")?.addEventListener("click", async (e) => {
+					e.stopPropagation();
+					if (data.images && data.images.length > 0) {
+						await importAllPdfImagesToGallery(data.images, data.pdf_id, true);
+					} else {
+						// Switch to images tab
+						document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+						document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+						document.querySelector('[data-tab="images-tab"]')?.classList.add("active");
+						document.getElementById("images-tab")?.classList.add("active");
+					}
+				});
 			}
 
 		} catch (e) {
@@ -2733,9 +2817,10 @@
 
 		// Synchronize with classRegistry
 		if (ontology.structures && ontology.structures.length > 0) {
-			classRegistry = ontology.structures.map(s => ({
+			classRegistry = ontology.structures.map((s, idx) => ({
+				id: s.id || (idx + 1),
 				key: s.key,
-				name: s.label || s.name,
+				name: s.label || s.name || s.key,
 				prompt: s.prompt,
 				color: s.color || "#8b5cf6"
 			}));
@@ -2843,7 +2928,8 @@
 			card.className = "pdf-img-card";
 			card.dataset.filename = img.filename;
 
-			const imgUrl = `${API_URL}/pdf-image/${pdf_id}/${img.filename}`;
+			const targetPdfId = img.pdf_id || pdf_id;
+			const imgUrl = `${API_URL}/pdf-image/${targetPdfId}/${img.filename}`;
 
 			card.innerHTML = `
 				<div class="pdf-img-thumb-wrapper" title="Click para vista previa y zoom">
@@ -2858,7 +2944,7 @@
 					<input type="text" class="pdf-img-caption-input" value="${img.caption || ''}" placeholder="Pie de figura / caption..." title="Edita el pie de figura y presiona Enter o el botón Guardar" />
 					<div class="pdf-img-actions">
 						<button type="button" class="btn-small btn-green pdf-img-save-btn" style="padding: 0.15rem 0.45rem; font-size: 0.65rem;" title="Guardar caption">💾</button>
-						<button type="button" class="btn-small btn-primary-action pdf-img-use-btn" style="padding: 0.15rem 0.45rem; font-size: 0.65rem;" title="Enviar a la galería principal">🎯 Usar</button>
+						<button type="button" class="btn-small btn-primary-action pdf-img-use-btn" style="padding: 0.15rem 0.55rem; font-size: 0.68rem; font-weight: 600;" title="Abrir y anotar esta imagen en la sección Imágenes">🎯 Anotar</button>
 					</div>
 				</div>
 			`;
@@ -2872,8 +2958,10 @@
 			const captionInput = card.querySelector(".pdf-img-caption-input");
 			const saveCaption = async () => {
 				const newCaption = captionInput.value.trim();
+				const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+				if (!targetPdfId) return;
 				try {
-					const res = await fetch(`${API_URL}/pdf-image/${pdf_id}/${img.filename}`, {
+					const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`, {
 						method: "PUT",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ caption: newCaption }),
@@ -2901,8 +2989,11 @@
 				e.stopPropagation();
 				if (!confirm(`¿Eliminar la imagen ${img.filename}?`)) return;
 
+				const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+				if (!targetPdfId) return;
+
 				try {
-					const res = await fetch(`${API_URL}/pdf-image/${pdf_id}/${img.filename}`, {
+					const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`, {
 						method: "DELETE",
 					});
 					if (res.ok) {
@@ -2943,7 +3034,7 @@
 		formData.append("caption", `Imagen subida: ${file.name}`);
 
 		try {
-			const res = await fetch(`${API_URL}/pdf-image/${_currentPdfData.pdf_id}/upload`, {
+			const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(_currentPdfData.pdf_id)}/upload`, {
 				method: "POST",
 				body: formData,
 			});
@@ -2955,7 +3046,7 @@
 				renderPdfImagesCrud(_currentPdfData.images, _currentPdfData.pdf_id);
 			}
 		} catch (e) {
-			alert("Error: " + e.message);
+			alert("Error al añadir imagen al PDF: " + e.message);
 		} finally {
 			pdfAddImageInput.value = "";
 		}
@@ -2964,7 +3055,8 @@
 	// Lightbox Modal functions
 	function openImagePreviewModal(img, pdf_id) {
 		_activeModalImg = { img, pdf_id };
-		const imgUrl = `${API_URL}/pdf-image/${pdf_id}/${img.filename}`;
+		const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+		const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`;
 
 		modalImgPreview.src = imgUrl;
 		modalImgTitle.textContent = `🖼️ ${img.filename}`;
@@ -2982,9 +3074,11 @@
 		if (!_activeModalImg) return;
 		const { img, pdf_id } = _activeModalImg;
 		const newCaption = modalImgCaptionInput.value.trim();
+		const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+		if (!targetPdfId) return;
 
 		try {
-			const res = await fetch(`${API_URL}/pdf-image/${pdf_id}/${img.filename}`, {
+			const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ caption: newCaption }),
@@ -3011,26 +3105,196 @@
 		await transferPdfImageToGallery(img, pdf_id, true);
 	});
 
+	function resolvePdfImageMeta(img, defaultPdfId) {
+		if (!img) return null;
+		let filename = "";
+		let targetPdfId = defaultPdfId || (_currentPdfData && _currentPdfData.pdf_id) || "unknown";
+
+		if (typeof img === "string") {
+			filename = img.split("/").pop().split("\\").pop();
+		} else if (typeof img === "object") {
+			filename = img.filename || img.name || (img.path ? img.path.split("/").pop().split("\\").pop() : "");
+			if (img.pdf_id) targetPdfId = img.pdf_id;
+		}
+
+		if (!filename) return null;
+
+		// Extract actual pdf_id from filename prefix if targetPdfId is unknown or empty
+		if ((!targetPdfId || targetPdfId === "unknown") && filename.includes("_")) {
+			targetPdfId = filename.split("_")[0];
+		}
+
+		return { filename, pdf_id: targetPdfId };
+	}
+
 	async function transferPdfImageToGallery(img, pdf_id, switchTab = false) {
 		try {
-			const imgUrl = `${API_URL}/pdf-image/${pdf_id}/${img.filename}`;
+			const meta = resolvePdfImageMeta(img, pdf_id);
+			if (!meta || !meta.filename) {
+				throw new Error("Identificador de PDF o nombre de archivo inválido.");
+			}
+			const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(meta.pdf_id)}/${encodeURIComponent(meta.filename)}`;
 			const response = await fetch(imgUrl);
+			if (!response.ok) {
+				throw new Error(`El servidor respondió con código ${response.status}: ${response.statusText}`);
+			}
 			const blob = await response.blob();
-			const file = new File([blob], img.filename, { type: "image/png" });
+			const file = new File([blob], meta.filename, { type: blob.type || "image/png" });
 
-			await handleFiles([file]);
+			await handleFiles([file], switchTab);
 
 			if (switchTab) {
 				// Switch to images tab only when explicitly requested
 				document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
 				document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-				document.querySelector('[data-tab="images-tab"]').classList.add("active");
-				document.getElementById("images-tab").classList.add("active");
+				document.querySelector('[data-tab="images-tab"]')?.classList.add("active");
+				document.getElementById("images-tab")?.classList.add("active");
 			}
 		} catch (e) {
-			alert("Error al cargar imagen en galería: " + e.message);
+			const msg = e.message && e.message.includes("Failed to fetch")
+				? "No se pudo conectar con el servidor backend (puerto 8000). Si se estaba reiniciando, espera unos segundos y vuelve a intentarlo."
+				: e.message;
+			alert("Error al cargar imagen en galería: " + msg);
 		}
 	}
+
+	async function importAllPdfImagesToGallery(images, pdf_id, switchTab = true) {
+		if (!images || images.length === 0) {
+			alert("No hay imágenes para cargar.");
+			return;
+		}
+
+		const files = [];
+		const fallbackPdfId = pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+
+		for (const img of images) {
+			try {
+				const meta = resolvePdfImageMeta(img, fallbackPdfId);
+				if (!meta || !meta.filename) continue;
+				const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(meta.pdf_id)}/${encodeURIComponent(meta.filename)}`;
+				const response = await fetch(imgUrl);
+				if (!response.ok) {
+					console.warn(`No se pudo descargar ${meta.filename} (HTTP ${response.status})`);
+					continue;
+				}
+				const blob = await response.blob();
+				const file = new File([blob], meta.filename, { type: blob.type || "image/png" });
+				files.push(file);
+			} catch (err) {
+				console.warn("Error fetching PDF image:", img, err);
+			}
+		}
+
+		if (files.length === 0) {
+			alert("No se pudieron descargar las imágenes del PDF. Verifica que el backend esté activo.");
+			return;
+		}
+
+		await handleFiles(files, false);
+
+		if (switchTab) {
+			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+			document.querySelector('[data-tab="images-tab"]')?.classList.add("active");
+			document.getElementById("images-tab")?.classList.add("active");
+		}
+	}
+
+	// Button: Import all PDF images from PDF Workbench
+	importAllPdfToGalleryBtn?.addEventListener("click", async () => {
+		if (!_currentPdfData || !_currentPdfData.images || _currentPdfData.images.length === 0) {
+			alert("No hay imágenes en el PDF actual para cargar.");
+			return;
+		}
+		const origText = importAllPdfToGalleryBtn.innerHTML;
+		importAllPdfToGalleryBtn.disabled = true;
+		importAllPdfToGalleryBtn.innerHTML = '⏳ Cargando imágenes...';
+		try {
+			await importAllPdfImagesToGallery(_currentPdfData.images, _currentPdfData.pdf_id, true);
+		} finally {
+			importAllPdfToGalleryBtn.disabled = false;
+			importAllPdfToGalleryBtn.innerHTML = origText;
+		}
+	});
+
+	// Helper to refresh PDF / Ontology dropdown in Images tab
+	function updatePdfSourceSelect() {
+		if (!pdfSourceSelect) return;
+		const prevVal = pdfSourceSelect.value;
+		pdfSourceSelect.innerHTML = '<option value="">Seleccionar PDF / Ontología...</option>';
+
+		let totalAvailable = 0;
+
+		// 1. Current active PDF
+		if (_currentPdfData && _currentPdfData.images && _currentPdfData.images.length > 0) {
+			const opt = document.createElement("option");
+			opt.value = "__current__";
+			opt.textContent = `📄 PDF Actual: ${_currentPdfData.filename} (${_currentPdfData.images.length} imgs)`;
+			pdfSourceSelect.appendChild(opt);
+			totalAvailable += _currentPdfData.images.length;
+		}
+
+		// 2. Saved ontologies with images
+		if (window._savedOntologiesList && window._savedOntologiesList.length > 0) {
+			for (const ont of window._savedOntologiesList) {
+				const opt = document.createElement("option");
+				opt.value = ont.name;
+				opt.textContent = `🧬 ${ont.domain} (${ont.num_images || 0} imgs - ${ont.source_pdf})`;
+				pdfSourceSelect.appendChild(opt);
+				totalAvailable += (ont.num_images || 0);
+			}
+		}
+
+		if (pdfImportCountBadge) {
+			pdfImportCountBadge.textContent = `${totalAvailable} disponibles`;
+		}
+
+		if (prevVal && pdfSourceSelect.querySelector(`option[value="${prevVal}"]`)) {
+			pdfSourceSelect.value = prevVal;
+		} else if (_currentPdfData) {
+			pdfSourceSelect.value = "__current__";
+		}
+	}
+
+	// Button: Import selected PDF / Ontology into gallery from Images tab
+	importPdfImgsBtn?.addEventListener("click", async () => {
+		const val = pdfSourceSelect?.value;
+		if (!val) {
+			alert("Selecciona primero un PDF u ontología del desplegable.");
+			return;
+		}
+
+		if (val === "__current__") {
+			if (_currentPdfData && _currentPdfData.images) {
+				await importAllPdfImagesToGallery(_currentPdfData.images, _currentPdfData.pdf_id, false);
+			}
+			return;
+		}
+
+		// Load from saved ontology
+		try {
+			const res = await fetch(`${API_URL}/ontology/${encodeURIComponent(val)}`);
+			if (!res.ok) throw new Error("No se pudo cargar la ontología.");
+			const ont = await res.json();
+			if (ont.pdf_id) {
+				const imgRes = await fetch(`${API_URL}/pdf-images/${encodeURIComponent(ont.pdf_id)}`);
+				if (imgRes.ok) {
+					const imgData = await imgRes.json();
+					if (imgData.images && imgData.images.length > 0) {
+						await importAllPdfImagesToGallery(imgData.images, ont.pdf_id, false);
+						return;
+					}
+				}
+			}
+			if (ont.extracted_images && ont.extracted_images.length > 0) {
+				await importAllPdfImagesToGallery(ont.extracted_images, ont.pdf_id || "unknown", false);
+			} else {
+				alert("Esta ontología no contiene imágenes asociadas.");
+			}
+		} catch (e) {
+			alert("Error al importar imágenes: " + e.message);
+		}
+	});
 
 
 	// --- 6. Batch Auto-Segmentation (SAM 3 + CONCH Zero-Shot) ---
@@ -3060,7 +3324,8 @@
 			batchProgressFill.style.width = `${pct}%`;
 
 			try {
-				const imgUrl = `${API_URL}/pdf-image/${_currentPdfData.pdf_id}/${img.filename}`;
+				const targetPdfId = img.pdf_id || _currentPdfData.pdf_id;
+				const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`;
 				const response = await fetch(imgUrl);
 				const blob = await response.blob();
 				const file = new File([blob], img.filename, { type: "image/png" });
@@ -3302,6 +3567,9 @@
 			console.log("[ONT] Response data:", JSON.stringify(data).substring(0, 200));
 			const list = data.ontologies || [];
 			console.log("[ONT] Found", list.length, "ontologies");
+
+			window._savedOntologiesList = list;
+			updatePdfSourceSelect();
 
 			// Always render the list (even if auto-load later fails)
 			renderOntologyList(list);

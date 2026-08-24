@@ -55,7 +55,11 @@ def _get_rf_project() -> Any:
                 p_id = str(p_info.get("id", ""))
                 p_slug = p_id.rsplit("/", 1)[-1]
                 p_name = str(p_info.get("name", ""))
-                if target in (p_id, p_slug, p_name):
+                if (
+                    target.lower() in (p_id.lower(), p_slug.lower(), p_name.lower())
+                    or p_slug.lower().startswith(target.lower() + "-")
+                    or p_name.lower().startswith(target.lower())
+                ):
                     logger.info(f"Resolved Roboflow project target '{target}' to slug '{p_slug}'")
                     return workspace.project(p_slug)
     except Exception as e:
@@ -158,28 +162,6 @@ def get_roboflow_models_and_versions() -> Dict[str, Any]:
 def build_coco_json(annotations_payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert the frontend annotation payload into a COCO-format JSON dict.
-
-    Expected input format (one image at a time):
-    {
-      "image_filename": "muestra_001.png",
-      "image_width": 1920,
-      "image_height": 1080,
-      "classes": [
-        {"id": 1, "name": "Espermatogonia B", "color": "#8b5cf6"},
-        ...
-      ],
-      "annotations": [
-        {
-          "id": 1,
-          "class_id": 1,
-          "bbox": [x, y, w, h],
-          "segmentation": [[x1,y1,x2,y2,...,xn,yn]],
-          "area": 1234.5,
-          "score": 0.87
-        },
-        ...
-      ]
-    }
     """
     classes = annotations_payload.get("classes", [])
     annotations = annotations_payload.get("annotations", [])
@@ -189,30 +171,54 @@ def build_coco_json(annotations_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     # Build COCO categories
     categories = []
-    for cls in classes:
+    seen_cat_ids = set()
+    for idx, cls in enumerate(classes):
+        c_id = cls.get("id") if (isinstance(cls, dict) and cls.get("id") is not None) else (idx + 1)
+        c_name = cls.get("name", cls.get("label", f"class_{c_id}")) if isinstance(cls, dict) else str(cls)
+        try:
+            c_id_int = int(c_id)
+        except (ValueError, TypeError):
+            c_id_int = idx + 1
+
+        if c_id_int not in seen_cat_ids:
+            seen_cat_ids.add(c_id_int)
+            categories.append({
+                "id": c_id_int,
+                "name": str(c_name),
+                "supercategory": "none",
+            })
+
+    # If no categories provided, create a default one
+    if not categories:
         categories.append({
-            "id": cls["id"],
-            "name": cls["name"],
+            "id": 1,
+            "name": "default_class",
             "supercategory": "none",
         })
 
     # Build COCO image entry
     image_entry = {
         "id": 1,
-        "file_name": filename,
+        "file_name": os.path.basename(filename),
         "width": width,
         "height": height,
     }
 
     # Build COCO annotations
     coco_annotations = []
-    for ann in annotations:
+    for ann_idx, ann in enumerate(annotations):
+        c_id = ann.get("class_id", ann.get("category_id", 1))
+        try:
+            c_id_int = int(c_id) if c_id is not None else 1
+        except (ValueError, TypeError):
+            c_id_int = 1
+
         coco_ann = {
-            "id": ann["id"],
+            "id": int(ann.get("id", ann_idx + 1)),
             "image_id": 1,
-            "category_id": ann["class_id"],
+            "category_id": c_id_int,
             "bbox": ann.get("bbox", [0, 0, 0, 0]),
-            "area": ann.get("area", 0),
+            "area": float(ann.get("area", 0)),
             "iscrowd": 0,
         }
         # Include segmentation polygons if available
@@ -243,7 +249,7 @@ def build_multi_image_coco(images_payload: List[Dict[str, Any]]) -> Dict[str, An
 
     Each element in images_payload has the same structure as build_coco_json input.
     """
-    all_categories = {}  # Deduplicate by (id, name)
+    all_categories = {}  # Deduplicate by id
     coco_images = []
     coco_annotations = []
     annotation_id_counter = 1
@@ -256,25 +262,38 @@ def build_multi_image_coco(images_payload: List[Dict[str, Any]]) -> Dict[str, An
 
         coco_images.append({
             "id": image_id,
-            "file_name": filename,
+            "file_name": os.path.basename(filename),
             "width": width,
             "height": height,
         })
 
-        for cls in img_data.get("classes", []):
-            all_categories[cls["id"]] = {
-                "id": cls["id"],
-                "name": cls["name"],
+        for idx, cls in enumerate(img_data.get("classes", [])):
+            c_id = cls.get("id") if (isinstance(cls, dict) and cls.get("id") is not None) else (idx + 1)
+            c_name = cls.get("name", cls.get("label", f"class_{c_id}")) if isinstance(cls, dict) else str(cls)
+            try:
+                c_id_int = int(c_id)
+            except (ValueError, TypeError):
+                c_id_int = idx + 1
+
+            all_categories[c_id_int] = {
+                "id": c_id_int,
+                "name": str(c_name),
                 "supercategory": "none",
             }
 
         for ann in img_data.get("annotations", []):
+            c_id = ann.get("class_id", ann.get("category_id", 1))
+            try:
+                c_id_int = int(c_id) if c_id is not None else 1
+            except (ValueError, TypeError):
+                c_id_int = 1
+
             coco_ann = {
                 "id": annotation_id_counter,
                 "image_id": image_id,
-                "category_id": ann["class_id"],
+                "category_id": c_id_int,
                 "bbox": ann.get("bbox", [0, 0, 0, 0]),
-                "area": ann.get("area", 0),
+                "area": float(ann.get("area", 0)),
                 "iscrowd": 0,
             }
             if "segmentation" in ann and ann["segmentation"]:
@@ -285,6 +304,13 @@ def build_multi_image_coco(images_payload: List[Dict[str, Any]]) -> Dict[str, An
 
             coco_annotations.append(coco_ann)
             annotation_id_counter += 1
+
+    if not all_categories:
+        all_categories[1] = {
+            "id": 1,
+            "name": "default_class",
+            "supercategory": "none",
+        }
 
     return {
         "info": {

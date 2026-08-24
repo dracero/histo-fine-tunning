@@ -7,6 +7,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 import io
 import time
+import math
 import base64
 import json
 import logging
@@ -76,6 +77,14 @@ from pathology_models import (
     get_pathology_models_status,
     classify_detections_with_conch,
     extract_detection_embeddings_uni,
+    discriminate_and_cluster_with_pathology_models,
+    group_detections_by_class,
+)
+
+# Import Dynamic Multimodal LLM Vision Assistant (Gemini 2.5 Flash)
+from gemini_vision import (
+    refine_prompt_multimodal,
+    discover_visual_primitives_from_image,
 )
 
 # Global variables for model and processor
@@ -95,10 +104,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     try:
         model = build_sam3_image_model(device=device, version="sam3.1")
-        # Use a reasonable threshold — too low generates hundreds of garbage
-        # detections that waste VRAM during mask interpolation. The official
-        # default is 0.5; 0.35 balances recall vs. precision for histology.
-        processor = Sam3Processor(model, device=device, confidence_threshold=0.35)
+        # Initialize with flexible threshold (will be dynamically adjusted per request)
+        processor = Sam3Processor(model, device=device, confidence_threshold=0.05)
         logger.info(f"SAM 3 loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
     except Exception as e:
         logger.error(f"Failed to load SAM 3 model: {e}")
@@ -120,54 +127,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
-
-# Fine-grained visual prompts for automatic histology & cell instance segmentation.
-# Replaces generic macro-prompts ("object", "person", "animal") that cause SAM3 to select the whole image frame.
-AUTO_SEGMENT_PROMPTS = [
-    {"key": "clase_1", "prompt": "small dark round cell nucleus",             "label": "Núcleos oscuros",     "color": "#f43f5e"},
-    {"key": "clase_2", "prompt": "round cell with pale nucleus",              "label": "Células claras",      "color": "#38bdf8"},
-    {"key": "clase_3", "prompt": "elongated spindle cell nucleus",            "label": "Núcleos alargados",   "color": "#e11d48"},
-    {"key": "clase_4", "prompt": "circular tubule lumen cavity",             "label": "Lumen tubular",       "color": "#6366f1"},
-    {"key": "clase_5", "prompt": "dense connective tissue band",             "label": "Tejido conectivo",    "color": "#8b5cf6"},
-    {"key": "clase_6", "prompt": "red blood cell in vessel",                 "label": "Eritrocitos",         "color": "#ef4444"},
-    {"key": "clase_7", "prompt": "large Leydig cell in intertubular space",  "label": "Células intersticiales", "color": "#f59e0b"},
-    {"key": "clase_8", "prompt": "spermatogonium near basement membrane",    "label": "Espermatogonias",     "color": "#10b981"},
-]
-
-SPANISH_PROMPT_TRANSLATION_MAP = {
-    "células germinales": "small round cell nucleus in seminiferous epithelium",
-    "celulas germinales": "small round cell nucleus in seminiferous epithelium",
-    "espermatogonia": "small round cell nucleus near basement membrane",
-    "espermatogonia a clara": "round cell with pale chromatin near tubule basement membrane",
-    "espermatogonia b": "small dark round nucleus at tubule wall",
-    "espermatocito": "large round cell with mottled nucleus in tubule wall",
-    "espermátida": "small dense dark nucleus near tubule lumen",
-    "célula de sertoli": "tall cell with pale triangular nucleus",
-    "celula de sertoli": "tall cell with pale triangular nucleus",
-    "célula de leydig": "polygonal cell with eosinophilic cytoplasm in interstitial space",
-    "celula de leydig": "polygonal cell with eosinophilic cytoplasm in interstitial space",
-    "túbulo seminífero": "circular tissue structure with central lumen",
-    "tubulo seminifero": "circular tissue structure with central lumen",
-    "lumen": "empty circular lumen cavity",
-    "núcleos": "dark round cell nucleus",
-    "nucleos": "dark round cell nucleus",
-}
-
-
-def translate_prompt_if_needed(prompt_text: str) -> str:
-    """Translates common Spanish medical/histology terms into visual English prompts for SAM 3."""
-    if not prompt_text:
-        return "cell nucleus"
-    cleaned = prompt_text.strip().lower()
-    if cleaned in SPANISH_PROMPT_TRANSLATION_MAP:
-        translated = SPANISH_PROMPT_TRANSLATION_MAP[cleaned]
-        logger.info(f"Translated Spanish prompt '{prompt_text}' -> '{translated}'")
-        return translated
-    return prompt_text
 
 
 MAX_INFERENCE_DIM = 1440  # Max dimension for SAM3 inference interpolation to prevent VRAM OOM
@@ -192,7 +156,10 @@ def mask_to_polygons(mask, scale_x: float = 1.0, scale_y: float = 1.0, simplify_
     """
     # Convert mask to numpy uint8
     if hasattr(mask, "cpu"):
-        mask_np = mask.cpu().numpy()
+        if hasattr(mask, "float"):
+            mask_np = mask.float().cpu().numpy()
+        else:
+            mask_np = mask.cpu().numpy()
     elif isinstance(mask, np.ndarray):
         mask_np = mask
     else:
@@ -330,7 +297,10 @@ def _extract_detections(
                 if polys:
                     detection["segmentation"] = polys
                     if hasattr(mask_i, "cpu"):
-                        area = float(mask_i.cpu().numpy().sum()) * scale_x * scale_y
+                        if hasattr(mask_i, "float"):
+                            area = float(mask_i.float().cpu().numpy().sum()) * scale_x * scale_y
+                        else:
+                            area = float(mask_i.cpu().numpy().sum()) * scale_x * scale_y
                     else:
                         area = float(np.array(mask_i).sum()) * scale_x * scale_y
                     detection["area"] = round(area, 2)
@@ -369,21 +339,25 @@ def health_check() -> Dict[str, Any]:
 
 @app.get("/api/prompts")
 def get_prompts() -> Dict[str, Any]:
-    """Returns the list of automatic prompts used for segmentation."""
-    return {"prompts": AUTO_SEGMENT_PROMPTS}
+    """Returns the list of available saved ontologies and their dynamic prompts."""
+    ontologies = list_ontologies()
+    return {"ontologies": ontologies}
 
 
 @app.post("/api/segment")
 async def segment_image(
     image: UploadFile = File(...),
-    prompt: str = Form("object"),
-    umbral: float = Form(0.05)
+    prompt: str = Form("cell nucleus"),
+    umbral: float = Form(0.05),
+    ontology_name: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
-    """Single-prompt segmentation endpoint."""
+    """
+    Single-prompt segmentation endpoint with dynamic multimodal refinement.
+    """
     if processor is None:
         raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
 
-    logger.info(f"Received request: prompt='{prompt}', umbral={umbral}")
+    logger.info(f"Received segment request: prompt='{prompt}', umbral={umbral}")
     start_time = time.time()
 
     try:
@@ -391,9 +365,20 @@ async def segment_image(
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
 
-        translated_prompt = translate_prompt_if_needed(prompt)
+        # Retrieve ontology context if available
+        ont_context = None
+        if ontology_name and ontology_name.strip():
+            ont_context = get_ontology_prompts(ontology_name.strip())
+
+        # Dynamic refinement using Gemini Vision multimodal assistant
+        refined_prompt = refine_prompt_multimodal(pil_image, prompt, ontology_context=ont_context)
+
+        # Set adaptive confidence threshold in processor
+        proc_thresh = max(0.01, min(0.35, float(umbral)))
+        processor.confidence_threshold = proc_thresh
+
         inference_state = processor.set_image(inf_image)
-        output = processor.set_text_prompt(state=inference_state, prompt=translated_prompt)
+        output = processor.set_text_prompt(state=inference_state, prompt=refined_prompt)
 
         detections = _extract_detections(output, umbral, scale_x, scale_y, img_w=width, img_h=height)
 
@@ -401,7 +386,7 @@ async def segment_image(
             torch.cuda.empty_cache()
 
         inference_time = time.time() - start_time
-        logger.info(f"Found {len(detections)} detections in {inference_time:.2f}s")
+        logger.info(f"Found {len(detections)} detections for '{refined_prompt}' in {inference_time:.2f}s")
 
         return {
             "width": width,
@@ -409,7 +394,8 @@ async def segment_image(
             "detections": detections,
             "inference_time_seconds": round(inference_time, 2),
             "prompt": prompt,
-            "umbral": umbral
+            "refined_prompt": refined_prompt,
+            "umbral": umbral,
         }
 
     except Exception as e:
@@ -423,18 +409,19 @@ async def segment_image(
 async def segment_auto(
     image: UploadFile = File(...),
     umbral: float = Form(0.05),
-    custom_prompt: str = Form(None),
-    ontology_name: str = Form(None)
+    custom_prompt: Optional[str] = Form(None),
+    ontology_name: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
-    Universal automatic multi-prompt segmentation for ANY image.
-    Runs universal visual prompts on the image and returns grouped detections
-    with polygon segmentation data.
+    Exhaustive automatic multi-prompt segmentation and semantic discrimination.
+    Prompts and classes are 100% dynamically inferred from the active ontology or
+    discovered on-the-fly with Gemini Vision multimodal analysis, and discriminated
+    with MahmoodLab/UNI (1024-dim) and MahmoodLab/CONCH (512-dim).
     """
     if processor is None:
         raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
 
-    logger.info(f"Received AUTO segment request, umbral={umbral}, custom_prompt='{custom_prompt}'")
+    logger.info(f"Received segment-auto request: umbral={umbral}, custom_prompt='{custom_prompt}', ontology_name='{ontology_name}'")
     start_time = time.time()
 
     try:
@@ -442,119 +429,121 @@ async def segment_auto(
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
 
-        # Set image once (backbone features are cached in state)
-        inference_state = processor.set_image(inf_image)
+        # 1. Dynamically resolve prompts to run
+        prompts_to_run: List[Dict[str, Any]] = []
 
-        all_groups = []
-        total_detections = 0
-
-        # Use ontology prompts if specified, otherwise fall back to generic
+        # A. Priority 1: From active ontology
         if ontology_name and ontology_name.strip():
             ont_prompts = get_ontology_prompts(ontology_name.strip())
             if ont_prompts:
-                prompts_to_run = ont_prompts
-                logger.info(f"Using ontology '{ontology_name}' with {len(prompts_to_run)} prompts")
-            else:
-                logger.warning(f"Ontology '{ontology_name}' not found, using defaults")
-                prompts_to_run = list(AUTO_SEGMENT_PROMPTS)
-        else:
-            prompts_to_run = list(AUTO_SEGMENT_PROMPTS)
+                prompts_to_run = list(ont_prompts)
+                logger.info(f"Loaded {len(prompts_to_run)} dynamic prompts from ontology '{ontology_name}'")
 
+        # B. Priority 2: If no ontology is available, discover visual structures dynamically with Gemini Vision
+        if not prompts_to_run:
+            logger.info("No ontology specified or empty. Using Gemini Vision for dynamic visual structure discovery...")
+            prompts_to_run = discover_visual_primitives_from_image(pil_image)
+
+        # C. User custom prompt refinement (multimodal)
         if custom_prompt and custom_prompt.strip():
             cp_text = custom_prompt.strip()
-            translated_cp = translate_prompt_if_needed(cp_text)
+            refined_cp = refine_prompt_multimodal(pil_image, cp_text, prompts_to_run)
             prompts_to_run.insert(0, {
-                "key": f"clase_custom_{len(prompts_to_run)+1}",
-                "prompt": translated_cp,
-                "label": cp_text,  # Keep original user text for UI display
-                "color": "#a855f7"
+                "key": f"custom_{len(prompts_to_run) + 1}",
+                "prompt": refined_cp,
+                "label": cp_text,
+                "color": "#a855f7",
             })
 
+        # Ensure we have visual prompts to run
+        if not prompts_to_run:
+            # Dynamic fallback
+            prompts_to_run = [
+                {"key": "cell_nucleus", "prompt": "dark round cell nucleus", "label": "Núcleos celulares", "color": "#f43f5e"},
+                {"key": "tissue_structure", "prompt": "stained tissue structure", "label": "Estructuras tisulares", "color": "#38bdf8"},
+                {"key": "connective_fiber", "prompt": "connective tissue fiber", "label": "Fibras de tejido", "color": "#8b5cf6"},
+                {"key": "lumen_space", "prompt": "empty cavity lumen", "label": "Luz / Cavidad", "color": "#6366f1"},
+            ]
+
+        # 2. SAM 3.1 Inference with adaptive sensitivity
+        proc_thresh = max(0.01, min(0.35, float(umbral)))
+        processor.confidence_threshold = proc_thresh
+
+        inference_state = processor.set_image(inf_image)
+        all_raw_detections = []
+
         for prompt_info in prompts_to_run:
-            raw_prompt_text = prompt_info["prompt"]
-            prompt_text = translate_prompt_if_needed(raw_prompt_text)
-            prompt_key = prompt_info["key"]
-            prompt_label = prompt_info["label"]
-            prompt_color = prompt_info["color"]
+            prompt_text = prompt_info.get("prompt", "")
+            prompt_key = prompt_info.get("key", "struct")
+            prompt_label = prompt_info.get("label", prompt_info.get("name", prompt_key))
+            prompt_color = prompt_info.get("color", "#8b5cf6")
 
-            # Reset prompts but keep image features
+            if not prompt_text:
+                continue
+
             processor.reset_all_prompts(inference_state)
-
-            # Run text prompt
             output = processor.set_text_prompt(state=inference_state, prompt=prompt_text)
 
-            detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True, img_w=width, img_h=height)
-            count = len(detections)
+            detections = _extract_detections(
+                output,
+                umbral=umbral,
+                scale_x=scale_x,
+                scale_y=scale_y,
+                include_polygons=True,
+                img_w=width,
+                img_h=height,
+                iou_threshold=0.65,
+            )
 
-            if count > 0:
-                logger.info(f"  '{prompt_text}' -> {count} raw detections (with polygons)")
-                all_groups.append({
-                    "key": prompt_key,
-                    "prompt": prompt_text,
-                    "label": prompt_label,
-                    "color": prompt_color,
-                    "detections": detections,
-                    "count": count
-                })
-
-        # --- Pathology Foundation Model Refinement (CONCH Zero-Shot) ---
-        raw_candidates = []
-        for g in all_groups:
-            for d in g["detections"]:
+            for d in detections:
                 d_copy = dict(d)
-                d_copy["initial_class_key"] = g["key"]
-                d_copy["initial_label"] = g["label"]
-                d_copy["color"] = g["color"]
-                raw_candidates.append(d_copy)
+                d_copy["initial_class_key"] = prompt_key
+                d_copy["initial_label"] = prompt_label
+                d_copy["color"] = prompt_color
+                all_raw_detections.append(d_copy)
 
-        if raw_candidates and len(prompts_to_run) > 0:
+        logger.info(f"SAM 3.1 generated {len(all_raw_detections)} candidate detections across {len(prompts_to_run)} dynamic prompts")
+
+        # 3. Global IoU NMS to deduplicate overlapping masks from different prompts
+        filtered_candidates = []
+        if len(all_raw_detections) > 1:
             try:
-                classified = classify_detections_with_conch(
-                    image=pil_image,
-                    detections=raw_candidates,
-                    candidate_classes=prompts_to_run,
-                    temperature=0.05
-                )
-
-                grouped_by_key = {}
-                for c in prompts_to_run:
-                    grouped_by_key[c["key"]] = {
-                        "key": c["key"],
-                        "prompt": c["prompt"],
-                        "label": c["label"],
-                        "color": c["color"],
-                        "detections": [],
-                        "count": 0
-                    }
-
-                for det in classified:
-                    target_key = det.get("class_key", det.get("initial_class_key"))
-                    if target_key not in grouped_by_key:
-                        grouped_by_key[target_key] = {
-                            "key": target_key,
-                            "prompt": det.get("prompt", target_key),
-                            "label": det.get("class_label", target_key),
-                            "color": det.get("color", "#8b5cf6"),
-                            "detections": [],
-                            "count": 0
-                        }
-                    grouped_by_key[target_key]["detections"].append(det)
-                    grouped_by_key[target_key]["count"] += 1
-
-                all_groups = [g for g in grouped_by_key.values() if g["count"] > 0]
-                total_detections = sum(g["count"] for g in all_groups)
-                logger.info(f"CONCH zero-shot verified {total_detections} detections across {len(all_groups)} categories")
-            except Exception as conch_err:
-                logger.warning(f"CONCH refinement skipped (fallback to raw SAM 3): {conch_err}")
-                total_detections = sum(g["count"] for g in all_groups)
+                import torchvision.ops
+                boxes = torch.tensor([d["box"] for d in all_raw_detections], dtype=torch.float32)
+                scores = torch.tensor([d.get("score", 0.5) for d in all_raw_detections], dtype=torch.float32)
+                keep_indices = torchvision.ops.nms(boxes, scores, iou_threshold=0.60).tolist()
+                filtered_candidates = [all_raw_detections[idx] for idx in keep_indices]
+            except Exception as nms_err:
+                logger.warning(f"Global NMS skipped: {nms_err}")
+                filtered_candidates = all_raw_detections
         else:
-            total_detections = sum(g["count"] for g in all_groups)
+            filtered_candidates = all_raw_detections
+
+        logger.info(f"Retained {len(filtered_candidates)} distinct candidate instances after spatial deduplication")
+
+        # 4. Discrimination and Semantic Clustering with UNI (1024-dim) and CONCH (512-dim)
+        classified_detections = []
+        if filtered_candidates:
+            try:
+                classified_detections = discriminate_and_cluster_with_pathology_models(
+                    image=pil_image,
+                    detections=filtered_candidates,
+                    candidate_classes=prompts_to_run,
+                    temperature=0.05,
+                )
+            except Exception as disc_err:
+                logger.warning(f"Pathology discrimination fallback: {disc_err}", exc_info=True)
+                classified_detections = filtered_candidates
+
+        # 5. Group into structured categories for UI rendering
+        all_groups = group_detections_by_class(classified_detections, candidate_classes=prompts_to_run)
+        total_detections = sum(g["count"] for g in all_groups)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
         inference_time = time.time() - start_time
-        logger.info(f"AUTO: Total {total_detections} detections across {len(all_groups)} categories in {inference_time:.2f}s")
+        logger.info(f"AUTO: Exhaustive segmentation finished with {total_detections} detections across {len(all_groups)} categories in {inference_time:.2f}s")
 
         return {
             "width": width,
@@ -562,7 +551,7 @@ async def segment_auto(
             "groups": all_groups,
             "total_detections": total_detections,
             "inference_time_seconds": round(inference_time, 2),
-            "umbral": umbral
+            "umbral": umbral,
         }
 
     except Exception as e:
@@ -878,8 +867,21 @@ async def serve_pdf_image(pdf_id: str, filename: str):
 
     path = get_pdf_image_path(pdf_id, filename)
     if path is None:
-        raise HTTPException(status_code=404, detail="Imagen no encontrada.")
-    return FileResponse(path, media_type="image/png")
+        raise HTTPException(
+            status_code=404,
+            detail="Imagen no encontrada.",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
 
 
 @app.post("/api/pdf-image/{pdf_id}/upload")
@@ -1127,11 +1129,12 @@ async def export_roboflow_dataset(payload: Dict[str, Any] = Body(default={})) ->
 
 if __name__ == "__main__":
     import uvicorn
+    from pathlib import Path
+    backend_dir = str(Path(__file__).resolve().parent)
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
-        reload_dirs=["backend"],
-        reload_excludes=["datasets", "datasets/*", "datasets/**/*"],
+        reload=False,
+        app_dir=backend_dir,
     )

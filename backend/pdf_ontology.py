@@ -130,6 +130,8 @@ def extract_pdf_content(
     images_dir = PDF_IMAGES_DIR / pdf_id
     images_dir.mkdir(parents=True, exist_ok=True)
 
+    seen_xrefs: set = set()
+    seen_hashes: set = set()
     image_count = 0
 
     for page_num in range(len(doc)):
@@ -147,25 +149,47 @@ def extract_pdf_content(
                 break
 
             xref = img_info[0]
+            if xref in seen_xrefs:
+                # Already processed or skipped this xref from another page/reference
+                continue
+
             try:
                 saved_via_pil = False
                 width, height = 0, 0
+                raw_hash = None
+                pixel_hash = None
 
                 # Primary extraction: direct raw stream via doc.extract_image + PIL
                 try:
                     base_image = doc.extract_image(xref)
                     if base_image and "image" in base_image:
                         raw_bytes = base_image["image"]
+                        raw_hash = hashlib.sha256(raw_bytes).hexdigest()
+                        if raw_hash in seen_hashes:
+                            seen_xrefs.add(xref)
+                            continue
+
                         pil_img = Image.open(io.BytesIO(raw_bytes))
                         width, height = pil_img.size
 
                         if width >= min_image_size and height >= min_image_size:
+                            pixel_hash = hashlib.sha256(pil_img.tobytes()).hexdigest()
+                            if pixel_hash in seen_hashes:
+                                seen_xrefs.add(xref)
+                                continue
+
                             if pil_img.mode != "RGB":
                                 pil_img = pil_img.convert("RGB")
                             img_filename = f"{pdf_id}_p{page_num + 1}_img{img_index + 1}.png"
                             img_path = images_dir / img_filename
                             pil_img.save(img_path, format="PNG")
                             saved_via_pil = True
+                            seen_hashes.add(raw_hash)
+                            seen_hashes.add(pixel_hash)
+                            seen_xrefs.add(xref)
+                        else:
+                            # Too small, skip and mark xref
+                            seen_xrefs.add(xref)
                 except Exception as extract_err:
                     logger.debug(f"doc.extract_image failed for xref={xref}: {extract_err}")
 
@@ -175,6 +199,13 @@ def extract_pdf_content(
 
                     # Skip very small images (icons, decorations)
                     if pix.width < min_image_size or pix.height < min_image_size:
+                        seen_xrefs.add(xref)
+                        pix = None
+                        continue
+
+                    pix_hash = hashlib.sha256(pix.samples).hexdigest()
+                    if pix_hash in seen_hashes:
+                        seen_xrefs.add(xref)
                         pix = None
                         continue
 
@@ -185,11 +216,20 @@ def extract_pdf_content(
                         except Exception as conv_err:
                             logger.warning(f"Error converting image xref={xref} to RGB: {conv_err}")
 
+                    conv_hash = hashlib.sha256(pix.samples).hexdigest()
+                    if conv_hash in seen_hashes:
+                        seen_xrefs.add(xref)
+                        pix = None
+                        continue
+
                     img_filename = f"{pdf_id}_p{page_num + 1}_img{img_index + 1}.png"
                     img_path = images_dir / img_filename
 
                     pix.save(str(img_path))
                     width, height = pix.width, pix.height
+                    seen_hashes.add(pix_hash)
+                    seen_hashes.add(conv_hash)
+                    seen_xrefs.add(xref)
                     pix = None
 
                 # Try to find a caption near the image
@@ -202,10 +242,12 @@ def extract_pdf_content(
                     "width": width,
                     "height": height,
                     "caption": caption,
+                    "pdf_id": pdf_id,
                 })
                 image_count += 1
 
             except Exception as e:
+                seen_xrefs.add(xref)
                 logger.warning(f"Failed to extract image xref={xref} from page {page_num + 1}: {e}")
                 continue
 
@@ -236,6 +278,7 @@ def extract_pdf_content(
                     "width": pix.width,
                     "height": pix.height,
                     "caption": f"Página {page_num + 1} (Vista completa)",
+                    "pdf_id": pdf_id,
                 })
                 image_count += 1
                 pix = None
@@ -529,7 +572,10 @@ def merge_ontology_structures(
     existing_img_filenames = {im.get("filename") for im in existing_images}
     for img in (new_images or []):
         if img.get("filename") not in existing_img_filenames:
-            existing_images.append(img)
+            img_copy = dict(img)
+            if "pdf_id" not in img_copy or not img_copy["pdf_id"]:
+                img_copy["pdf_id"] = new_pdf_id
+            existing_images.append(img_copy)
             existing_img_filenames.add(img.get("filename"))
 
     # Rebuild the ontology document
@@ -553,7 +599,8 @@ def merge_ontology_structures(
 
     logger.info(
         f"Merge complete: {added_count} new + {updated_count} updated = "
-        f"{len(merged_structures)} total structures from {len(source_pdfs)} PDFs"
+        f"{len(merged_structures)} total structures from {len(source_pdfs)} PDFs, "
+        f"{len(existing_images)} total images"
     )
     return existing_ontology
 
@@ -624,10 +671,29 @@ def get_ontology_prompts(name: str) -> Optional[List[Dict[str, str]]]:
 
 
 def get_pdf_image_path(pdf_id: str, filename: str) -> Optional[str]:
-    """Get the absolute path to an extracted PDF image."""
-    path = PDF_IMAGES_DIR / pdf_id / filename
-    if path.exists():
-        return str(path)
+    """Get the absolute path to an extracted PDF image, resolving across merged PDF subdirectories."""
+    # 1. Direct path in requested pdf_id
+    if pdf_id and pdf_id != "unknown":
+        path = PDF_IMAGES_DIR / pdf_id / filename
+        if path.exists():
+            return str(path)
+
+    # 2. Extract actual pdf_id from filename prefix if filename format is {real_pdf_id}_...
+    if "_" in filename:
+        prefix = filename.split("_")[0]
+        if prefix and prefix != pdf_id:
+            path = PDF_IMAGES_DIR / prefix / filename
+            if path.exists():
+                return str(path)
+
+    # 3. Fallback: Search across all subdirectories of PDF_IMAGES_DIR
+    if PDF_IMAGES_DIR.exists():
+        for sub_dir in PDF_IMAGES_DIR.iterdir():
+            if sub_dir.is_dir():
+                cand = sub_dir / filename
+                if cand.exists():
+                    return str(cand)
+
     return None
 
 

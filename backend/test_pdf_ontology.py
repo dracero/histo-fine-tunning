@@ -2,10 +2,13 @@
 Integration & unit tests for pdf_ontology module and FastAPI backend endpoints.
 """
 
+import io
 import os
 import json
 import unittest
 from pathlib import Path
+from PIL import Image
+import fitz
 
 from pdf_ontology import (
     build_ontology_document,
@@ -15,6 +18,7 @@ from pdf_ontology import (
     update_ontology_structures,
     get_ontology_prompts,
     merge_ontology_structures,
+    extract_pdf_content,
     ONTOLOGIES_DIR,
 )
 
@@ -199,6 +203,67 @@ class TestPdfOntology(unittest.TestCase):
         reloaded = load_ontology(TEST_DOMAIN)
         self.assertEqual(len(reloaded["structures"]), 3)
         self.assertEqual(len(reloaded["source_pdfs"]), 2)
+
+    def test_extract_pdf_content_deduplication(self):
+        """Test that identical images across pages or different xrefs are extracted only once."""
+        doc = fitz.open()
+
+        # Image 1 (Red square)
+        img1 = Image.new("RGB", (100, 100), color=(255, 0, 0))
+        img1_io = io.BytesIO()
+        img1.save(img1_io, format="PNG")
+        img1_bytes = img1_io.getvalue()
+
+        # Image 2 (Blue square - distinct)
+        img2 = Image.new("RGB", (100, 100), color=(0, 0, 255))
+        img2_io = io.BytesIO()
+        img2.save(img2_io, format="PNG")
+        img2_bytes = img2_io.getvalue()
+
+        # Page 1: Has Image 1
+        page1 = doc.new_page()
+        page1.insert_image(fitz.Rect(50, 50, 150, 150), stream=img1_bytes)
+
+        # Page 2: Has duplicate of Image 1 (same stream/content)
+        page2 = doc.new_page()
+        page2.insert_image(fitz.Rect(50, 50, 150, 150), stream=img1_bytes)
+
+        # Page 3: Has Image 2
+        page3 = doc.new_page()
+        page3.insert_image(fitz.Rect(50, 50, 150, 150), stream=img2_bytes)
+
+        pdf_bytes = doc.write()
+        doc.close()
+
+        result = extract_pdf_content(pdf_bytes, "test_dedup.pdf", min_image_size=20)
+
+        # Must have extracted exactly 2 images, not 3!
+        self.assertEqual(result["total_images"], 2)
+        self.assertEqual(len(result["images"]), 2)
+
+    def test_group_detections_by_class(self):
+        """Test grouping and structuring of classified detections."""
+        from pathology_models import group_detections_by_class
+
+        detections = [
+            {"class_key": "nucleus", "class_label": "Núcleos", "color": "#f43f5e", "bbox": [10, 10, 20, 20]},
+            {"class_key": "nucleus", "class_label": "Núcleos", "color": "#f43f5e", "bbox": [50, 50, 20, 20]},
+            {"class_key": "collagen", "class_label": "Colágeno", "color": "#38bdf8", "bbox": [100, 100, 40, 40]},
+        ]
+        candidate_classes = [
+            {"key": "nucleus", "prompt": "dark round nucleus", "label": "Núcleos", "color": "#f43f5e"},
+            {"key": "collagen", "prompt": "pink collagen fibers", "label": "Colágeno", "color": "#38bdf8"},
+            {"key": "lumen", "prompt": "empty lumen cavity", "label": "Lumen", "color": "#6366f1"},
+        ]
+
+        groups = group_detections_by_class(detections, candidate_classes)
+        self.assertEqual(len(groups), 2)
+        group_keys = {g["key"] for g in groups}
+        self.assertEqual(group_keys, {"nucleus", "collagen"})
+
+        nucleus_group = next(g for g in groups if g["key"] == "nucleus")
+        self.assertEqual(nucleus_group["count"], 2)
+        self.assertEqual(len(nucleus_group["detections"]), 2)
 
 
 if __name__ == "__main__":

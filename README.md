@@ -55,7 +55,7 @@ Diseñada especialmente para imágenes complejas (como histología o microscopí
 ```text
 Meta_SAM_V3/
 ├── backend/
-│   ├── main.py                  # API FastAPI para inferencia de SAM 3, CONCH, UNI y endpoints REST
+│   ├── main.py                  # API FastAPI para inferencia de SAM 3 (Ultralytics + Meta), CONCH, UNI
 │   ├── pathology_models.py      # Módulo de modelos fundacionales (CONCH 512d + UNI 1024d)
 │   ├── pdf_ontology.py          # Extracción de PDFs, ontología con Gemini y CRUD de imágenes
 │   ├── roboflow_integration.py  # Módulo de conversión COCO, upload y training en Roboflow
@@ -70,24 +70,36 @@ Meta_SAM_V3/
 ├── datasets/
 │   ├── ontologies/              # Almacenamiento JSON de ontologías generadas
 │   └── pdf_images/              # Imágenes y textos extraídos de PDFs
+├── segmenter.py                 # Script CLI / Interactivo de segmentación zero-shot con SAM 3 (Ultralytics)
+├── sam3.pt                      # Checkpoint de pesos de SAM 3
 ├── .env                         # Credenciales (Roboflow, Gemini API Key)
-├── .env.example                 # Plantilla de variables de entorno
-├── package.json                 # Script principal (npm run dev)
-└── start.sh                     # Script Bash de lanzamiento simultáneo de servidores
-```
-├── frontend/
-│   ├── src/
-│   │   └── pages/
-│   │       └── index.astro      # Interfaz de usuario interactiva (Astro + Vanilla JS + CSS)
-│   ├── package.json
-│   └── astro.config.mjs
-├── .env                         # Credenciales y configuración de Roboflow (Ignorado en git)
 ├── .env.example                 # Plantilla de variables de entorno
 ├── package.json                 # Script principal (npm run dev)
 └── start.sh                     # Script Bash de lanzamiento simultáneo de servidores
 ```
 
 ---
+
+## 🎯 Uso de Segmentación Semántica Zero-Shot con SAM 3
+
+### 1. Modo Interactivo por Consola
+Permite elegir cualquier imagen y definir qué elementos o conceptos segmentar:
+```bash
+# Ejecutar en modo interactivo (solicita la imagen y los elementos por pantalla):
+python segmenter.py
+
+# O pasar parámetros directamente vía CLI:
+python segmenter.py --image mi_imagen.jpg --elements "person, glasses, red tie" --conf 0.25
+python segmenter.py --image histologia.png --elements "cell nucleus, circular lumen" --conf 0.20
+```
+
+### 2. Desde la Aplicación Web
+1. Iniciar los servidores con `./start.sh` o `npm run dev`.
+2. Abrir el navegador en `http://localhost:4321`.
+3. Arrastrar o seleccionar cualquier imagen en la pestaña **🖼️ Imágenes**.
+4. En el panel **🎯 Elementos a segmentar**, escribir los conceptos separados por comas o hacer click en los chips de sugerencias.
+5. Hacer click en **⚡ Segmentar Elementos** para segmentar instantáneamente con SAM 3 en GPU y editar/exportar los resultados.
+
 
 ## 📐 Arquitectura, Patrones de Diseño y Complejidad
 

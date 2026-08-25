@@ -41,6 +41,13 @@ except ImportError as e:
     logger.error(f"Error importing SAM3 modules: {e}")
     raise
 
+# Try importing Ultralytics SAM 3 Semantic Predictor
+try:
+    from ultralytics.models.sam import SAM3SemanticPredictor
+except ImportError:
+    SAM3SemanticPredictor = None
+    logger.warning("Ultralytics SAM3SemanticPredictor not found.")
+
 # Import Roboflow integration
 from roboflow_integration import (
     check_connection as rf_check_connection,
@@ -89,26 +96,53 @@ from gemini_vision import (
 
 # Global variables for model and processor
 processor = None
+sam3_semantic_predictor = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global processor
-    logger.info("Initializing SAM 3 model...")
+    global processor, sam3_semantic_predictor
+    logger.info("Initializing SAM 3 models...")
     start_time = time.time()
 
     # Enable bfloat16 autocast globally, as recommended by the official SAM3 notebooks
     torch.autocast(device_type=device, dtype=torch.bfloat16).__enter__()
     torch.inference_mode().__enter__()
 
+    # 1. Initialize Ultralytics SAM3SemanticPredictor if available
+    if SAM3SemanticPredictor is not None:
+        try:
+            model_file = "sam3.pt"
+            if not os.path.exists(model_file):
+                hf_cache = os.path.expanduser("~/.cache/huggingface/hub/models--facebook--sam3/snapshots")
+                if os.path.exists(hf_cache):
+                    for root, _, files in os.walk(hf_cache):
+                        if "sam3.pt" in files:
+                            model_file = os.path.join(root, "sam3.pt")
+                            break
+            if os.path.exists(model_file):
+                sam3_semantic_predictor = SAM3SemanticPredictor(overrides={
+                    "conf": 0.15,
+                    "task": "segment",
+                    "mode": "predict",
+                    "model": model_file,
+                    "quantize": 16,
+                    "save": False,
+                })
+                logger.info(f"Ultralytics SAM3SemanticPredictor loaded successfully from '{model_file}'.")
+        except Exception as e:
+            logger.warning(f"Could not load Ultralytics SAM3SemanticPredictor: {e}")
+            sam3_semantic_predictor = None
+
+    # 2. Initialize Meta SAM 3 image model & processor
     try:
         model = build_sam3_image_model(device=device, version="sam3.1")
         # Initialize with flexible threshold (will be dynamically adjusted per request)
         processor = Sam3Processor(model, device=device, confidence_threshold=0.05)
-        logger.info(f"SAM 3 loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
+        logger.info(f"SAM 3.1 Processor loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
     except Exception as e:
-        logger.error(f"Failed to load SAM 3 model: {e}")
+        logger.error(f"Failed to load SAM 3.1 model: {e}")
         processor = None
 
     yield
@@ -312,6 +346,88 @@ def _extract_detections(
     return detections
 
 
+def _extract_detections_ultralytics(
+    results,
+    elements: List[str],
+    img_w: int,
+    img_h: int,
+    conf_thresh: float = 0.15,
+) -> List[Dict[str, Any]]:
+    """Extract detections and polygons from Ultralytics SAM3SemanticPredictor results."""
+    detections = []
+    det_counter = 1
+    total_img_area = float(img_w) * float(img_h) if (img_w > 0 and img_h > 0) else None
+
+    for r in results:
+        masks = getattr(r, "masks", None)
+        if masks is None or len(masks) == 0:
+            continue
+
+        masks_xy = masks.xy
+        boxes = getattr(r, "boxes", None)
+        names = getattr(r, "names", elements)
+
+        cls_arr = boxes.cls.cpu().numpy().astype(int) if boxes is not None and hasattr(boxes, "cls") and boxes.cls is not None else [0] * len(masks_xy)
+        conf_arr = boxes.conf.cpu().numpy() if boxes is not None and hasattr(boxes, "conf") and boxes.conf is not None else [conf_thresh] * len(masks_xy)
+        xyxy_arr = boxes.xyxy.cpu().numpy() if boxes is not None and hasattr(boxes, "xyxy") and boxes.xyxy is not None else None
+
+        for i in range(len(masks_xy)):
+            score = float(conf_arr[i])
+            if score < conf_thresh:
+                continue
+
+            poly_pts = masks_xy[i]
+            if len(poly_pts) < 3:
+                continue
+
+            poly_flat = []
+            for pt in poly_pts:
+                px = max(0.0, min(float(img_w), float(pt[0])))
+                py = max(0.0, min(float(img_h), float(pt[1])))
+                poly_flat.extend([round(px, 2), round(py, 2)])
+
+            if len(poly_flat) < 6:
+                continue
+
+            cls_idx = int(cls_arr[i])
+            if isinstance(names, list) and cls_idx < len(names):
+                cls_name = names[cls_idx]
+            elif isinstance(names, dict):
+                cls_name = names.get(cls_idx, str(cls_idx))
+            else:
+                cls_name = str(cls_idx)
+
+            if xyxy_arr is not None and i < len(xyxy_arr):
+                x1 = max(0.0, min(float(img_w), float(xyxy_arr[i][0])))
+                y1 = max(0.0, min(float(img_h), float(xyxy_arr[i][1])))
+                x2 = max(0.0, min(float(img_w), float(xyxy_arr[i][2])))
+                y2 = max(0.0, min(float(img_h), float(xyxy_arr[i][3])))
+            else:
+                x_pts = poly_flat[0::2]
+                y_pts = poly_flat[1::2]
+                x1, y1, x2, y2 = min(x_pts), min(y_pts), max(x_pts), max(y_pts)
+
+            bw = max(0.0, x2 - x1)
+            bh = max(0.0, y2 - y1)
+            box_area = bw * bh
+
+            if total_img_area and (box_area / total_img_area) > 0.90:
+                continue
+
+            detections.append({
+                "id": f"det_{det_counter}",
+                "category_name": cls_name,
+                "score": round(score, 4),
+                "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                "bbox": [round(x1, 2), round(y1, 2), round(bw, 2), round(bh, 2)],
+                "segmentation": [poly_flat],
+                "area": round(box_area, 2),
+            })
+            det_counter += 1
+
+    return detections
+
+
 def _prepare_image_for_inference(pil_image: Image.Image):
     """
     Prepares image for SAM3 inference.
@@ -324,17 +440,16 @@ def _prepare_image_for_inference(pil_image: Image.Image):
     Returns (pil_image, orig_width, orig_height, scale_x, scale_y)
     """
     orig_w, orig_h = pil_image.size
-    # Sam3Processor handles all resizing internally — scale factors are 1.0
-    # because the processor already maps outputs back to original_height/width.
     return pil_image, orig_w, orig_h, 1.0, 1.0
 
 
 @app.get("/api/health")
 def health_check() -> Dict[str, Any]:
     return {
-        "status": "ok" if processor is not None else "model_not_loaded",
+        "status": "ok" if (processor is not None or sam3_semantic_predictor is not None) else "model_not_loaded",
         "device": device,
-        "model": "sam3"
+        "model": "sam3",
+        "ultralytics_sam3": sam3_semantic_predictor is not None,
     }
 
 @app.get("/api/prompts")
@@ -347,54 +462,94 @@ def get_prompts() -> Dict[str, Any]:
 @app.post("/api/segment")
 async def segment_image(
     image: UploadFile = File(...),
-    prompt: str = Form("cell nucleus"),
-    umbral: float = Form(0.05),
+    prompt: Optional[str] = Form(None),
+    elements: Optional[str] = Form(None),
+    umbral: float = Form(0.25),
     ontology_name: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
-    Single-prompt segmentation endpoint with dynamic multimodal refinement.
+    Zero-shot semantic segmentation endpoint with SAM 3 (Ultralytics / Meta SAM 3).
+    Supports single or multiple concepts separated by commas (e.g. 'person, glasses' or 'cell, nucleus').
     """
-    if processor is None:
+    if sam3_semantic_predictor is None and processor is None:
         raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
 
-    logger.info(f"Received segment request: prompt='{prompt}', umbral={umbral}")
+    query_text = (elements if elements and elements.strip() else (prompt if prompt and prompt.strip() else "cell nucleus")).strip()
+    logger.info(f"Received segment request: query='{query_text}', umbral={umbral}")
     start_time = time.time()
 
     try:
         contents = await image.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
+        width, height = pil_image.size
 
-        # Retrieve ontology context if available
-        ont_context = None
-        if ontology_name and ontology_name.strip():
-            ont_context = get_ontology_prompts(ontology_name.strip())
+        # Parse elements list (split by comma)
+        concept_list = [c.strip() for c in query_text.split(",") if c.strip()]
+        if not concept_list:
+            concept_list = ["cell nucleus"]
 
-        # Dynamic refinement using Gemini Vision multimodal assistant
-        refined_prompt = refine_prompt_multimodal(pil_image, prompt, ontology_context=ont_context)
+        detections = []
+        # Priority 1: Ultralytics SAM3SemanticPredictor (Fast multi-concept zero-shot)
+        if sam3_semantic_predictor is not None:
+            try:
+                if hasattr(sam3_semantic_predictor, "args") and sam3_semantic_predictor.args is not None:
+                    sam3_semantic_predictor.args.conf = float(umbral)
+                sam3_semantic_predictor.set_image(pil_image)
+                results = sam3_semantic_predictor(text=concept_list)
+                detections = _extract_detections_ultralytics(
+                    results=results,
+                    elements=concept_list,
+                    img_w=width,
+                    img_h=height,
+                    conf_thresh=float(umbral)
+                )
+            except Exception as ultra_err:
+                logger.warning(f"SAM3SemanticPredictor failed, falling back to processor: {ultra_err}")
+                detections = []
 
-        # Set adaptive confidence threshold in processor
-        proc_thresh = max(0.01, min(0.35, float(umbral)))
-        processor.confidence_threshold = proc_thresh
+        # Priority 2: Fallback to Sam3Processor if predictor was unavailable or returned empty due to error
+        if not detections and processor is not None:
+            inf_image, w, h, sx, sy = _prepare_image_for_inference(pil_image)
+            processor.confidence_threshold = max(0.01, min(0.35, float(umbral)))
+            inference_state = processor.set_image(inf_image)
+            for c_text in concept_list:
+                output = processor.set_text_prompt(state=inference_state, prompt=c_text)
+                c_dets = _extract_detections(output, umbral, sx, sy, img_w=width, img_h=height)
+                for d in c_dets:
+                    d["category_name"] = c_text
+                detections.extend(c_dets)
 
-        inference_state = processor.set_image(inf_image)
-        output = processor.set_text_prompt(state=inference_state, prompt=refined_prompt)
+        # Group detections by category_name for frontend compatibility
+        palette = ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#84cc16"]
+        groups_map = {}
+        for d in detections:
+            cat = d.get("category_name", "Objeto")
+            if cat not in groups_map:
+                idx = len(groups_map)
+                color = palette[idx % len(palette)]
+                key = cat.lower().replace(" ", "_")
+                groups_map[cat] = {
+                    "key": key,
+                    "label": cat,
+                    "color": color,
+                    "detections": []
+                }
+            groups_map[cat]["detections"].append(d)
 
-        detections = _extract_detections(output, umbral, scale_x, scale_y, img_w=width, img_h=height)
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        groups = list(groups_map.values())
 
         inference_time = time.time() - start_time
-        logger.info(f"Found {len(detections)} detections for '{refined_prompt}' in {inference_time:.2f}s")
+        logger.info(f"Found {len(detections)} detections for concepts {concept_list} in {inference_time:.2f}s")
 
         return {
             "width": width,
             "height": height,
             "detections": detections,
+            "groups": groups,
+            "total_detections": len(detections),
             "inference_time_seconds": round(inference_time, 2),
-            "prompt": prompt,
-            "refined_prompt": refined_prompt,
+            "prompt": query_text,
+            "elements": concept_list,
             "umbral": umbral,
         }
 

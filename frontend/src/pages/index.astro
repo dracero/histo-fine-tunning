@@ -87,19 +87,38 @@
 						<!-- Segmentation controls -->
 						<div class="parameters-area">
 							<div class="form-group">
-								<label for="custom-prompt-input">Patrón visual adicional:</label>
-								<div class="input-with-btn">
-									<input type="text" id="custom-prompt-input" placeholder="Ej: elongated dark nucleus" class="form-input" />
-									<button type="button" id="re-segment-btn" class="btn-small">Re-segmentar</button>
+								<label for="custom-prompt-input" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+									<span style="font-weight: 600; font-size: 0.78rem;">🎯 Elementos a segmentar (SAM 3 Zero-Shot):</span>
+									<span class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">Open-Vocabulary</span>
+								</label>
+								<div class="input-with-btn" style="flex-direction: column; gap: 0.4rem;">
+									<input type="text" id="custom-prompt-input" placeholder="Ej: cell nucleus, lumen o person, glasses, tie" class="form-input" style="width: 100%; font-size: 0.8rem;" />
+									<div style="display: flex; gap: 0.4rem; width: 100%;">
+										<button type="button" id="re-segment-btn" class="btn-action btn-primary-action" style="flex: 2; margin: 0; padding: 0.45rem 0.6rem; font-size: 0.78rem;">
+											⚡ Segmentar Elementos
+										</button>
+										<button type="button" id="auto-segment-btn" class="btn-small btn-outline" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.72rem;" title="Descubrimiento automático con ontología">
+											🪄 Auto
+										</button>
+									</div>
+								</div>
+								<!-- Prompt suggestion tags -->
+								<div class="prompt-tags" id="prompt-tags-container" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem;">
+									<span class="prompt-chip" data-concept="cell nucleus">🔬 Núcleos</span>
+									<span class="prompt-chip" data-concept="circular tissue structure">🧬 Estructura circular</span>
+									<span class="prompt-chip" data-concept="red blood cells">🩸 Eritrocitos</span>
+									<span class="prompt-chip" data-concept="empty circular lumen">⭕ Lumen</span>
+									<span class="prompt-chip" data-concept="person">👤 Persona</span>
+									<span class="prompt-chip" data-concept="glasses">👓 Anteojos</span>
 								</div>
 							</div>
 
 							<div class="form-group">
 								<div class="slider-header">
 									<label for="threshold-slider">Umbral de confianza</label>
-									<span id="threshold-val" class="slider-val">0.35</span>
+									<span id="threshold-val" class="slider-val">0.25</span>
 								</div>
-								<input type="range" id="threshold-slider" min="0.01" max="0.95" step="0.01" value="0.35" class="form-range" />
+								<input type="range" id="threshold-slider" min="0.01" max="0.95" step="0.01" value="0.25" class="form-range" />
 							</div>
 						</div>
 
@@ -485,6 +504,34 @@
 	.model-pill .dot.green { background: #10b981; box-shadow: 0 0 6px #10b981; }
 	.model-pill .dot.purple { background: #a855f7; box-shadow: 0 0 6px #a855f7; }
 
+	/* Prompt Suggestion Chips */
+	.prompt-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.68rem;
+		padding: 0.2rem 0.5rem;
+		border-radius: 9999px;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid var(--border-color);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		user-select: none;
+	}
+	.prompt-chip:hover {
+		background: rgba(139, 92, 246, 0.15);
+		border-color: var(--primary);
+		color: var(--text-main);
+		transform: translateY(-1px);
+	}
+	.prompt-chip.active {
+		background: rgba(6, 182, 212, 0.2);
+		border-color: var(--accent-cyan);
+		color: #fff;
+		font-weight: 600;
+	}
+
 	/* Panel Box */
 	.panel-box { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem; }
 
@@ -863,13 +910,13 @@
 			selectImage(firstKey);
 		}
 
-		// Auto-segment new images only if explicitly requested
+		// Auto-segment new images with SAM 3 if requested
 		if (autoSegment) {
 			for (const file of imageFiles) {
 				const key = [...imageStore.keys()].find(k => imageStore.get(k).file === file);
 				if (key) {
 					selectImage(key);
-					await runAutoSegmentation(key);
+					await runSam3Segmentation(key);
 				}
 			}
 		}
@@ -975,16 +1022,119 @@
 		return count;
 	}
 
-	// ======================= SEGMENTATION =======================
+	// ======================= SEGMENTATION (SAM 3 ZERO-SHOT) =======================
 	const customPromptInput = document.getElementById("custom-prompt-input");
 	const reSegmentBtn = document.getElementById("re-segment-btn");
+	const autoSegmentBtn = document.getElementById("auto-segment-btn");
+
+	// Setup Prompt Chips Click Listeners
+	document.querySelectorAll(".prompt-chip").forEach(chip => {
+		chip.addEventListener("click", () => {
+			const concept = chip.getAttribute("data-concept");
+			if (!concept) return;
+			const currentVal = customPromptInput.value.trim();
+			if (!currentVal) {
+				customPromptInput.value = concept;
+				chip.classList.add("active");
+			} else {
+				const items = currentVal.split(",").map(s => s.trim()).filter(Boolean);
+				if (items.includes(concept)) {
+					const filtered = items.filter(x => x !== concept);
+					customPromptInput.value = filtered.join(", ");
+					chip.classList.remove("active");
+				} else {
+					items.push(concept);
+					customPromptInput.value = items.join(", ");
+					chip.classList.add("active");
+				}
+			}
+			if (activeImageKey) {
+				runSam3Segmentation(activeImageKey);
+			}
+		});
+	});
 
 	reSegmentBtn.addEventListener("click", () => {
+		if (activeImageKey) runSam3Segmentation(activeImageKey);
+	});
+	autoSegmentBtn?.addEventListener("click", () => {
 		if (activeImageKey) runAutoSegmentation(activeImageKey);
 	});
 	customPromptInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter" && activeImageKey) runAutoSegmentation(activeImageKey);
+		if (e.key === "Enter" && activeImageKey) runSam3Segmentation(activeImageKey);
 	});
+
+	async function runSam3Segmentation(key) {
+		const data = imageStore.get(key);
+		if (!data) return;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `Segmentando ${data.filename} con SAM 3 (zero-shot)...`;
+
+		const elementsText = customPromptInput.value.trim() || "cell nucleus";
+		const formData = new FormData();
+		formData.append("image", data.file);
+		formData.append("elements", elementsText);
+		formData.append("prompt", elementsText);
+		formData.append("umbral", thresholdSlider.value);
+		if (window._activeOntologyName) {
+			formData.append("ontology_name", window._activeOntologyName);
+		}
+
+		try {
+			const response = await fetch(`${API_URL}/segment`, {
+				method: "POST",
+				body: formData
+			});
+
+			if (!response.ok) {
+				const err = await response.json();
+				throw new Error(err.detail || "Error en segmentación SAM 3.");
+			}
+
+			const result = await response.json();
+			data.groups = result.groups || [];
+			data.width = result.width || data.width;
+			data.height = result.height || data.height;
+			data.annotated = true;
+
+			// Register classes from this segmentation
+			for (const group of data.groups) {
+				if (!classRegistry.find(c => c.key === group.key)) {
+					classRegistry.push({
+						id: classIdCounter++,
+						name: group.label,
+						color: group.color,
+						key: group.key,
+					});
+				}
+			}
+
+			if (key === activeImageKey) {
+				viewerControls.style.display = "flex";
+				selectedDetections.clear();
+				updateSelectionToolbar();
+				renderOverlay();
+				updateClassesList();
+			}
+
+			renderGallery();
+			updateExportStats();
+
+			statusText.textContent = `✓ ${data.filename}: ${result.total_detections || result.detections?.length || 0} instancias detectadas (${result.inference_time_seconds || 0}s)`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "none";
+			}, 3000);
+
+		} catch (error) {
+			console.error(error);
+			alert(`Error en SAM 3: ${error.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
 
 	async function runAutoSegmentation(key) {
 		const data = imageStore.get(key);
@@ -992,7 +1142,7 @@
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `Segmentando ${data.filename}...`;
+		statusText.textContent = `Auto-segmentando ${data.filename}...`;
 
 		const formData = new FormData();
 		formData.append("image", data.file);

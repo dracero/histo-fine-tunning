@@ -13,8 +13,10 @@ import torch
 from pathology_models import (
     ConchModelWrapper,
     UniModelWrapper,
+    VirchowModelWrapper,
     classify_detections_with_conch,
     extract_detection_embeddings_uni,
+    extract_detection_embeddings_virchow,
     get_pathology_models_status,
 )
 from pdf_ontology import (
@@ -36,8 +38,10 @@ class TestPathologyModels(unittest.TestCase):
         status = get_pathology_models_status()
         self.assertIn("conch", status)
         self.assertIn("uni", status)
+        self.assertIn("virchow", status)
         self.assertEqual(status["conch"]["embedding_dim"], 512)
         self.assertEqual(status["uni"]["embedding_dim"], 1024)
+        self.assertEqual(status["virchow"]["embedding_dim"], 1280)
 
     def test_conch_zero_shot_classification(self):
         detections = [
@@ -98,6 +102,22 @@ class TestPathologyModels(unittest.TestCase):
 
         self.assertEqual(len(embeddings), 1)
         self.assertEqual(len(embeddings[0]), 1024)
+
+    def test_virchow_feature_extraction_fallback(self):
+        detections = [
+            {
+                "id": "det_1",
+                "bbox": [20, 20, 50, 50],
+            }
+        ]
+
+        # Testing fallback when is_histology=False
+        embeddings_false = extract_detection_embeddings_virchow(
+            image=self.test_img,
+            detections=detections,
+            is_histology=False,
+        )
+        self.assertEqual(embeddings_false, [])
 
     def test_pdf_images_crud(self):
         test_pdf_id = "test_crud_pdf"

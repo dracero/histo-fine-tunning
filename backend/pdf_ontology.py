@@ -453,6 +453,67 @@ def generate_ontology_with_gemini(
     return structures
 
 
+HISTOLOGY_KEYWORDS = {
+    # Spanish
+    "histo", "histologia", "histología", "histopatologia", "histopatología",
+    "tejido", "tejidos", "célula", "celula", "células", "celulas", "núcleo", "nucleo",
+    "núcleos", "nucleos", "citoplasma", "microscop", "microscopio", "microscopia",
+    "microscopía", "tinción", "tincion", "tinciones", "biopsia", "patología", "patologia",
+    "epitelio", "estroma", "túbulo", "tubulo", "túbulos", "tubulos", "fibra", "fibras",
+    "glándula", "glandula", "glándulas", "glandulas", "lumen", "membrana", "arteria",
+    "vena", "capilar", "endotelio", "miocito", "neurona", "linfocito", "macrófago",
+    "macrofago", "hematoxilina", "eosina", "h&e", "intersticio", "basal", "acino",
+    "corte", "frotis", "lámina", "lamina", "portaobjeto", "endotelial",
+    # English
+    "histology", "histopathology", "tissue", "tissues", "cell", "cells", "cellular",
+    "nucleus", "nuclei", "cytoplasm", "microscopy", "microscopic", "microscope",
+    "stain", "staining", "biopsy", "pathology", "epithelium", "epithelial",
+    "stroma", "stromal", "tubule", "tubules", "fiber", "fibers", "gland", "glands",
+    "artery", "vein", "capillary", "endothelium", "myocyte", "neuron", "lymphocyte",
+    "macrophage", "hematoxylin", "eosin", "interstitial", "basement", "acini", "acinar",
+    "slide", "section", "smear", "endothelial"
+}
+
+
+def is_histology_ontology(ontology: Optional[Dict[str, Any]]) -> bool:
+    """
+    Determine if an ontology is related to histology/microscopy.
+    Returns True if histological features/keywords are detected or explicitly flagged,
+    False if the ontology is for non-histological domains.
+    """
+    if not ontology or not isinstance(ontology, dict):
+        return False
+
+    # Explicit flag takes priority if set
+    if "is_histology" in ontology and isinstance(ontology["is_histology"], bool):
+        return ontology["is_histology"]
+
+    # Gather texts to search across
+    domain = str(ontology.get("domain", "")).lower()
+    source_pdf = str(ontology.get("source_pdf", "")).lower()
+
+    combined_text_parts = [domain, source_pdf]
+
+    structures = ontology.get("structures", []) or ontology.get("prompts", [])
+    for s in structures:
+        if isinstance(s, dict):
+            combined_text_parts.append(str(s.get("key", "")).lower())
+            combined_text_parts.append(str(s.get("name", "")).lower())
+            combined_text_parts.append(str(s.get("name_en", "")).lower())
+            combined_text_parts.append(str(s.get("label", "")).lower())
+            combined_text_parts.append(str(s.get("prompt", "")).lower())
+            combined_text_parts.append(str(s.get("description", "")).lower())
+
+    full_text = " ".join(combined_text_parts)
+
+    # Check for keyword matches
+    for kw in HISTOLOGY_KEYWORDS:
+        if kw in full_text:
+            return True
+
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Ontology Storage
 # ---------------------------------------------------------------------------
@@ -470,7 +531,7 @@ def build_ontology_document(
         base = Path(filename).stem
         domain_name = re.sub(r"[^a-zA-Z0-9_]", "_", base).lower()
 
-    return {
+    doc = {
         "domain": domain_name,
         "source_pdf": filename,
         "pdf_id": pdf_id,
@@ -486,6 +547,8 @@ def build_ontology_document(
             for i, s in enumerate(structures)
         ],
     }
+    doc["is_histology"] = is_histology_ontology(doc)
+    return doc
 
 
 def save_ontology(ontology: Dict[str, Any]) -> str:
@@ -596,6 +659,7 @@ def merge_ontology_structures(
         }
         for i, s in enumerate(merged_structures)
     ]
+    existing_ontology["is_histology"] = is_histology_ontology(existing_ontology)
 
     logger.info(
         f"Merge complete: {added_count} new + {updated_count} updated = "
@@ -611,7 +675,10 @@ def load_ontology(name: str) -> Optional[Dict[str, Any]]:
     if not filepath.exists():
         return None
     with open(filepath, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    if "is_histology" not in data:
+        data["is_histology"] = is_histology_ontology(data)
+    return data
 
 
 def list_ontologies() -> List[Dict[str, Any]]:
@@ -626,6 +693,7 @@ def list_ontologies() -> List[Dict[str, Any]]:
                 "name": filepath.stem,
                 "domain": data.get("domain", filepath.stem),
                 "source_pdf": data.get("source_pdf", "unknown"),
+                "is_histology": is_histology_ontology(data),
                 "num_structures": len(data.get("structures", [])),
                 "num_images": len(data.get("extracted_images", [])),
                 "num_prompts": len(data.get("prompts", [])),
@@ -644,6 +712,7 @@ def update_ontology_structures(
         return None
 
     ontology["structures"] = structures
+    ontology["is_histology"] = is_histology_ontology(ontology)
     # Regenerate prompts from updated structures
     ontology["prompts"] = [
         {

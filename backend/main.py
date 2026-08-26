@@ -1,10 +1,4 @@
 import os
-from dotenv import load_dotenv
-load_dotenv()
-
-# Configure PyTorch CUDA memory allocator before importing torch
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
 import io
 import time
 import math
@@ -13,6 +7,17 @@ import json
 import logging
 import warnings
 from typing import List, Dict, Any
+
+from dotenv import load_dotenv
+load_dotenv()
+
+# Configure PyTorch CUDA memory allocator
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+# Ensure Hugging Face authentication token compatibility across all libraries
+if os.getenv("HF_TOKEN"):
+    os.environ["HUGGING_FACE_HUB_TOKEN"] = os.getenv("HF_TOKEN")
+    os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN")
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,6 +81,7 @@ from pdf_ontology import (
     update_pdf_image_metadata,
     delete_pdf_image,
     merge_ontology_structures,
+    is_histology_ontology,
     PDF_IMAGES_DIR,
 )
 
@@ -84,6 +90,7 @@ from pathology_models import (
     get_pathology_models_status,
     classify_detections_with_conch,
     extract_detection_embeddings_uni,
+    extract_detection_embeddings_virchow,
     discriminate_and_cluster_with_pathology_models,
     group_detections_by_class,
 )
@@ -94,10 +101,54 @@ from gemini_vision import (
     discover_visual_primitives_from_image,
 )
 
+# Import Cellpose & Cellpose-SAM Histological Segmentation Module
+from cellpose_segmenter import (
+    is_cellpose_available,
+    run_cellpose_segmentation,
+    get_cellpose_status,
+    AVAILABLE_CELLPOSE_MODELS,
+    load_cellpose_model,
+    offload_cellpose_to_cpu,
+)
+
 # Global variables for model and processor
 processor = None
 sam3_semantic_predictor = None
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def prepare_engine_vram(target_engine: str) -> None:
+    """
+    Dynamically swap models between GPU and CPU to ensure the active model
+    always has full access to the RTX 3050 GPU VRAM without running into CUDA OOM.
+    """
+    global processor, device
+    if not torch.cuda.is_available():
+        return
+
+    if target_engine in ("cellpose", "cpsam"):
+        # 1. Offload SAM 3 to CPU to free 4.9 GB VRAM for Cellpose
+        if processor is not None and hasattr(processor, "model"):
+            try:
+                if str(processor.device) != "cpu":
+                    processor.model.to("cpu")
+                    processor.device = "cpu"
+                    torch.cuda.empty_cache()
+                    logger.info("Temporarily swapped SAM 3 to CPU to give 100% GPU VRAM to Cellpose-SAM.")
+            except Exception as e:
+                logger.warning(f"Could not offload SAM 3 to CPU: {e}")
+    else:
+        # 2. Offload Cellpose and restore SAM 3 to GPU
+        offload_cellpose_to_cpu()
+        if processor is not None and hasattr(processor, "model"):
+            try:
+                if str(processor.device) == "cpu":
+                    processor.model.to(device)
+                    processor.device = device
+                    torch.cuda.empty_cache()
+                    logger.info("Restored SAM 3 to GPU for fast zero-shot segmentation.")
+            except Exception as e:
+                logger.warning(f"Could not restore SAM 3 to GPU: {e}")
 
 
 @asynccontextmanager
@@ -137,7 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 2. Initialize Meta SAM 3 image model & processor
     try:
-        model = build_sam3_image_model(device=device, version="sam3.1")
+        model = build_sam3_image_model(device=device)
         # Initialize with flexible threshold (will be dynamically adjusted per request)
         processor = Sam3Processor(model, device=device, confidence_threshold=0.05)
         logger.info(f"SAM 3.1 Processor loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
@@ -446,10 +497,47 @@ def _prepare_image_for_inference(pil_image: Image.Image):
 @app.get("/api/health")
 def health_check() -> Dict[str, Any]:
     return {
-        "status": "ok" if (processor is not None or sam3_semantic_predictor is not None) else "model_not_loaded",
+        "status": "ok" if (processor is not None or sam3_semantic_predictor is not None or is_cellpose_available()) else "model_not_loaded",
         "device": device,
         "model": "sam3",
         "ultralytics_sam3": sam3_semantic_predictor is not None,
+        "cellpose_available": is_cellpose_available(),
+    }
+
+@app.get("/api/cellpose-status")
+def cellpose_status_endpoint() -> Dict[str, Any]:
+    """Check Cellpose & Cellpose-SAM models availability and hardware support."""
+    return get_cellpose_status()
+
+@app.get("/api/segmentation-models")
+def get_segmentation_models() -> Dict[str, Any]:
+    """List available segmentation engines (SAM 3.1 and Cellpose/Cellpose-SAM)."""
+    cellpose_info = get_cellpose_status()
+    models_list = [
+        {
+            "id": "sam3",
+            "name": "Meta SAM 3.1",
+            "tag": "Open-Vocabulary Zero-Shot",
+            "description": "Segmentación guiada por texto / open-vocabulary con Meta SAM 3.1",
+            "available": processor is not None or sam3_semantic_predictor is not None,
+            "submodels": [],
+        },
+        {
+            "id": "cellpose",
+            "name": "Cellpose / Cellpose-SAM",
+            "tag": "Histología & Microscopía",
+            "description": "Segmentación celular y tisular de alta precisión entrenada en núcleos y cortes histológicos",
+            "available": cellpose_info.get("available", False),
+            "submodels": [
+                {"id": k, "name": v} for k, v in cellpose_info.get("models", {}).items()
+            ],
+            "default_submodel": "cyto3",
+        },
+    ]
+    return {
+        "engines": models_list,
+        "default_engine": "sam3",
+        "cellpose_status": cellpose_info,
     }
 
 @app.get("/api/prompts")
@@ -466,20 +554,42 @@ async def segment_image(
     elements: Optional[str] = Form(None),
     umbral: float = Form(0.25),
     ontology_name: Optional[str] = Form(None),
+    model_engine: str = Form("sam3"),
+    cellpose_model: str = Form("cpsam"),
+    cell_diameter: Optional[float] = Form(None),
 ) -> Dict[str, Any]:
     """
-    Zero-shot semantic segmentation endpoint with SAM 3 (Ultralytics / Meta SAM 3).
-    Supports single or multiple concepts separated by commas (e.g. 'person, glasses' or 'cell, nucleus').
+    Segmentation endpoint supporting both Meta SAM 3.1 and Cellpose / Cellpose-SAM.
     """
-    if sam3_semantic_predictor is None and processor is None:
-        raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
-
     query_text = (elements if elements and elements.strip() else (prompt if prompt and prompt.strip() else "cell nucleus")).strip()
-    logger.info(f"Received segment request: query='{query_text}', umbral={umbral}")
+    logger.info(f"Received segment request: engine='{model_engine}', query='{query_text}', umbral={umbral}")
     start_time = time.time()
+
+    # Dynamically allocate GPU VRAM for the requested model engine
+    prepare_engine_vram(model_engine)
 
     try:
         contents = await image.read()
+
+        # Engine Branch 1: Cellpose / Cellpose-SAM Histology Segmenter
+        if model_engine in ("cellpose", "cpsam"):
+            if not is_cellpose_available():
+                raise HTTPException(status_code=503, detail="Cellpose no está instalado en el servidor.")
+
+            query_label = query_text if query_text else "cell"
+            cellpose_res = run_cellpose_segmentation(
+                image_input=contents,
+                model_type=cellpose_model or "cpsam",
+                diameter=cell_diameter if (cell_diameter and cell_diameter > 0) else None,
+                prompt_label=query_label,
+                cellprob_threshold=(float(umbral) - 0.5) * 4.0 if umbral is not None else 0.0,
+            )
+            return cellpose_res
+
+        # Engine Branch 2: Meta SAM 3.1 Zero-Shot Segmentation
+        if sam3_semantic_predictor is None and processor is None:
+            raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
+
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         width, height = pil_image.size
 
@@ -551,6 +661,7 @@ async def segment_image(
             "prompt": query_text,
             "elements": concept_list,
             "umbral": umbral,
+            "engine": "sam3",
         }
 
     except Exception as e:
@@ -566,21 +677,42 @@ async def segment_auto(
     umbral: float = Form(0.05),
     custom_prompt: Optional[str] = Form(None),
     ontology_name: Optional[str] = Form(None),
+    model_engine: str = Form("sam3"),
+    cellpose_model: str = Form("cpsam"),
+    cell_diameter: Optional[float] = Form(None),
 ) -> Dict[str, Any]:
     """
     Exhaustive automatic multi-prompt segmentation and semantic discrimination.
-    Prompts and classes are 100% dynamically inferred from the active ontology or
-    discovered on-the-fly with Gemini Vision multimodal analysis, and discriminated
-    with MahmoodLab/UNI (1024-dim) and MahmoodLab/CONCH (512-dim).
+    Supports both Meta SAM 3.1 and Cellpose/Cellpose-SAM engines.
     """
-    if processor is None:
-        raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
-
-    logger.info(f"Received segment-auto request: umbral={umbral}, custom_prompt='{custom_prompt}', ontology_name='{ontology_name}'")
+    logger.info(f"Received segment-auto request: engine={model_engine}, umbral={umbral}, custom_prompt='{custom_prompt}', ontology_name='{ontology_name}'")
     start_time = time.time()
+
+    # Dynamically allocate GPU VRAM for the requested model engine
+    prepare_engine_vram(model_engine)
 
     try:
         contents = await image.read()
+
+        # Engine Branch 1: Cellpose / Cellpose-SAM Histology Segmenter
+        if model_engine in ("cellpose", "cpsam"):
+            if not is_cellpose_available():
+                raise HTTPException(status_code=503, detail="Cellpose no está instalado en el servidor.")
+
+            label = custom_prompt.strip() if custom_prompt and custom_prompt.strip() else "cell"
+            cellpose_res = run_cellpose_segmentation(
+                image_input=contents,
+                model_type=cellpose_model or "cpsam",
+                diameter=cell_diameter if (cell_diameter and cell_diameter > 0) else None,
+                prompt_label=label,
+                cellprob_threshold=(float(umbral) - 0.5) * 4.0 if umbral is not None else 0.0,
+            )
+            return cellpose_res
+
+        # Engine Branch 2: Meta SAM 3.1
+        if processor is None:
+            raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
+
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
 
@@ -624,38 +756,46 @@ async def segment_auto(
         proc_thresh = max(0.01, min(0.35, float(umbral)))
         processor.confidence_threshold = proc_thresh
 
-        inference_state = processor.set_image(inf_image)
         all_raw_detections = []
+        with torch.inference_mode():
+            inference_state = processor.set_image(inf_image)
 
-        for prompt_info in prompts_to_run:
-            prompt_text = prompt_info.get("prompt", "")
-            prompt_key = prompt_info.get("key", "struct")
-            prompt_label = prompt_info.get("label", prompt_info.get("name", prompt_key))
-            prompt_color = prompt_info.get("color", "#8b5cf6")
+            for p_idx, prompt_info in enumerate(prompts_to_run):
+                prompt_text = prompt_info.get("prompt", "")
+                prompt_key = prompt_info.get("key", "struct")
+                prompt_label = prompt_info.get("label", prompt_info.get("name", prompt_key))
+                prompt_color = prompt_info.get("color", "#8b5cf6")
 
-            if not prompt_text:
-                continue
+                if not prompt_text:
+                    continue
 
-            processor.reset_all_prompts(inference_state)
-            output = processor.set_text_prompt(state=inference_state, prompt=prompt_text)
+                processor.reset_all_prompts(inference_state)
+                output = processor.set_text_prompt(state=inference_state, prompt=prompt_text)
 
-            detections = _extract_detections(
-                output,
-                umbral=umbral,
-                scale_x=scale_x,
-                scale_y=scale_y,
-                include_polygons=True,
-                img_w=width,
-                img_h=height,
-                iou_threshold=0.65,
-            )
+                detections = _extract_detections(
+                    output,
+                    umbral=umbral,
+                    scale_x=scale_x,
+                    scale_y=scale_y,
+                    include_polygons=True,
+                    img_w=width,
+                    img_h=height,
+                    iou_threshold=0.65,
+                )
 
-            for d in detections:
-                d_copy = dict(d)
-                d_copy["initial_class_key"] = prompt_key
-                d_copy["initial_label"] = prompt_label
-                d_copy["color"] = prompt_color
-                all_raw_detections.append(d_copy)
+                for d in detections:
+                    d_copy = dict(d)
+                    d_copy["initial_class_key"] = prompt_key
+                    d_copy["initial_label"] = prompt_label
+                    d_copy["color"] = prompt_color
+                    all_raw_detections.append(d_copy)
+
+                # Clear CUDA cache periodically every 5 prompts to avoid VRAM fragmentation
+                if p_idx > 0 and p_idx % 5 == 0 and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
         logger.info(f"SAM 3.1 generated {len(all_raw_detections)} candidate detections across {len(prompts_to_run)} dynamic prompts")
 
@@ -677,6 +817,16 @@ async def segment_auto(
         logger.info(f"Retained {len(filtered_candidates)} distinct candidate instances after spatial deduplication")
 
         # 4. Discrimination and Semantic Clustering with UNI (1024-dim) and CONCH (512-dim)
+        is_histo = True
+        if ontology_name and ontology_name.strip():
+            active_ont_doc = load_ontology(ontology_name.strip())
+            if active_ont_doc:
+                is_histo = is_histology_ontology(active_ont_doc)
+        else:
+            is_histo = is_histology_ontology({"structures": prompts_to_run})
+
+        logger.info(f"Ontology domain histology status: is_histology={is_histo}")
+
         classified_detections = []
         if filtered_candidates:
             try:
@@ -685,6 +835,7 @@ async def segment_auto(
                     detections=filtered_candidates,
                     candidate_classes=prompts_to_run,
                     temperature=0.05,
+                    is_histology=is_histo,
                 )
             except Exception as disc_err:
                 logger.warning(f"Pathology discrimination fallback: {disc_err}", exc_info=True)
@@ -707,6 +858,7 @@ async def segment_auto(
             "total_detections": total_detections,
             "inference_time_seconds": round(inference_time, 2),
             "umbral": umbral,
+            "is_histology": is_histo,
         }
 
     except Exception as e:
@@ -1099,6 +1251,7 @@ async def classify_conch(
     detections: str = Form(...),
     classes: str = Form(...),
     temperature: float = Form(0.05),
+    ontology_name: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
     Run Zero-Shot Pathology Classification with CONCH on segmented crops.
@@ -1108,6 +1261,7 @@ async def classify_conch(
       - detections: JSON string representing list of detection objects
       - classes: JSON string representing candidate classes [{ key, prompt, label, color }]
       - temperature: float (softmax scaling factor)
+      - ontology_name: optional active ontology domain name
     """
     try:
         contents = await image.read()
@@ -1119,17 +1273,113 @@ async def classify_conch(
         if not isinstance(detections_list, list) or not isinstance(classes_list, list):
             raise HTTPException(status_code=400, detail="Formato JSON inválido para detections o classes.")
 
+        is_histo = True
+        ont_doc = None
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc:
+                is_histo = is_histology_ontology(ont_doc)
+        else:
+            is_histo = is_histology_ontology({"structures": classes_list})
+
+        NON_CELLULAR_KEYS = {
+            "testis", "testiculo", "testicular_lobule", "lobulillo_testicular",
+            "seminiferous_tubule", "tubulos_seminiferos", "tubular_wall", "pared_tubular",
+            "luz_tubular", "tubular_lumen", "epitelio_seminifero", "seminiferous_epithelium",
+            "celulas_germinales", "germ_cell", "fibras_colagenas", "collagen_fibers",
+            "lamina_basal_del_epitelio", "epithelial_basal_lamina"
+        }
+
+        # 1. Filter candidate classes to retain only real cellular subtypes
+        final_candidate_classes = [
+            c for c in classes_list
+            if c.get("key", "").lower().strip() not in NON_CELLULAR_KEYS
+            and c.get("label", "").lower().strip() not in ("luz tubular", "epitelio seminifero", "tubulo seminifero", "tubulos seminiferos")
+        ]
+
+        # 2. If ontology is available, pull the exact cellular structures
+        if ont_doc and "structures" in ont_doc and len(ont_doc["structures"]) > 0:
+            ont_structs = ont_doc["structures"]
+            cellular_structs = [
+                s for s in ont_structs
+                if s.get("key", "").lower().strip() not in NON_CELLULAR_KEYS
+                and s.get("label", s.get("name", "")).lower().strip() not in ("luz tubular", "epitelio seminifero", "tubulo seminifero", "tubulos seminiferos")
+            ]
+            if len(cellular_structs) >= 2:
+                logger.info(f"Using {len(cellular_structs)} cellular structures from ontology '{ontology_name}' for CONCH.")
+                final_candidate_classes = [
+                    {
+                        "key": s.get("key"),
+                        "label": s.get("label", s.get("name")),
+                        "name": s.get("name", s.get("label")),
+                        "prompt": s.get("prompt", s.get("name_en", s.get("name"))),
+                        "color": s.get("color", "#8b5cf6"),
+                    }
+                    for s in cellular_structs
+                ]
+
+        # 3. If still empty or insufficient, use high-precision histological spermatogenesis cellular palette
+        if len(final_candidate_classes) < 2:
+            logger.info("Using default high-precision spermatogenesis cellular classes for CONCH.")
+            final_candidate_classes = [
+                {
+                    "key": "primary_spermatocyte",
+                    "label": "Espermatocito Primario",
+                    "name": "Espermatocito Primario",
+                    "prompt": "large spherical primary spermatocyte cell with voluminous nucleus and coarse chromatin in seminiferous epithelium",
+                    "color": "#38bdf8",
+                },
+                {
+                    "key": "secondary_spermatocyte",
+                    "label": "Espermatocito Secundario",
+                    "name": "Espermatocito Secundario",
+                    "prompt": "intermediate spherical secondary spermatocyte cell with granular chromatin",
+                    "color": "#4ade80",
+                },
+                {
+                    "key": "spermatozoon",
+                    "label": "Espermatozoide",
+                    "name": "Espermatozoide",
+                    "prompt": "mature spermatozoon cell with small condensed dark elongated head and flagellum in tubule lumen",
+                    "color": "#ef4444",
+                },
+                {
+                    "key": "spermatid",
+                    "label": "Espermátide",
+                    "name": "Espermátide",
+                    "prompt": "small round early spermatid cell with pale spherical nucleus near lumen",
+                    "color": "#e11d48",
+                },
+                {
+                    "key": "spermatogonia",
+                    "label": "Espermatogonia",
+                    "name": "Espermatogonia",
+                    "prompt": "dome-shaped basal spermatogonium cell resting on basement membrane",
+                    "color": "#a855f7",
+                },
+                {
+                    "key": "sertoli_cell",
+                    "label": "Célula de Sertoli",
+                    "name": "Célula de Sertoli",
+                    "prompt": "tall supportive Sertoli cell with pale indented nucleus and prominent nucleolus",
+                    "color": "#f59e0b",
+                },
+            ]
+
         classified = classify_detections_with_conch(
             image=pil_image,
             detections=detections_list,
-            candidate_classes=classes_list,
+            candidate_classes=final_candidate_classes,
             temperature=temperature,
+            is_histology=is_histo,
         )
 
         return {
             "success": True,
+            "is_histology": is_histo,
             "total_classified": len(classified),
             "detections": classified,
+            "candidate_classes_used": final_candidate_classes,
         }
     except Exception as e:
         logger.error(f"Error in CONCH zero-shot classification: {e}", exc_info=True)
@@ -1140,6 +1390,7 @@ async def classify_conch(
 async def extract_uni_features(
     image: UploadFile = File(...),
     detections: str = Form(...),
+    ontology_name: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
     Extract 1024-dim UNI pathology embeddings for all detection crops.
@@ -1148,23 +1399,84 @@ async def extract_uni_features(
         contents = await image.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-        detections_list = json.loads(detections)
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+
         if not isinstance(detections_list, list):
-            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections.")
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
+
+        is_histo = True
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc:
+                is_histo = is_histology_ontology(ont_doc)
 
         embeddings = extract_detection_embeddings_uni(
             image=pil_image,
             detections=detections_list,
+            is_histology=is_histo,
         )
 
         return {
             "success": True,
+            "is_histology": is_histo,
             "total_extracted": len(embeddings),
-            "embedding_dim": 1024,
+            "embedding_dim": 1024 if is_histo else 0,
             "embeddings": embeddings,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in UNI feature extraction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/extract-features-virchow")
+async def extract_virchow_features(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    ontology_name: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Extract 1280-dim Paige AI Virchow pathology embeddings for all detection crops.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+
+        if not isinstance(detections_list, list):
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
+
+        is_histo = True
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc:
+                is_histo = is_histology_ontology(ont_doc)
+
+        embeddings = extract_detection_embeddings_virchow(
+            image=pil_image,
+            detections=detections_list,
+            is_histology=is_histo,
+        )
+
+        return {
+            "success": True,
+            "is_histology": is_histo,
+            "total_extracted": len(embeddings),
+            "embedding_dim": 1280 if is_histo else 0,
+            "embeddings": embeddings,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Virchow feature extraction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

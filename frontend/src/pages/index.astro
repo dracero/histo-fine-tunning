@@ -22,14 +22,20 @@
 					<h1>SAM 3 <span class="gradient-text">Annotator</span></h1>
 					<span class="badge">Multi-Image + Roboflow</span>
 					<div class="model-status-pills" id="model-status-pills">
-						<span class="model-pill active" title="Meta AI Segment Anything Model 3.1">
+						<span class="model-pill active" id="sam3-pill" title="Meta AI Segment Anything Model 3.1">
 							<span class="dot green"></span> SAM 3.1
+						</span>
+						<span class="model-pill active" id="cellpose-pill" title="Cellpose 3 / Cellpose-SAM Histology & Cellular Model">
+							<span class="dot green" id="cellpose-dot"></span> Cellpose-SAM (Histología)
 						</span>
 						<span class="model-pill" id="conch-pill" title="MahmoodLab CONCH Vision-Language (512d)">
 							<span class="dot" id="conch-dot"></span> CONCH (512d)
 						</span>
 						<span class="model-pill" id="uni-pill" title="MahmoodLab UNI ViT-Large (1024d)">
 							<span class="dot" id="uni-dot"></span> UNI (1024d)
+						</span>
+						<span class="model-pill" id="virchow-pill" title="Paige AI Virchow2 ViT-Huge (1280d)">
+							<span class="dot" id="virchow-dot"></span> Virchow2 (1280d)
 						</span>
 						<span class="model-pill active" id="ont-pill" style="border-color: rgba(6,182,212,0.4); background: rgba(6,182,212,0.1); cursor: pointer;" title="Ontología activa. Click para ver ontología e imágenes del PDF.">
 							<span class="dot green"></span> 🧬 <strong id="ont-pill-name" style="color: var(--accent-cyan); font-weight: 700;">Cargando...</strong>
@@ -86,10 +92,45 @@
 
 						<!-- Segmentation controls -->
 						<div class="parameters-area">
-							<div class="form-group">
+							<!-- Model Engine Selector (SAM 3 vs Cellpose) -->
+							<div class="form-group" style="margin-bottom: 0.2rem;">
+								<label style="font-weight: 600; font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+									<span>🧠 Motor de Segmentación:</span>
+									<span id="active-engine-badge" class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">SAM 3.1</span>
+								</label>
+								<div class="engine-selector-bar" style="display: flex; gap: 0.35rem; background: var(--bg-tertiary); padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+									<button type="button" class="engine-btn active" id="btn-engine-sam3" data-engine="sam3" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; background: var(--primary); color: #fff; transition: all 0.15s;">
+										⚡ SAM 3.1
+									</button>
+									<button type="button" class="engine-btn" id="btn-engine-cellpose" data-engine="cellpose" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; background: transparent; color: var(--text-muted); transition: all 0.15s;">
+										🔬 Cellpose-SAM
+									</button>
+								</div>
+							</div>
+
+							<!-- Cellpose Specific Parameters Box -->
+							<div id="cellpose-params-box" style="display: none; background: rgba(6,182,212,0.06); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; padding: 0.55rem; margin-top: 0.35rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+									<span style="font-size: 0.72rem; font-weight: 600; color: var(--accent-cyan);">🔬 Modelo Histológico:</span>
+									<span style="font-size: 0.62rem; color: #10b981; font-weight: 600;">GPU Activa</span>
+								</div>
+								<select id="cellpose-submodel-select" class="form-input" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background: var(--bg-main); width: 100%; margin-bottom: 0.35rem;">
+									<option value="cpsam">Cellpose-SAM (ViT SAM Backbone - Recomendado)</option>
+									<option value="cpsam_v2">Cellpose-SAM v2 (High-Res ViT SAM)</option>
+									<option value="cpdino">Cellpose DINO (ViT-L Histología)</option>
+								</select>
+								<div style="display: flex; gap: 0.4rem; align-items: center;">
+									<label for="cellpose-diameter-input" style="font-size: 0.68rem; color: var(--text-muted); white-space: nowrap;">Diámetro célula (px):</label>
+									<input type="number" id="cellpose-diameter-input" placeholder="Auto" min="1" max="500" class="form-input-sm" style="width: 70px; font-size: 0.72rem; padding: 0.2rem 0.35rem; background: var(--bg-main);" />
+									<span style="font-size: 0.65rem; color: var(--text-muted);">(Vacío = Auto)</span>
+								</div>
+							</div>
+
+							<!-- Prompt Input -->
+							<div class="form-group" style="margin-top: 0.5rem;">
 								<label for="custom-prompt-input" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-									<span style="font-weight: 600; font-size: 0.78rem;">🎯 Elementos a segmentar (SAM 3 Zero-Shot):</span>
-									<span class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">Open-Vocabulary</span>
+									<span id="prompt-input-label" style="font-weight: 600; font-size: 0.78rem;">🎯 Elementos a segmentar:</span>
+									<span id="prompt-input-badge" class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">Open-Vocabulary</span>
 								</label>
 								<div class="input-with-btn" style="flex-direction: column; gap: 0.4rem;">
 									<input type="text" id="custom-prompt-input" placeholder="Ej: cell nucleus, lumen o person, glasses, tie" class="form-input" style="width: 100%; font-size: 0.8rem;" />
@@ -104,13 +145,27 @@
 								</div>
 								<!-- Prompt suggestion tags -->
 								<div class="prompt-tags" id="prompt-tags-container" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem;">
+									<span class="prompt-chip" data-concept="large primary spermatocyte with voluminous nucleus">🔬 Espermatocito I</span>
+									<span class="prompt-chip" data-concept="secondary spermatocyte with spherical nucleus">🔬 Espermatocito II</span>
+									<span class="prompt-chip" data-concept="mature spermatozoon with elongated head in lumen">🩸 Espermatozoide</span>
+									<span class="prompt-chip" data-concept="dome-shaped basal spermatogonia">⭕ Espermatogonia</span>
+									<span class="prompt-chip" data-concept="round or elongating spermatid">🧬 Espermátide</span>
 									<span class="prompt-chip" data-concept="cell nucleus">🔬 Núcleos</span>
-									<span class="prompt-chip" data-concept="circular tissue structure">🧬 Estructura circular</span>
-									<span class="prompt-chip" data-concept="red blood cells">🩸 Eritrocitos</span>
 									<span class="prompt-chip" data-concept="empty circular lumen">⭕ Lumen</span>
-									<span class="prompt-chip" data-concept="person">👤 Persona</span>
-									<span class="prompt-chip" data-concept="glasses">👓 Anteojos</span>
 								</div>
+							</div>
+
+							<!-- Dedicated Cellular Classes & Ontology Quick Bar -->
+							<div style="margin-top: 0.45rem; padding: 0.5rem 0.65rem; background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; display: flex; flex-direction: column; gap: 0.35rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center;">
+									<span style="font-size: 0.74rem; font-weight: 700; color: var(--accent-cyan);">🧬 Células del PDF / Ontología:</span>
+									<button type="button" class="load-ontology-cells-btn btn-small" style="font-size: 0.7rem; padding: 0.25rem 0.55rem; background: var(--accent-cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer;">
+										📥 Cargar Células
+									</button>
+								</div>
+								<p style="font-size: 0.66rem; color: var(--text-muted); margin: 0;">
+									Carga espermatocitos, espermatozoides, espermatogonias y espermátides para clasificar con CONCH.
+								</p>
 							</div>
 
 							<div class="form-group">
@@ -143,8 +198,13 @@
 								<button type="button" id="merge-classes-btn" class="btn-small btn-outline" disabled>Fusionar</button>
 							</div>
 							<div style="display: flex; gap: 0.35rem;">
-								<input type="text" id="new-class-input" placeholder="Añadir clase (ej: Limón)" style="flex: 1; font-size: 0.78rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main);" />
+								<input type="text" id="new-class-input" placeholder="Añadir clase (ej: Espermatocito)" style="flex: 1; font-size: 0.78rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main);" />
 								<button type="button" id="add-class-btn" class="btn-small btn-green" style="white-space: nowrap;">➕ Clase</button>
+							</div>
+							<div style="display: flex; gap: 0.35rem; margin-top: 0.2rem;">
+								<button type="button" id="load-ontology-cells-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.72rem; padding: 0.35rem 0.5rem; color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);" title="Cargar todas las subpoblaciones celulares de la ontología">
+									🧬 Cargar Células de la Ontología (PDF)
+								</button>
 							</div>
 							<button type="button" id="classify-conch-btn" class="btn-action btn-primary-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem;">
 								🔬 Auto-Clasificar con CONCH
@@ -328,7 +388,22 @@
 				<section class="viewer-panel panel-card">
 					<div class="viewer-header">
 						<h2 class="section-title">Visor de Anotaciones</h2>
-						<div class="viewer-controls" id="viewer-controls" style="display: none;">
+						<div class="viewer-controls" id="viewer-controls" style="display: none; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+							<!-- Engine Select in Visor -->
+							<select id="viewer-engine-select" class="form-input-sm" style="font-size: 0.72rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); font-weight: 600; color: var(--accent-cyan);" title="Seleccionar modelo de segmentación">
+								<option value="sam3">⚡ SAM 3.1 (Texto/Open-Vocab)</option>
+								<option value="cellpose">🔬 Cellpose-SAM (Histología)</option>
+							</select>
+
+							<!-- Quick Search / Text Prompt Input -->
+							<div class="viewer-prompt-box" style="display: flex; gap: 0.3rem; align-items: center; background: rgba(255,255,255,0.04); padding: 0.2rem 0.4rem; border-radius: 8px; border: 1px solid var(--border-color);">
+								<span id="viewer-prompt-label" style="font-size: 0.72rem; color: var(--accent-cyan); font-weight: 600;">🔍 Prompt:</span>
+								<input type="text" id="viewer-prompt-input" placeholder="ej: cell nucleus, lumen, person..." class="form-input-sm" style="width: 200px; font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg-tertiary);" title="Escribe lo que quieras buscar/segmentar y presiona Enter o Segmentar" />
+								<button type="button" id="viewer-segment-btn" class="btn-small btn-primary-action" style="font-size: 0.72rem; padding: 0.25rem 0.55rem;" title="Segmentar elemento">
+									⚡ Segmentar
+								</button>
+							</div>
+							<span class="separator">|</span>
 							<button type="button" id="toggle-click-mode" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
 								👆 Modo Click (SAM 3)
 							</button>
@@ -338,8 +413,14 @@
 							<button type="button" id="finish-polygon-btn" class="btn-small btn-green" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; display: none;">
 								✓ Finalizar Polígono
 							</button>
-							<button type="button" id="toggle-conch-classify-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;" title="Clasificar detecciones con CONCH zero-shot">
+							<button type="button" class="load-ontology-cells-btn btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);" title="Cargar todas las subpoblaciones celulares del PDF">
+								🧬 Células PDF
+							</button>
+							<button type="button" id="toggle-conch-classify-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;" title="Clasificar detecciones con CONCH zero-shot">
 								🔬 Clasificar CONCH
+							</button>
+							<button type="button" id="extract-virchow-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Extraer vectores de características de 1280d de Virchow (Paige AI)">
+								🧬 Virchow (1280d)
 							</button>
 							<span class="separator">|</span>
 							<label class="toggle-container">
@@ -873,7 +954,7 @@
 		if (fileInput.files.length > 0) handleFiles(Array.from(fileInput.files));
 	});
 
-	async function handleFiles(files, autoSegment = true) {
+	async function handleFiles(files, autoSegment = false) {
 		const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
 		if (pdfFiles.length > 0) {
 			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -887,7 +968,7 @@
 		const imageFiles = files.filter(f => f.type.startsWith("image/"));
 		if (imageFiles.length === 0) { alert("Selecciona archivos de imagen o un PDF."); return; }
 
-		let firstKey = null;
+		const addedKeys = [];
 		for (const file of imageFiles) {
 			const key = file.name + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
 			const dataUrl = await readFileAsDataUrl(file);
@@ -902,22 +983,18 @@
 				groups: [],
 				annotated: false,
 			});
-			if (!firstKey) firstKey = key;
+			addedKeys.push(key);
 		}
 
 		renderGallery();
-		if (firstKey) {
-			selectImage(firstKey);
+		if (addedKeys.length > 0) {
+			selectImage(addedKeys[0]);
 		}
 
-		// Auto-segment new images with SAM 3 if requested
 		if (autoSegment) {
-			for (const file of imageFiles) {
-				const key = [...imageStore.keys()].find(k => imageStore.get(k).file === file);
-				if (key) {
-					selectImage(key);
-					await runSam3Segmentation(key);
-				}
+			for (const key of addedKeys) {
+				selectImage(key);
+				await runSam3Segmentation(key);
 			}
 		}
 
@@ -1022,10 +1099,89 @@
 		return count;
 	}
 
-	// ======================= SEGMENTATION (SAM 3 ZERO-SHOT) =======================
+	// ======================= SEGMENTATION ENGINES (SAM 3 & CELLPOSE-SAM) =======================
+	let currentEngine = "sam3"; // "sam3" or "cellpose"
+	let currentCellposeModel = "cpsam";
+
+	const btnEngineSam3 = document.getElementById("btn-engine-sam3");
+	const btnEngineCellpose = document.getElementById("btn-engine-cellpose");
+	const viewerEngineSelect = document.getElementById("viewer-engine-select");
+	const cellposeParamsBox = document.getElementById("cellpose-params-box");
+	const cellposeSubmodelSelect = document.getElementById("cellpose-submodel-select");
+	const cellposeDiameterInput = document.getElementById("cellpose-diameter-input");
+	const activeEngineBadge = document.getElementById("active-engine-badge");
+	const promptInputLabel = document.getElementById("prompt-input-label");
+	const promptInputBadge = document.getElementById("prompt-input-badge");
+	const viewerPromptLabel = document.getElementById("viewer-prompt-label");
+
+	function setSegmentationEngine(engine) {
+		currentEngine = engine;
+		if (engine === "cellpose") {
+			if (btnEngineCellpose) {
+				btnEngineCellpose.classList.add("active");
+				btnEngineCellpose.style.background = "var(--accent-cyan)";
+				btnEngineCellpose.style.color = "#000";
+			}
+			if (btnEngineSam3) {
+				btnEngineSam3.classList.remove("active");
+				btnEngineSam3.style.background = "transparent";
+				btnEngineSam3.style.color = "var(--text-muted)";
+			}
+			if (viewerEngineSelect) viewerEngineSelect.value = "cellpose";
+			if (cellposeParamsBox) cellposeParamsBox.style.display = "block";
+			if (activeEngineBadge) {
+				activeEngineBadge.textContent = "Cellpose-SAM";
+				activeEngineBadge.style.color = "var(--accent-cyan)";
+				activeEngineBadge.style.borderColor = "rgba(6,182,212,0.4)";
+			}
+			if (promptInputLabel) promptInputLabel.textContent = "🎯 Concepto / Célula:";
+			if (promptInputBadge) promptInputBadge.textContent = "Histología & Células";
+			if (viewerPromptLabel) viewerPromptLabel.textContent = "🔬 Cellpose:";
+		} else {
+			if (btnEngineSam3) {
+				btnEngineSam3.classList.add("active");
+				btnEngineSam3.style.background = "var(--primary)";
+				btnEngineSam3.style.color = "#fff";
+			}
+			if (btnEngineCellpose) {
+				btnEngineCellpose.classList.remove("active");
+				btnEngineCellpose.style.background = "transparent";
+				btnEngineCellpose.style.color = "var(--text-muted)";
+			}
+			if (viewerEngineSelect) viewerEngineSelect.value = "sam3";
+			if (cellposeParamsBox) cellposeParamsBox.style.display = "none";
+			if (activeEngineBadge) {
+				activeEngineBadge.textContent = "SAM 3.1";
+				activeEngineBadge.style.color = "var(--primary)";
+				activeEngineBadge.style.borderColor = "rgba(139,92,246,0.4)";
+			}
+			if (promptInputLabel) promptInputLabel.textContent = "🎯 Elementos a segmentar:";
+			if (promptInputBadge) promptInputBadge.textContent = "Open-Vocabulary";
+			if (viewerPromptLabel) viewerPromptLabel.textContent = "🔍 SAM 3:";
+		}
+	}
+
+	btnEngineSam3?.addEventListener("click", () => setSegmentationEngine("sam3"));
+	btnEngineCellpose?.addEventListener("click", () => setSegmentationEngine("cellpose"));
+	viewerEngineSelect?.addEventListener("change", (e) => setSegmentationEngine(e.target.value));
+	cellposeSubmodelSelect?.addEventListener("change", (e) => { currentCellposeModel = e.target.value; });
+
+	// ======================= SEGMENTATION PROMPT LISTENERS =======================
 	const customPromptInput = document.getElementById("custom-prompt-input");
+	const viewerPromptInput = document.getElementById("viewer-prompt-input");
 	const reSegmentBtn = document.getElementById("re-segment-btn");
+	const viewerSegmentBtn = document.getElementById("viewer-segment-btn");
 	const autoSegmentBtn = document.getElementById("auto-segment-btn");
+
+	// Sync prompt inputs between sidebar and viewer header
+	if (customPromptInput && viewerPromptInput) {
+		customPromptInput.addEventListener("input", () => {
+			viewerPromptInput.value = customPromptInput.value;
+		});
+		viewerPromptInput.addEventListener("input", () => {
+			customPromptInput.value = viewerPromptInput.value;
+		});
+	}
 
 	// Setup Prompt Chips Click Listeners
 	document.querySelectorAll(".prompt-chip").forEach(chip => {
@@ -1035,16 +1191,19 @@
 			const currentVal = customPromptInput.value.trim();
 			if (!currentVal) {
 				customPromptInput.value = concept;
+				if (viewerPromptInput) viewerPromptInput.value = concept;
 				chip.classList.add("active");
 			} else {
 				const items = currentVal.split(",").map(s => s.trim()).filter(Boolean);
 				if (items.includes(concept)) {
 					const filtered = items.filter(x => x !== concept);
 					customPromptInput.value = filtered.join(", ");
+					if (viewerPromptInput) viewerPromptInput.value = filtered.join(", ");
 					chip.classList.remove("active");
 				} else {
 					items.push(concept);
 					customPromptInput.value = items.join(", ");
+					if (viewerPromptInput) viewerPromptInput.value = items.join(", ");
 					chip.classList.add("active");
 				}
 			}
@@ -1054,13 +1213,19 @@
 		});
 	});
 
-	reSegmentBtn.addEventListener("click", () => {
+	reSegmentBtn?.addEventListener("click", () => {
+		if (activeImageKey) runSam3Segmentation(activeImageKey);
+	});
+	viewerSegmentBtn?.addEventListener("click", () => {
 		if (activeImageKey) runSam3Segmentation(activeImageKey);
 	});
 	autoSegmentBtn?.addEventListener("click", () => {
 		if (activeImageKey) runAutoSegmentation(activeImageKey);
 	});
-	customPromptInput.addEventListener("keydown", (e) => {
+	customPromptInput?.addEventListener("keydown", (e) => {
+		if (e.key === "Enter" && activeImageKey) runSam3Segmentation(activeImageKey);
+	});
+	viewerPromptInput?.addEventListener("keydown", (e) => {
 		if (e.key === "Enter" && activeImageKey) runSam3Segmentation(activeImageKey);
 	});
 
@@ -1070,14 +1235,23 @@
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `Segmentando ${data.filename} con SAM 3 (zero-shot)...`;
+		const engineName = currentEngine === "cellpose" ? `Cellpose (${currentCellposeModel})` : "SAM 3.1";
+		statusText.textContent = `Segmentando ${data.filename} con ${engineName}...`;
 
-		const elementsText = customPromptInput.value.trim() || "cell nucleus";
+		const elementsText = customPromptInput.value.trim() || (currentEngine === "cellpose" ? "cell" : "cell nucleus");
 		const formData = new FormData();
 		formData.append("image", data.file);
 		formData.append("elements", elementsText);
 		formData.append("prompt", elementsText);
 		formData.append("umbral", thresholdSlider.value);
+		formData.append("model_engine", currentEngine);
+		formData.append("cellpose_model", currentCellposeModel);
+
+		const diamVal = cellposeDiameterInput ? parseFloat(cellposeDiameterInput.value) : null;
+		if (diamVal && diamVal > 0) {
+			formData.append("cell_diameter", diamVal.toString());
+		}
+
 		if (window._activeOntologyName) {
 			formData.append("ontology_name", window._activeOntologyName);
 		}
@@ -1090,7 +1264,7 @@
 
 			if (!response.ok) {
 				const err = await response.json();
-				throw new Error(err.detail || "Error en segmentación SAM 3.");
+				throw new Error(err.detail || `Error en segmentación con ${engineName}.`);
 			}
 
 			const result = await response.json();
@@ -1122,15 +1296,16 @@
 			renderGallery();
 			updateExportStats();
 
-			statusText.textContent = `✓ ${data.filename}: ${result.total_detections || result.detections?.length || 0} instancias detectadas (${result.inference_time_seconds || 0}s)`;
+			const detCount = result.total_detections || (result.detections ? result.detections.length : 0);
+			statusText.textContent = `✓ [${engineName}] ${data.filename}: ${detCount} instancias detectadas (${result.inference_time_seconds || 0}s)`;
 			setTimeout(() => {
 				statusRunning.style.display = "none";
 				statusIdle.style.display = "none";
-			}, 3000);
+			}, 3500);
 
 		} catch (error) {
 			console.error(error);
-			alert(`Error en SAM 3: ${error.message}`);
+			alert(`Error en ${engineName}: ${error.message}`);
 			statusRunning.style.display = "none";
 			statusIdle.style.display = "flex";
 		}
@@ -1142,11 +1317,20 @@
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `Auto-segmentando ${data.filename}...`;
+		const engineName = currentEngine === "cellpose" ? `Cellpose (${currentCellposeModel})` : "SAM 3.1";
+		statusText.textContent = `Auto-segmentando ${data.filename} con ${engineName}...`;
 
 		const formData = new FormData();
 		formData.append("image", data.file);
 		formData.append("umbral", thresholdSlider.value);
+		formData.append("model_engine", currentEngine);
+		formData.append("cellpose_model", currentCellposeModel);
+
+		const diamVal = cellposeDiameterInput ? parseFloat(cellposeDiameterInput.value) : null;
+		if (diamVal && diamVal > 0) {
+			formData.append("cell_diameter", diamVal.toString());
+		}
+
 		if (customPromptInput.value.trim()) {
 			formData.append("custom_prompt", customPromptInput.value.trim());
 		}
@@ -1195,11 +1379,12 @@
 			renderGallery();
 			updateExportStats();
 
-			statusText.textContent = `✓ ${data.filename}: ${result.total_detections} detecciones`;
+			const detCount = result.total_detections || (result.detections ? result.detections.length : 0);
+			statusText.textContent = `✓ [${engineName}] ${data.filename}: ${detCount} detecciones`;
 			setTimeout(() => {
 				statusRunning.style.display = "none";
 				statusIdle.style.display = "none";
-			}, 2500);
+			}, 3000);
 
 		} catch (error) {
 			console.error(error);
@@ -2456,6 +2641,8 @@
 			const conchDot = document.getElementById("conch-dot");
 			const uniPill = document.getElementById("uni-pill");
 			const uniDot = document.getElementById("uni-dot");
+			const virchowPill = document.getElementById("virchow-pill");
+			const virchowDot = document.getElementById("virchow-dot");
 
 			if (data.conch) {
 				conchPill.classList.add("active");
@@ -2466,6 +2653,11 @@
 				uniPill.classList.add("active");
 				uniDot.classList.add("green");
 				uniPill.title = `UNI: ${data.uni.architecture} (${data.uni.embedding_dim}d) - ${data.device}`;
+			}
+			if (data.virchow) {
+				virchowPill.classList.add("active");
+				virchowDot.classList.add("green");
+				virchowPill.title = `Virchow: ${data.virchow.architecture} (${data.virchow.embedding_dim}d) - ${data.device}`;
 			}
 		} catch (e) {
 			console.warn("Pathology models status check skipped:", e);
@@ -2486,16 +2678,18 @@
 			return;
 		}
 
-		// Flatten all detections
+		// Flatten all detections preserving full geometry (segmentation, box, bbox, area)
 		let allDets = [];
 		data.groups.forEach((g) => {
 			if (g.detections) {
 				g.detections.forEach((d) => {
 					allDets.push({
+						...d,
 						id: d.id,
 						bbox: d.bbox,
-						polygon: d.polygon,
-						score: d.score,
+						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+						segmentation: d.segmentation || [],
+						score: d.score !== undefined ? d.score : 0.95,
 						class_key: g.key,
 						label: g.label,
 						color: g.color,
@@ -2533,11 +2727,25 @@
 		statusText.textContent = `🔬 CONCH: Clasificando ${allDets.length} células/estructuras...`;
 
 		try {
+			let imageFile = data.file;
+			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+				const arr = data.dataUrl.split(",");
+				const mime = arr[0].match(/:(.*?);/)[1];
+				const bstr = atob(arr[1]);
+				let n = bstr.length;
+				const u8arr = new Uint8Array(n);
+				while (n--) u8arr[n] = bstr.charCodeAt(n);
+				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+			}
+
 			const formData = new FormData();
-			formData.append("image", data.file);
+			formData.append("image", imageFile);
 			formData.append("detections", JSON.stringify(allDets));
 			formData.append("classes", JSON.stringify(candidateClasses));
 			formData.append("temperature", "0.05");
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
 
 			const res = await fetch(`${API_URL}/classify-detections-conch`, {
 				method: "POST",
@@ -2545,16 +2753,42 @@
 			});
 
 			if (!res.ok) {
-				const err = await res.json();
-				throw new Error(err.detail || "Error en clasificación CONCH");
+				let errText = `Error HTTP ${res.status}`;
+				try {
+					const errObj = await res.json();
+					errText = errObj.detail || errObj.message || errText;
+				} catch (_) {
+					const raw = await res.text();
+					if (raw) errText = raw.slice(0, 150);
+				}
+				throw new Error(errText);
 			}
 
 			const result = await res.json();
+
+			if (result.is_histology === false || (result.detections && result.detections[0] && result.detections[0].conch_skipped)) {
+				statusText.textContent = `ℹ️ Dominio no histológico: CONCH/UNI omitidos.`;
+				setTimeout(() => {
+					statusRunning.style.display = "none";
+					statusIdle.style.display = "flex";
+				}, 3000);
+				return;
+			}
+
 			const classified = result.detections || [];
 
-			// Rebuild groups from classified results
+			// Rebuild groups from classified results preserving geometry
 			const groupsMap = new Map();
-			for (const det of classified) {
+			for (let i = 0; i < classified.length; i++) {
+				const det = classified[i];
+				const origDet = allDets[i] || {};
+				
+				// Ensure geometry and score are never dropped
+				det.segmentation = det.segmentation || origDet.segmentation || [];
+				det.box = det.box || origDet.box;
+				det.bbox = det.bbox || origDet.bbox;
+				det.score = det.conch_confidence !== undefined ? det.conch_confidence : (origDet.score || 0.95);
+
 				const groupKey = det.class_key || det.category_id || "clase_1";
 				if (!groupsMap.has(groupKey)) {
 					groupsMap.set(groupKey, {
@@ -2603,6 +2837,142 @@
 
 	classifyConchBtn?.addEventListener("click", runConchClassification);
 	toggleConchClassifyBtn?.addEventListener("click", runConchClassification);
+
+	// --- 3. Virchow (1280d) Feature Extraction ---
+	const extractVirchowBtn = document.getElementById("extract-virchow-btn");
+
+	async function runVirchowExtraction() {
+		if (!activeImageKey) {
+			alert("Selecciona primero una imagen con segmentaciones.");
+			return;
+		}
+
+		const data = imageStore.get(activeImageKey);
+		if (!data || !data.groups || data.groups.length === 0) {
+			alert("Esta imagen no tiene detecciones. Ejecuta primero la segmentación.");
+			return;
+		}
+
+		let allDets = [];
+		data.groups.forEach((g) => {
+			if (g.detections) {
+				g.detections.forEach((d) => {
+					allDets.push({
+						...d,
+						id: d.id,
+						bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+						score: d.score !== undefined ? d.score : 0.95,
+					});
+				});
+			}
+		});
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `🧬 Virchow (1280d): Extrayendo vectores de características de ${allDets.length} células...`;
+
+		try {
+			let imageFile = data.file;
+			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+				const arr = data.dataUrl.split(",");
+				const mime = arr[0].match(/:(.*?);/)[1];
+				const bstr = atob(arr[1]);
+				let n = bstr.length;
+				const u8arr = new Uint8Array(n);
+				while (n--) u8arr[n] = bstr.charCodeAt(n);
+				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+			}
+
+			const formData = new FormData();
+			formData.append("image", imageFile);
+			formData.append("detections", JSON.stringify(allDets));
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			const res = await fetch(`${API_URL}/extract-features-virchow`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				let errText = `Error HTTP ${res.status}`;
+				try {
+					const errObj = await res.json();
+					errText = errObj.detail || errObj.message || errText;
+				} catch (_) {
+					const raw = await res.text();
+					if (raw) errText = raw.slice(0, 150);
+				}
+				throw new Error(errText);
+			}
+
+			const result = await res.json();
+			const count = result.total_extracted || 0;
+			const dim = result.embedding_dim || 1280;
+
+			statusText.textContent = `✅ Virchow: Extraídos ${count} vectores de ${dim}d con éxito.`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3000);
+		} catch (e) {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+			alert("Error con Virchow (1280d): " + e.message);
+		}
+	}
+
+	extractVirchowBtn?.addEventListener("click", runVirchowExtraction);
+
+	document.querySelectorAll(".load-ontology-cells-btn").forEach(btn => {
+		btn.addEventListener("click", async () => {
+			const ontName = window._activeOntologyName || "arch4";
+			statusIdle.style.display = "none";
+			statusRunning.style.display = "flex";
+			statusText.textContent = `🧬 Cargando células de la ontología '${ontName}'...`;
+
+			try {
+				const res = await fetch(`${API_URL}/ontology/${ontName}`);
+				if (!res.ok) throw new Error("No se pudo cargar la ontología.");
+				const ontData = await res.json();
+				if (!ontData.structures || ontData.structures.length === 0) {
+					alert("La ontología no contiene estructuras.");
+					statusRunning.style.display = "none";
+					statusIdle.style.display = "flex";
+					return;
+				}
+				// Filter out top-level macro-containers to focus on fine-grained cellular subtypes
+				const cellStructs = ontData.structures.filter(s => !["testis", "testicular_lobule", "seminiferous_tubule", "tubular_wall"].includes(s.key));
+				classRegistry = cellStructs.map((s, idx) => ({
+					id: idx + 1,
+					key: s.key,
+					name: s.label || s.name || s.key,
+					prompt: s.prompt || s.name_en || s.name,
+					color: s.color || getClassColor(s.key)
+				}));
+				classIdCounter = classRegistry.length + 1;
+				updateClassesList();
+
+				// Automatically suggest the key concepts in prompt inputs
+				const suggestedPrompt = "large primary spermatocyte with voluminous nucleus, mature spermatozoon with elongated head in lumen, dome-shaped basal spermatogonia, round spermatid";
+				if (customPromptInput) customPromptInput.value = suggestedPrompt;
+				if (viewerPromptInput) viewerPromptInput.value = suggestedPrompt;
+
+				statusText.textContent = `✓ Se cargaron ${classRegistry.length} poblaciones celulares del PDF ('${ontName}').`;
+				setTimeout(() => {
+					statusRunning.style.display = "none";
+					statusIdle.style.display = "flex";
+				}, 3500);
+			} catch (err) {
+				console.error(err);
+				alert("Error al cargar células de la ontología: " + err.message);
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}
+		});
+	});
 
 
 	// --- 3. PDF Upload & Content Extraction ---
@@ -3291,7 +3661,7 @@
 			const blob = await response.blob();
 			const file = new File([blob], meta.filename, { type: blob.type || "image/png" });
 
-			await handleFiles([file], switchTab);
+			await handleFiles([file], false);
 
 			if (switchTab) {
 				// Switch to images tab only when explicitly requested
@@ -3514,23 +3884,25 @@
 					imageData.groups = segResult.groups || [];
 					imageData.annotated = true;
 
-					// 2. Run CONCH Zero-Shot Classification if groups exist
+					// 2. Run CONCH Zero-Shot Classification if groups exist and domain is histology
 					let allDets = [];
-					imageData.groups.forEach(g => {
-						(g.detections || []).forEach(d => {
-							allDets.push({
-								id: d.id,
-								bbox: d.bbox,
-								polygon: d.polygon,
-								score: d.score,
-								class_key: g.key,
-								label: g.label,
-								color: g.color,
+					if (segResult.is_histology !== false) {
+						imageData.groups.forEach(g => {
+							(g.detections || []).forEach(d => {
+								allDets.push({
+									id: d.id,
+									bbox: d.bbox,
+									polygon: d.polygon,
+									score: d.score,
+									class_key: g.key,
+									label: g.label,
+									color: g.color,
+								});
 							});
 						});
-					});
+					}
 
-					if (allDets.length > 0) {
+					if (allDets.length > 0 && segResult.is_histology !== false) {
 						let candidateClasses = classRegistry.map(c => ({
 							key: c.key,
 							name: c.name,
@@ -3553,6 +3925,9 @@
 						conchForm.append("detections", JSON.stringify(allDets));
 						conchForm.append("classes", JSON.stringify(candidateClasses));
 						conchForm.append("temperature", "0.05");
+						if (window._activeOntologyName) {
+							conchForm.append("ontology_name", window._activeOntologyName);
+						}
 
 						const conchRes = await fetch(`${API_URL}/classify-detections-conch`, {
 							method: "POST",
@@ -3561,24 +3936,25 @@
 
 						if (conchRes.ok) {
 							const conchResult = await conchRes.json();
-							const classified = conchResult.detections || [];
-							const groupsMap = new Map();
-							for (const det of classified) {
-								const gKey = det.class_key || "clase_1";
-								if (!groupsMap.has(gKey)) {
-									groupsMap.set(gKey, {
-										key: gKey,
-										label: det.class_label || gKey,
-										color: det.color || getClassColor(gKey),
-										detections: [],
-									});
+							if (conchResult.is_histology !== false) {
+								const classified = conchResult.detections || [];
+								const groupsMap = new Map();
+								for (const det of classified) {
+									const gKey = det.class_key || "clase_1";
+									if (!groupsMap.has(gKey)) {
+										groupsMap.set(gKey, {
+											key: gKey,
+											label: det.class_label || gKey,
+											color: det.color || getClassColor(gKey),
+											detections: [],
+										});
+									}
+									groupsMap.get(gKey).detections.push(det);
 								}
-								groupsMap.get(gKey).detections.push(det);
+								imageData.groups = Array.from(groupsMap.values());
 							}
-							imageData.groups = Array.from(groupsMap.values());
 						}
 					}
-
 					// Update class registry
 					for (const group of imageData.groups) {
 						if (!classRegistry.find(c => c.key === group.key)) {
@@ -3591,7 +3967,6 @@
 						}
 					}
 				}
-
 			} catch (e) {
 				console.warn(`Error processing ${img.filename} in batch:`, e);
 			}

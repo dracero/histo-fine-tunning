@@ -159,6 +159,41 @@ def get_roboflow_models_and_versions() -> Dict[str, Any]:
         }
 
 
+def _normalize_segmentation(seg: Any, bbox: List[float]) -> List[List[float]]:
+    """Ensure segmentation is formatted as valid COCO 2D list of float polygon coordinates."""
+    if not seg:
+        x, y, w, h = bbox
+        return [[float(x), float(y), float(x + w), float(y), float(x + w), float(y + h), float(x), float(y + h)]]
+
+    # Case 1: Flat 1D list of floats [x1, y1, x2, y2, ...]
+    if isinstance(seg, list) and len(seg) > 0 and isinstance(seg[0], (int, float)):
+        return [[float(v) for v in seg]]
+
+    # Case 2: List of coordinate pairs [[x1, y1], [x2, y2], ...]
+    if isinstance(seg, list) and len(seg) > 0 and isinstance(seg[0], list):
+        if len(seg[0]) == 2 and isinstance(seg[0][0], (int, float)):
+            flat = []
+            for pt in seg:
+                flat.extend([float(pt[0]), float(pt[1])])
+            return [flat]
+        # Case 3: List of polygons [[x1, y1, x2, y2, ...]] or [[[x1, y1], ...]]
+        res = []
+        for poly in seg:
+            if isinstance(poly, list) and len(poly) > 0:
+                if isinstance(poly[0], (int, float)):
+                    res.append([float(v) for v in poly])
+                elif isinstance(poly[0], list) and len(poly[0]) == 2:
+                    flat = []
+                    for pt in poly:
+                        flat.extend([float(pt[0]), float(pt[1])])
+                    res.append(flat)
+        if res:
+            return res
+
+    x, y, w, h = bbox
+    return [[float(x), float(y), float(x + w), float(y), float(x + w), float(y + h), float(x), float(y + h)]]
+
+
 def build_coco_json(annotations_payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert the frontend annotation payload into a COCO-format JSON dict.
@@ -166,8 +201,8 @@ def build_coco_json(annotations_payload: Dict[str, Any]) -> Dict[str, Any]:
     classes = annotations_payload.get("classes", [])
     annotations = annotations_payload.get("annotations", [])
     filename = annotations_payload.get("image_filename", "image.png")
-    width = annotations_payload.get("image_width", 0)
-    height = annotations_payload.get("image_height", 0)
+    width = int(annotations_payload.get("image_width", 0))
+    height = int(annotations_payload.get("image_height", 0))
 
     # Build COCO categories
     categories = []
@@ -213,21 +248,19 @@ def build_coco_json(annotations_payload: Dict[str, Any]) -> Dict[str, Any]:
         except (ValueError, TypeError):
             c_id_int = 1
 
+        raw_bbox = ann.get("bbox", [0, 0, 0, 0])
+        x, y, w, h = raw_bbox if len(raw_bbox) == 4 else [0, 0, 0, 0]
+        bbox = [float(x), float(y), max(1.0, float(w)), max(1.0, float(h))]
+
         coco_ann = {
             "id": int(ann.get("id", ann_idx + 1)),
             "image_id": 1,
             "category_id": c_id_int,
-            "bbox": ann.get("bbox", [0, 0, 0, 0]),
-            "area": float(ann.get("area", 0)),
+            "bbox": bbox,
+            "area": float(ann.get("area", bbox[2] * bbox[3])),
+            "segmentation": _normalize_segmentation(ann.get("segmentation"), bbox),
             "iscrowd": 0,
         }
-        # Include segmentation polygons if available
-        if "segmentation" in ann and ann["segmentation"]:
-            coco_ann["segmentation"] = ann["segmentation"]
-        else:
-            # Fallback: create polygon from bbox
-            x, y, w, h = ann.get("bbox", [0, 0, 0, 0])
-            coco_ann["segmentation"] = [[x, y, x + w, y, x + w, y + h, x, y + h]]
 
         coco_annotations.append(coco_ann)
 
@@ -368,13 +401,26 @@ def upload_dataset_to_roboflow(
             with open(img_path, "wb") as f:
                 f.write(img_bytes)
 
+            # Auto-detect real image width and height if missing or zero
+            if not img_data.get("image_width") or not img_data.get("image_height"):
+                try:
+                    from PIL import Image
+                    with Image.open(io.BytesIO(img_bytes)) as pimg:
+                        img_data["image_width"] = pimg.width
+                        img_data["image_height"] = pimg.height
+                except Exception as ie:
+                    logger.warning(f"Could not auto-detect image dimensions for {clean_name}: {ie}")
+
             # Build single-image COCO JSON
             coco_dict = build_coco_json(img_data)
-            ann_path = os.path.join(tmp_dir, f"{clean_name}.json")
+
+            # Ensure proper annotation filename matching base image name (e.g. image1.json instead of image1.png.json)
+            name_base = os.path.splitext(clean_name)[0]
+            ann_path = os.path.join(tmp_dir, f"{name_base}.json")
             with open(ann_path, "w") as f:
                 json.dump(coco_dict, f, indent=2)
 
-            logger.info(f"Uploading {clean_name} to Roboflow ({len(coco_dict.get('annotations', []))} annotations)...")
+            logger.info(f"Uploading {clean_name} with annotation {name_base}.json to Roboflow ({len(coco_dict.get('annotations', []))} annotations)...")
 
             # Upload via official Roboflow project.upload method
             project.upload(

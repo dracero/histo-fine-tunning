@@ -23,8 +23,25 @@ from torchvision import transforms
 
 logger = logging.getLogger("sam3-backend")
 
-# Device configuration
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Device configuration: route auxiliary models (CONCH/UNI) to CPU on GPUs with <12GB VRAM
+# to save GPU VRAM for SAM 3.
+def _get_aux_device() -> torch.device:
+    env_dev = os.getenv("AUX_MODELS_DEVICE", "").strip().lower()
+    if env_dev == "cuda" and torch.cuda.is_available():
+        return torch.device("cuda")
+    if env_dev == "cpu":
+        return torch.device("cpu")
+    # Auto-detect: if GPU VRAM is < 12GB (e.g. RTX 3060 6GB), use CPU for auxiliary classification
+    if torch.cuda.is_available():
+        try:
+            total_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            if total_mem_gb >= 12.0:
+                return torch.device("cuda")
+        except Exception:
+            pass
+    return torch.device("cpu")
+
+DEVICE = _get_aux_device()
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +219,117 @@ class UniModelWrapper:
 
 
 # ---------------------------------------------------------------------------
+# Virchow Wrapper (Paige AI ViT-Huge 1280-dim Pathology Foundation Model)
+# ---------------------------------------------------------------------------
+
+class VirchowModelWrapper:
+    """Singleton wrapper for Paige AI Virchow2 1280-dim foundation model."""
+
+    _instance: Optional["VirchowModelWrapper"] = None
+
+    def __init__(self):
+        self.model = None
+        self.transform = None
+        self.is_loaded = False
+        self.device = DEVICE
+        self.model_id = os.getenv("VIRCHOW_MODEL_ID", "paige-ai/Virchow2")
+
+    @classmethod
+    def get_instance(cls) -> "VirchowModelWrapper":
+        if cls._instance is None:
+            cls._instance = VirchowModelWrapper()
+        return cls._instance
+
+    def load(self, force_reload: bool = False) -> bool:
+        """Load Virchow model weights onto GPU/CPU with optimal precision and transforms."""
+        if self.is_loaded and not force_reload:
+            return True
+
+        try:
+            import timm
+            from timm.data import resolve_data_config
+            from timm.data.transforms_factory import create_transform
+            from dotenv import load_dotenv
+
+            load_dotenv()
+            token = os.getenv("HF_TOKEN")
+            if token:
+                os.environ["HF_TOKEN"] = token
+
+            # Target CUDA if available for fast ViT-Huge inference
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            logger.info(f"Loading Virchow model ({self.model_id}) on {self.device}...")
+            model = timm.create_model(
+                f"hf_hub:{self.model_id}",
+                pretrained=True,
+                mlp_layer=timm.layers.SwiGLUPacked,
+                act_layer=torch.nn.SiLU,
+            )
+
+            # Move to target device (in half precision on CUDA to save VRAM and maximize throughput)
+            if self.device.type == "cuda":
+                model = model.to(self.device).half()
+            else:
+                model = model.to(self.device)
+            model.eval()
+
+            try:
+                data_config = resolve_data_config(model.pretrained_cfg, model=model)
+                transform = create_transform(**data_config, is_training=False)
+            except Exception:
+                transform = transforms.Compose([
+                    transforms.Resize(224),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                ])
+
+            self.model = model
+            self.transform = transform
+            self.is_loaded = True
+            logger.info(f"Virchow model ({self.model_id}) loaded successfully on {self.device}.")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to load Virchow model ({self.model_id}): {e}")
+            self.is_loaded = False
+            return False
+
+    def encode_crops(self, crops: List[Image.Image], batch_size: int = 32) -> torch.Tensor:
+        """Encode image crops into normalized 1280-dim Virchow embeddings."""
+        if not self.is_loaded:
+            self.load()
+        if not self.is_loaded or self.model is None or self.transform is None:
+            raise RuntimeError(f"Virchow model ({self.model_id}) is not available.")
+
+        dev_type = "cuda" if self.device.type == "cuda" else "cpu"
+        all_embeddings = []
+        for i in range(0, len(crops), batch_size):
+            batch_crops = crops[i : i + batch_size]
+            tensors = [self.transform(c) for c in batch_crops]
+            batch_tensor = torch.stack(tensors).to(self.device)
+            if dev_type == "cuda":
+                batch_tensor = batch_tensor.half()
+
+            with torch.inference_mode(), torch.autocast(device_type=dev_type, enabled=(dev_type == "cuda")):
+                features = self.model(batch_tensor)
+                if isinstance(features, (tuple, list)):
+                    features = features[0]
+                elif isinstance(features, dict):
+                    features = features.get("embeddings", features.get("logits", list(features.values())[0]))
+                if hasattr(features, "ndim") and features.ndim == 3:
+                    # Token 0 is the CLS token (1280d) in Virchow / Virchow2 ViT
+                    features = features[:, 0]
+                features = F.normalize(features.float(), dim=-1)
+                all_embeddings.append(features.float().cpu())
+
+        if not all_embeddings:
+            return torch.empty((0, 1280), device=self.device, dtype=torch.float32)
+
+        return torch.cat(all_embeddings, dim=0).float()
+
+
+# ---------------------------------------------------------------------------
 # High-Level Pathology Processing Functions
 # ---------------------------------------------------------------------------
 
@@ -218,8 +346,13 @@ def extract_crops_from_detections(
     crops = []
 
     for det in detections:
-        bbox = det.get("bbox", [0, 0, img_w, img_h])
-        x, y, w, h = bbox
+        if "bbox" in det and isinstance(det["bbox"], (list, tuple)) and len(det["bbox"]) == 4:
+            x, y, w, h = det["bbox"]
+        elif "box" in det and isinstance(det["box"], (list, tuple)) and len(det["box"]) == 4:
+            bx1, by1, bx2, by2 = det["box"]
+            x, y, w, h = bx1, by1, max(1, bx2 - bx1), max(1, by2 - by1)
+        else:
+            x, y, w, h = 0, 0, img_w, img_h
 
         # Add contextual margin
         pad_x = max(2, int(w * margin_ratio))
@@ -251,6 +384,7 @@ def classify_detections_with_conch(
     detections: List[Dict[str, Any]],
     candidate_classes: List[Dict[str, str]],
     temperature: float = 0.05,
+    is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Perform Zero-Shot Pathology Classification on a list of detections using CONCH.
@@ -260,12 +394,20 @@ def classify_detections_with_conch(
         detections: List of detection dicts (each containing 'id', 'bbox', 'polygon', etc.)
         candidate_classes: List of dicts with 'key', 'prompt', 'label', 'color'
         temperature: Softmax scaling temperature.
+        is_histology: If False, skip CONCH as it is reserved for histology domains.
 
     Returns:
         List of classified detections with updated class_key, class_label, color,
         conch_confidence, and class_scores.
     """
     if not detections or not candidate_classes:
+        return detections
+
+    if not is_histology:
+        logger.info("Non-histology domain: skipping CONCH zero-shot classification.")
+        for det in detections:
+            det["conch_skipped"] = True
+            det["conch_reason"] = "CONCH is restricted to histology ontologies"
         return detections
 
     conch = ConchModelWrapper.get_instance()
@@ -334,6 +476,7 @@ def discriminate_and_cluster_with_pathology_models(
     detections: List[Dict[str, Any]],
     candidate_classes: Optional[List[Dict[str, Any]]] = None,
     temperature: float = 0.05,
+    is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Exhaustive semantic discrimination and clustering of all detections using
@@ -352,11 +495,36 @@ def discriminate_and_cluster_with_pathology_models(
     if not detections:
         return []
 
+    # If domain is not histology, skip CONCH/UNI foundation models entirely
+    if not is_histology:
+        logger.info("Non-histology domain: skipping CONCH and UNI pathology models, retaining initial SAM 3 prompts.")
+        classified_detections = []
+        for det in detections:
+            det_copy = dict(det)
+            det_copy["class_key"] = det.get("initial_class_key", det.get("category_id", "default_class"))
+            det_copy["class_label"] = det.get("initial_label", det.get("class_label", "Objeto"))
+            det_copy["conch_skipped"] = True
+            det_copy["conch_reason"] = "Restricted to histology ontologies"
+            classified_detections.append(det_copy)
+        return classified_detections
+
     # 1. Extract crops for all detections
     crops = extract_crops_from_detections(image, detections)
     num_dets = len(detections)
 
-    # 2. Extract UNI 1024-dim morphological features (if available)
+    # 2. Extract Virchow 1280-dim WSI features (if available)
+    virchow_features = None
+    try:
+        virchow = VirchowModelWrapper.get_instance()
+        if not virchow.is_loaded:
+            virchow.load()
+        if virchow.is_loaded:
+            virchow_features = virchow.encode_crops(crops, batch_size=16).float()  # (N, 1280)
+            logger.info(f"Extracted Virchow 1280-dim embeddings for {num_dets} detections")
+    except Exception as virchow_err:
+        logger.warning(f"Virchow feature extraction skipped: {virchow_err}")
+
+    # 3. Extract UNI 1024-dim morphological features (if available)
     uni_features = None
     try:
         uni = UniModelWrapper.get_instance()
@@ -368,7 +536,7 @@ def discriminate_and_cluster_with_pathology_models(
     except Exception as uni_err:
         logger.warning(f"UNI feature extraction skipped: {uni_err}")
 
-    # 3. Extract CONCH 512-dim vision-language features
+    # 4. Extract CONCH 512-dim vision-language features
     conch_features = None
     try:
         conch = ConchModelWrapper.get_instance()
@@ -380,7 +548,7 @@ def discriminate_and_cluster_with_pathology_models(
     except Exception as conch_err:
         logger.warning(f"CONCH feature extraction skipped: {conch_err}")
 
-    # 4. If we have candidate classes from the active ontology / Gemini
+    # 5. If we have candidate classes from the active ontology / Gemini
     if candidate_classes and len(candidate_classes) > 0 and conch_features is not None:
         conch = ConchModelWrapper.get_instance()
         prompts_text = [
@@ -420,9 +588,11 @@ def discriminate_and_cluster_with_pathology_models(
             torch.cuda.empty_cache()
         return classified_detections
 
-    # 5. Unsupervised Morphological Clustering fallback (when no ontology classes provided)
-    # Combine UNI (morphology) and CONCH (semantics) into a normalized joint embedding
+    # 6. Unsupervised Morphological & WSI Clustering fallback (when no ontology classes provided)
+    # Combine Virchow (1280d), UNI (1024d) and CONCH (512d) into a joint feature embedding space (up to 2816d)
     feat_tensors = []
+    if virchow_features is not None:
+        feat_tensors.append(virchow_features.float())
     if uni_features is not None:
         feat_tensors.append(uni_features.float())
     if conch_features is not None:
@@ -513,11 +683,16 @@ def group_detections_by_class(
 def extract_detection_embeddings_uni(
     image: Image.Image,
     detections: List[Dict[str, Any]],
+    is_histology: bool = True,
 ) -> List[List[float]]:
     """
     Extract 1024-dim UNI embeddings for all detections.
     """
     if not detections:
+        return []
+
+    if not is_histology:
+        logger.info("Non-histology domain: skipping UNI embeddings extraction.")
         return []
 
     uni = UniModelWrapper.get_instance()
@@ -537,10 +712,43 @@ def extract_detection_embeddings_uni(
     return embeddings_list
 
 
+def extract_detection_embeddings_virchow(
+    image: Image.Image,
+    detections: List[Dict[str, Any]],
+    is_histology: bool = True,
+) -> List[List[float]]:
+    """
+    Extract 1280-dim Virchow pathology embeddings for all detections.
+    """
+    if not detections:
+        return []
+
+    if not is_histology:
+        logger.info("Non-histology domain: skipping Virchow embeddings extraction.")
+        return []
+
+    virchow = VirchowModelWrapper.get_instance()
+    if not virchow.is_loaded:
+        success = virchow.load()
+        if not success:
+            raise RuntimeError("Virchow model could not be initialized.")
+
+    crops = extract_crops_from_detections(image, detections)
+    embeddings = virchow.encode_crops(crops, batch_size=16)
+
+    embeddings_list = embeddings.float().cpu().numpy().tolist()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return embeddings_list
+
+
 def get_pathology_models_status() -> Dict[str, Any]:
-    """Get status of CONCH and UNI foundation models."""
+    """Get status of CONCH, UNI, and Virchow foundation models."""
     conch = ConchModelWrapper.get_instance()
     uni = UniModelWrapper.get_instance()
+    virchow = VirchowModelWrapper.get_instance()
 
     return {
         "device": str(DEVICE),
@@ -556,5 +764,11 @@ def get_pathology_models_status() -> Dict[str, Any]:
             "embedding_dim": 1024,
             "is_loaded": uni.is_loaded,
             "architecture": "ViT-Large-patch16-224",
+        },
+        "virchow": {
+            "name": f"Virchow ({virchow.model_id})",
+            "embedding_dim": 1280,
+            "is_loaded": virchow.is_loaded,
+            "architecture": "ViT-Huge-SwiGLU-patch14-224",
         },
     }

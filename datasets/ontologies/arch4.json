@@ -1,0 +1,504 @@
+{
+  "domain": "arch4",
+  "source_pdf": "arch4.pdf",
+  "pdf_id": "af51e67a2f47",
+  "structures": [
+    {
+      "key": "testiculo",
+      "name": "Testículo",
+      "name_en": "Testis",
+      "prompt": "whole testis organ",
+      "parent": null,
+      "color": "#e11d48",
+      "label": "Testículo"
+    },
+    {
+      "key": "lobulillo_testicular",
+      "name": "Lobulillo testicular",
+      "name_en": "Testicular lobule",
+      "prompt": "testicular lobule compartment",
+      "parent": "testiculo",
+      "color": "#8b5cf6",
+      "label": "Lobulillo testicular"
+    },
+    {
+      "key": "tubulos_seminiferos",
+      "name": "Túbulos seminíferos",
+      "name_en": "Seminiferous tubules",
+      "prompt": "circular or oval tubule cross-section",
+      "parent": "lobulillo_testicular",
+      "color": "#06b6d4",
+      "label": "Túbulos seminíferos"
+    },
+    {
+      "key": "luz_tubular",
+      "name": "Luz tubular",
+      "name_en": "Tubular lumen",
+      "prompt": "empty central lumen cavity",
+      "parent": "tubulos_seminiferos",
+      "color": "#f59e0b",
+      "label": "Luz tubular"
+    },
+    {
+      "key": "epitelio_seminifero",
+      "name": "Epitelio seminífero",
+      "name_en": "Seminiferous epithelium",
+      "prompt": "stratified cell layers lining tubule",
+      "parent": "tubulos_seminiferos",
+      "color": "#10b981",
+      "label": "Epitelio seminífero"
+    },
+    {
+      "key": "celulas_germinales",
+      "name": "Células germinales",
+      "name_en": "Germ cells",
+      "prompt": "various round cells in epithelium",
+      "parent": "epitelio_seminifero",
+      "color": "#ec4899",
+      "label": "Células germinales"
+    },
+    {
+      "key": "espermatogonia",
+      "name": "Espermatogonia",
+      "name_en": "Spermatogonium",
+      "prompt": "round cells at basal lamina",
+      "parent": "celulas_germinales",
+      "color": "#6366f1",
+      "label": "Espermatogonia"
+    },
+    {
+      "key": "espermatogonias_a_claras",
+      "name": "Espermatogonias A claras",
+      "name_en": "Type A pale spermatogonia",
+      "prompt": "round nucleus, pale finely granular chromatin",
+      "parent": "espermatogonia",
+      "color": "#14b8a6",
+      "label": "Espermatogonias A claras"
+    },
+    {
+      "key": "espermatogonias_a_oscuras",
+      "name": "Espermatogonias A oscuras",
+      "name_en": "Type A dark spermatogonia",
+      "prompt": "dark round nucleus, central chromatin rarefaction",
+      "parent": "espermatogonia",
+      "color": "#f97316",
+      "label": "Espermatogonias A oscuras"
+    },
+    {
+      "key": "espermatogonias_b",
+      "name": "Espermatogonias B",
+      "name_en": "Type B spermatogonia",
+      "prompt": "round nucleus, heterogeneous chromatin, free nucleoli",
+      "parent": "espermatogonia",
+      "color": "#84cc16",
+      "label": "Espermatogonias B"
+    },
+    {
+      "key": "espermatocitos_primarios",
+      "name": "Espermatocitos primarios",
+      "name_en": "Primary spermatocytes",
+      "prompt": "large central nucleus, filamentous chromatin",
+      "parent": "celulas_germinales",
+      "color": "#a855f7",
+      "label": "Espermatocitos primarios"
+    },
+    {
+      "key": "espermatocitos_secundarios",
+      "name": "Espermatocitos secundarios",
+      "name_en": "Secondary spermatocytes",
+      "prompt": "smaller spherical nucleus, pale granular chromatin",
+      "parent": "celulas_germinales",
+      "color": "#0ea5e9",
+      "label": "Espermatocitos secundarios"
+    },
+    {
+      "key": "espermátides_inmaduras_o_tempranas",
+      "name": "Espermátides inmaduras o tempranas",
+      "name_en": "Immature or early spermatids",
+      "prompt": "small round cell, spherical nucleus, pale granular chromatin",
+      "parent": "celulas_germinales",
+      "color": "#ef4444",
+      "label": "Espermátides inmaduras o tempranas"
+    },
+    {
+      "key": "espermátides_maduras_o_tardías",
+      "name": "Espermátides maduras o tardías",
+      "name_en": "Mature or late spermatids",
+      "prompt": "spindle-shaped nucleus, very condensed dark chromatin",
+      "parent": "celulas_germinales",
+      "color": "#22c55e",
+      "label": "Espermátides maduras o tardías"
+    },
+    {
+      "key": "espermatozoides",
+      "name": "Espermatozoides",
+      "name_en": "Spermatozoa",
+      "prompt": "small dark oval head, thin flagellum",
+      "parent": "celulas_germinales",
+      "color": "#eab308",
+      "label": "Espermatozoides"
+    },
+    {
+      "key": "celulas_de_sertoli",
+      "name": "Células de Sertoli o sustentaculares",
+      "name_en": "Sertoli cells or sustentacular cells",
+      "prompt": "large triangular nucleus, prominent nucleolus, pale cytoplasm",
+      "parent": "epitelio_seminifero",
+      "color": "#d946ef",
+      "label": "Células de Sertoli o sustentaculares"
+    },
+    {
+      "key": "pared_tubular",
+      "name": "Pared tubular",
+      "name_en": "Tubular wall",
+      "prompt": "outer layer surrounding seminiferous tubule",
+      "parent": "tubulos_seminiferos",
+      "color": "#38bdf8",
+      "label": "Pared tubular"
+    },
+    {
+      "key": "lamina_basal_del_epitelio",
+      "name": "Lámina basal del epitelio",
+      "name_en": "Epithelial basement membrane",
+      "prompt": "thin basal membrane layer",
+      "parent": "pared_tubular",
+      "color": "#fb923c",
+      "label": "Lámina basal del epitelio"
+    },
+    {
+      "key": "celulas_peritubulares_o_mioides",
+      "name": "Células peritubulares o mioides",
+      "name_en": "Peritubular or myoid cells",
+      "prompt": "elongated spindle cells around tubule",
+      "parent": "pared_tubular",
+      "color": "#4ade80",
+      "label": "Células peritubulares o mioides"
+    },
+    {
+      "key": "fibras_colagenas",
+      "name": "Fibras colágenas",
+      "name_en": "Collagen fibers",
+      "prompt": "pink collagen fibers",
+      "parent": "pared_tubular",
+      "color": "#facc15",
+      "label": "Fibras colágenas"
+    },
+    {
+      "key": "intersticio_testicular",
+      "name": "Intersticio testicular",
+      "name_en": "Testicular interstitium",
+      "prompt": "connective tissue space between tubules",
+      "parent": "lobulillo_testicular",
+      "color": "#e11d48",
+      "label": "Intersticio testicular"
+    },
+    {
+      "key": "estroma_de_tejido_conectivo_laxo",
+      "name": "Estroma de tejido conectivo laxo",
+      "name_en": "Loose connective tissue stroma",
+      "prompt": "pale pink loose connective tissue",
+      "parent": "intersticio_testicular",
+      "color": "#8b5cf6",
+      "label": "Estroma de tejido conectivo laxo"
+    },
+    {
+      "key": "vasos_sanguineos",
+      "name": "Vasos sanguíneos",
+      "name_en": "Blood vessels",
+      "prompt": "small circular blood vessels",
+      "parent": "intersticio_testicular",
+      "color": "#06b6d4",
+      "label": "Vasos sanguíneos"
+    },
+    {
+      "key": "celulas_de_leydig",
+      "name": "Células de Leydig o intersticiales",
+      "name_en": "Leydig cells or interstitial cells",
+      "prompt": "large polygonal cells, eosinophilic cytoplasm, central nucleus",
+      "parent": "intersticio_testicular",
+      "color": "#f59e0b",
+      "label": "Células de Leydig o intersticiales"
+    },
+    {
+      "key": "cristaloides_de_reinke",
+      "name": "Cristaloides de Reinke",
+      "name_en": "Reinke's crystalloids",
+      "prompt": "intracellular protein crystalloid inclusions",
+      "parent": "celulas_de_leydig",
+      "color": "#10b981",
+      "label": "Cristaloides de Reinke"
+    }
+  ],
+  "extracted_images": [
+    {
+      "filename": "af51e67a2f47_p1_img1.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img1.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img2.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img2.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img3.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img3.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img4.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img4.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img5.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img5.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img6.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img6.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img7.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img7.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img8.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img8.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img9.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img9.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img10.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img10.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img11.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img11.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img12.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img12.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img13.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img13.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    }
+  ],
+  "prompts": [
+    {
+      "key": "testiculo",
+      "prompt": "whole testis organ",
+      "label": "Testículo",
+      "color": "#e11d48"
+    },
+    {
+      "key": "lobulillo_testicular",
+      "prompt": "testicular lobule compartment",
+      "label": "Lobulillo testicular",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "tubulos_seminiferos",
+      "prompt": "circular or oval tubule cross-section",
+      "label": "Túbulos seminíferos",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "luz_tubular",
+      "prompt": "empty central lumen cavity",
+      "label": "Luz tubular",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "epitelio_seminifero",
+      "prompt": "stratified cell layers lining tubule",
+      "label": "Epitelio seminífero",
+      "color": "#10b981"
+    },
+    {
+      "key": "celulas_germinales",
+      "prompt": "various round cells in epithelium",
+      "label": "Células germinales",
+      "color": "#ec4899"
+    },
+    {
+      "key": "espermatogonia",
+      "prompt": "round cells at basal lamina",
+      "label": "Espermatogonia",
+      "color": "#6366f1"
+    },
+    {
+      "key": "espermatogonias_a_claras",
+      "prompt": "round nucleus, pale finely granular chromatin",
+      "label": "Espermatogonias A claras",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "espermatogonias_a_oscuras",
+      "prompt": "dark round nucleus, central chromatin rarefaction",
+      "label": "Espermatogonias A oscuras",
+      "color": "#f97316"
+    },
+    {
+      "key": "espermatogonias_b",
+      "prompt": "round nucleus, heterogeneous chromatin, free nucleoli",
+      "label": "Espermatogonias B",
+      "color": "#84cc16"
+    },
+    {
+      "key": "espermatocitos_primarios",
+      "prompt": "large central nucleus, filamentous chromatin",
+      "label": "Espermatocitos primarios",
+      "color": "#a855f7"
+    },
+    {
+      "key": "espermatocitos_secundarios",
+      "prompt": "smaller spherical nucleus, pale granular chromatin",
+      "label": "Espermatocitos secundarios",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "espermátides_inmaduras_o_tempranas",
+      "prompt": "small round cell, spherical nucleus, pale granular chromatin",
+      "label": "Espermátides inmaduras o tempranas",
+      "color": "#ef4444"
+    },
+    {
+      "key": "espermátides_maduras_o_tardías",
+      "prompt": "spindle-shaped nucleus, very condensed dark chromatin",
+      "label": "Espermátides maduras o tardías",
+      "color": "#22c55e"
+    },
+    {
+      "key": "espermatozoides",
+      "prompt": "small dark oval head, thin flagellum",
+      "label": "Espermatozoides",
+      "color": "#eab308"
+    },
+    {
+      "key": "celulas_de_sertoli",
+      "prompt": "large triangular nucleus, prominent nucleolus, pale cytoplasm",
+      "label": "Células de Sertoli o sustentaculares",
+      "color": "#d946ef"
+    },
+    {
+      "key": "pared_tubular",
+      "prompt": "outer layer surrounding seminiferous tubule",
+      "label": "Pared tubular",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "lamina_basal_del_epitelio",
+      "prompt": "thin basal membrane layer",
+      "label": "Lámina basal del epitelio",
+      "color": "#fb923c"
+    },
+    {
+      "key": "celulas_peritubulares_o_mioides",
+      "prompt": "elongated spindle cells around tubule",
+      "label": "Células peritubulares o mioides",
+      "color": "#4ade80"
+    },
+    {
+      "key": "fibras_colagenas",
+      "prompt": "pink collagen fibers",
+      "label": "Fibras colágenas",
+      "color": "#facc15"
+    },
+    {
+      "key": "intersticio_testicular",
+      "prompt": "connective tissue space between tubules",
+      "label": "Intersticio testicular",
+      "color": "#e11d48"
+    },
+    {
+      "key": "estroma_de_tejido_conectivo_laxo",
+      "prompt": "pale pink loose connective tissue",
+      "label": "Estroma de tejido conectivo laxo",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "vasos_sanguineos",
+      "prompt": "small circular blood vessels",
+      "label": "Vasos sanguíneos",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "celulas_de_leydig",
+      "prompt": "large polygonal cells, eosinophilic cytoplasm, central nucleus",
+      "label": "Células de Leydig o intersticiales",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "cristaloides_de_reinke",
+      "prompt": "intracellular protein crystalloid inclusions",
+      "label": "Cristaloides de Reinke",
+      "color": "#10b981"
+    }
+  ],
+  "is_histology": true
+}

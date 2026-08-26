@@ -89,6 +89,7 @@ from pdf_ontology import (
 from pathology_models import (
     get_pathology_models_status,
     classify_detections_with_conch,
+    classify_with_virchow_prototypes,
     extract_detection_embeddings_uni,
     extract_detection_embeddings_virchow,
     discriminate_and_cluster_with_pathology_models,
@@ -1168,7 +1169,7 @@ def get_pdf_images(pdf_id: str) -> Dict[str, Any]:
 
 
 @app.get("/api/pdf-image/{pdf_id}/{filename}")
-async def serve_pdf_image(pdf_id: str, filename: str):
+async def serve_pdf_image(pdf_id: str, filename: str) -> Any:
     """Serve an extracted PDF image for the frontend."""
     from fastapi.responses import FileResponse
 
@@ -1477,6 +1478,65 @@ async def extract_virchow_features(
         raise
     except Exception as e:
         logger.error(f"Error in Virchow feature extraction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/classify-virchow-prototypes")
+async def classify_virchow_prototypes_endpoint(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    classes: Optional[str] = Form(None),
+    temperature: float = Form(0.05),
+    ontology_name: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    High-precision Few-Shot Prototype & Morphological Classification using Paige AI Virchow 2.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+
+        if not isinstance(detections_list, list):
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
+
+        candidate_classes = []
+        if classes and classes.strip():
+            try:
+                candidate_classes = json.loads(classes)
+            except Exception as parse_err:
+                logger.warning(f"Failed to parse candidate classes: {parse_err}")
+                candidate_classes = []
+
+        # Check histology domain
+        is_histo = True
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc:
+                is_histo = is_histology_ontology(ont_doc)
+
+        classified = classify_with_virchow_prototypes(
+            image=pil_image,
+            detections=detections_list,
+            candidate_classes=candidate_classes,
+            temperature=temperature,
+            is_histology=is_histo,
+        )
+
+        return {
+            "success": True,
+            "is_histology": is_histo,
+            "total_classified": len(classified),
+            "detections": classified,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Virchow prototype classification: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

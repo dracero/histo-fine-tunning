@@ -15,6 +15,7 @@ from pathology_models import (
     UniModelWrapper,
     VirchowModelWrapper,
     classify_detections_with_conch,
+    classify_with_virchow_prototypes,
     extract_detection_embeddings_uni,
     extract_detection_embeddings_virchow,
     get_pathology_models_status,
@@ -118,6 +119,39 @@ class TestPathologyModels(unittest.TestCase):
             is_histology=False,
         )
         self.assertEqual(embeddings_false, [])
+
+    def test_virchow_prototype_classification(self):
+        detections = [
+            {
+                "id": "det_1",
+                "bbox": [20, 20, 50, 50],
+                "class_key": "spermatogonia",
+                "class_label": "Espermatogonia",
+            },
+            {
+                "id": "det_2",
+                "bbox": [100, 100, 25, 25],
+                "class_key": "spermatid",
+                "class_label": "Espermátide",
+            },
+            {
+                "id": "det_3",
+                "bbox": [150, 150, 24, 24],
+                "class_key": "unassigned",
+            },
+        ]
+        candidate_classes = [
+            {"key": "spermatogonia", "name": "Espermatogonia", "label": "Espermatogonia", "color": "#e11d48"},
+            {"key": "spermatid", "name": "Espermátide", "label": "Espermátide", "color": "#06b6d4"},
+        ]
+        # Test fallback when is_histology is False
+        classified = classify_with_virchow_prototypes(
+            image=self.test_img,
+            detections=detections,
+            candidate_classes=candidate_classes,
+            is_histology=False,
+        )
+        self.assertEqual(len(classified), 3)
 
     def test_pdf_images_crud(self):
         test_pdf_id = "test_crud_pdf"

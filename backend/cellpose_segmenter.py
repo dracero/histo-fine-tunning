@@ -261,30 +261,34 @@ def run_cellpose_segmentation(
     logger.info(f"Running Cellpose ({getattr(model, 'pretrained_model', model_type)}) on image {w}x{h} with diameter={diameter}...")
 
     # Run inference with GPU inference mode
+    eval_kwargs = {
+        "diameter": diameter,
+        "cellprob_threshold": cellprob_threshold,
+        "flow_threshold": flow_threshold,
+        "progress": None,
+    }
+    # Cellpose 4+ uses channel_axis; only pass channels if specified or fallback
+    if channels is not None:
+        eval_kwargs["channels"] = channels
+
     try:
         with torch.inference_mode():
-            eval_res = model.eval(
-                img_np,
-                diameter=diameter,
-                channels=chan,
-                cellprob_threshold=cellprob_threshold,
-                flow_threshold=flow_threshold,
-                progress=None,
-            )
+            try:
+                eval_res = model.eval(img_np, **eval_kwargs)
+            except (TypeError, ValueError):
+                eval_kwargs.pop("channels", None)
+                eval_res = model.eval(img_np, **eval_kwargs)
     except (torch.OutOfMemoryError, RuntimeError) as eval_oom:
         logger.warning(f"CUDA OOM during Cellpose eval: {eval_oom}. Retrying on CPU...")
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         cpu_model = load_cellpose_model(model_type="cpdino-vitb", device="cpu")
         with torch.inference_mode():
-            eval_res = cpu_model.eval(
-                img_np,
-                diameter=diameter,
-                channels=chan,
-                cellprob_threshold=cellprob_threshold,
-                flow_threshold=flow_threshold,
-                progress=None,
-            )
+            try:
+                eval_res = cpu_model.eval(img_np, **eval_kwargs)
+            except (TypeError, ValueError):
+                eval_kwargs.pop("channels", None)
+                eval_res = cpu_model.eval(img_np, **eval_kwargs)
 
     # Free cache after inference
     if torch.cuda.is_available():

@@ -15,7 +15,7 @@ from pathology_models import (
 
 class TestHistologyGuard(unittest.TestCase):
 
-    def test_is_histology_ontology_detection(self):
+    def test_is_histology_ontology_detection(self) -> None:
         # 1. Histology domain test
         histo_ontology = {
             "domain": "testiculo_histologia",
@@ -62,7 +62,7 @@ class TestHistologyGuard(unittest.TestCase):
         }
         self.assertFalse(is_histology_ontology(override_false))
 
-    def test_conch_skipped_for_non_histology(self):
+    def test_conch_skipped_for_non_histology(self) -> None:
         dummy_image = Image.new("RGB", (100, 100), color="white")
         detections = [
             {
@@ -86,7 +86,7 @@ class TestHistologyGuard(unittest.TestCase):
         self.assertTrue(res[0].get("conch_skipped"))
         self.assertIn("restricted", res[0].get("conch_reason", "").lower())
 
-    def test_discriminate_and_cluster_bypassed_for_non_histology(self):
+    def test_discriminate_and_cluster_bypassed_for_non_histology(self) -> None:
         dummy_image = Image.new("RGB", (100, 100), color="white")
         detections = [
             {
@@ -107,7 +107,7 @@ class TestHistologyGuard(unittest.TestCase):
         self.assertEqual(res[0]["class_key"], "car_wheel")
         self.assertTrue(res[0].get("conch_skipped"))
 
-    def test_uni_embeddings_skipped_for_non_histology(self):
+    def test_uni_embeddings_skipped_for_non_histology(self) -> None:
         dummy_image = Image.new("RGB", (100, 100), color="white")
         detections = [{"id": "det1", "bbox": [10, 10, 50, 50]}]
 

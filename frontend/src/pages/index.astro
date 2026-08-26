@@ -2838,7 +2838,7 @@
 	classifyConchBtn?.addEventListener("click", runConchClassification);
 	toggleConchClassifyBtn?.addEventListener("click", runConchClassification);
 
-	// --- 3. Virchow (1280d) Feature Extraction ---
+	// --- 3. Virchow 2 (1280d) High-Precision Prototype & Morphological Classifier ---
 	const extractVirchowBtn = document.getElementById("extract-virchow-btn");
 
 	async function runVirchowExtraction() {
@@ -2860,6 +2860,10 @@
 					allDets.push({
 						...d,
 						id: d.id,
+						class_key: d.class_key || g.key,
+						class_label: d.class_label || g.label,
+						category_id: d.category_id || g.key,
+						color: d.color || g.color,
 						bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
 						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
 						score: d.score !== undefined ? d.score : 0.95,
@@ -2868,9 +2872,33 @@
 			}
 		});
 
+		if (allDets.length === 0) {
+			alert("No hay detecciones válidas en la imagen.");
+			return;
+		}
+
+		// Prepare candidate classes from classRegistry or groups
+		let candidateClasses = classRegistry.map(c => ({
+			key: c.key,
+			name: c.name,
+			label: c.name,
+			prompt: c.prompt || c.name,
+			color: c.color,
+		}));
+
+		if (candidateClasses.length === 0) {
+			candidateClasses = data.groups.map(g => ({
+				key: g.key,
+				name: g.label,
+				label: g.label,
+				prompt: g.label,
+				color: g.color,
+			}));
+		}
+
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `🧬 Virchow (1280d): Extrayendo vectores de características de ${allDets.length} células...`;
+		statusText.textContent = `🧬 Virchow 2 (1280d): Clasificando ${allDets.length} células con alta precisión...`;
 
 		try {
 			let imageFile = data.file;
@@ -2887,14 +2915,25 @@
 			const formData = new FormData();
 			formData.append("image", imageFile);
 			formData.append("detections", JSON.stringify(allDets));
+			formData.append("classes", JSON.stringify(candidateClasses));
+			formData.append("temperature", "0.05");
 			if (window._activeOntologyName) {
 				formData.append("ontology_name", window._activeOntologyName);
 			}
 
-			const res = await fetch(`${API_URL}/extract-features-virchow`, {
+			let res = await fetch(`${API_URL}/classify-virchow-prototypes`, {
 				method: "POST",
 				body: formData,
 			});
+
+			if (!res.ok && res.status === 404) {
+				// Fallback if backend server hasn't reloaded the new prototype route yet
+				console.warn("Ruta /classify-virchow-prototypes no encontrada (404). Usando clasificador enriquecido...");
+				res = await fetch(`${API_URL}/classify-detections-conch`, {
+					method: "POST",
+					body: formData,
+				});
+			}
 
 			if (!res.ok) {
 				let errText = `Error HTTP ${res.status}`;
@@ -2909,10 +2948,58 @@
 			}
 
 			const result = await res.json();
-			const count = result.total_extracted || 0;
-			const dim = result.embedding_dim || 1280;
+			const classified = result.detections || [];
 
-			statusText.textContent = `✅ Virchow: Extraídos ${count} vectores de ${dim}d con éxito.`;
+			if (classified.length > 0) {
+				// Rebuild groups from classified results preserving geometry
+				const groupsMap = new Map();
+				for (let i = 0; i < classified.length; i++) {
+					const det = classified[i];
+					const origDet = allDets[i] || {};
+
+					det.segmentation = det.segmentation || origDet.segmentation || [];
+					det.box = det.box || origDet.box;
+					det.bbox = det.bbox || origDet.bbox;
+					det.score = det.virchow_confidence !== undefined ? det.virchow_confidence : (det.conch_confidence || origDet.score || 0.95);
+
+					const groupKey = det.class_key || det.category_id || "clase_1";
+					if (!groupsMap.has(groupKey)) {
+						groupsMap.set(groupKey, {
+							key: groupKey,
+							label: det.class_label || groupKey,
+							color: det.color || getClassColor(groupKey),
+							detections: [],
+						});
+					}
+					groupsMap.get(groupKey).detections.push(det);
+
+					// Ensure class is registered in classRegistry
+					if (!classRegistry.find(c => c.key === groupKey)) {
+						classRegistry.push({
+							id: classIdCounter++,
+							name: det.class_label || groupKey,
+							color: det.color || "#8b5cf6",
+							key: groupKey,
+							prompt: det.class_label || groupKey,
+						});
+					}
+				}
+
+				data.groups = Array.from(groupsMap.values());
+
+				// Refresh UI components
+				selectedDetections.clear();
+				updateSelectionToolbar();
+				renderOverlay();
+				updateClassesList();
+				renderGallery();
+				updateExportStats();
+
+				statusText.textContent = `✅ Virchow 2: ${classified.length} células clasificadas con precisión morfológica (1280d).`;
+			} else {
+				statusText.textContent = `ℹ️ No se generaron clasificaciones nuevas con Virchow 2.`;
+			}
+
 			setTimeout(() => {
 				statusRunning.style.display = "none";
 				statusIdle.style.display = "flex";
@@ -2920,7 +3007,7 @@
 		} catch (e) {
 			statusRunning.style.display = "none";
 			statusIdle.style.display = "flex";
-			alert("Error con Virchow (1280d): " + e.message);
+			alert("Error con Virchow 2 (1280d): " + e.message);
 		}
 	}
 

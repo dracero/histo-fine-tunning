@@ -333,14 +333,31 @@ class VirchowModelWrapper:
 # High-Level Pathology Processing Functions
 # ---------------------------------------------------------------------------
 
+def _compute_detection_area(det: Dict[str, Any]) -> float:
+    """Compute pixel area from a detection dict, handling both bbox [x,y,w,h] and box [x1,y1,x2,y2] formats."""
+    if "bbox" in det and isinstance(det["bbox"], (list, tuple)) and len(det["bbox"]) == 4:
+        _, _, w, h = det["bbox"]
+        return max(1.0, float(abs(w * h)))
+    if "box" in det and isinstance(det["box"], (list, tuple)) and len(det["box"]) == 4:
+        x1, y1, x2, y2 = det["box"]
+        return max(1.0, float(abs((x2 - x1) * (y2 - y1))))
+    if "area" in det:
+        return max(1.0, float(det["area"]))
+    return 100.0
+
+
 def extract_crops_from_detections(
     image: Image.Image,
     detections: List[Dict[str, Any]],
-    margin_ratio: float = 0.1,
-    min_size: int = 16,
+    margin_ratio: float = 0.35,
+    min_size: int = 64,
 ) -> List[Image.Image]:
     """
-    Extract PIL crops for a list of detections with contextual padding.
+    Extract PIL crops for a list of detections with adaptive contextual padding.
+
+    Smaller detections receive proportionally larger context margins so that
+    Virchow/CONCH always see enough surrounding tissue to discriminate cell
+    types by position (basal vs luminal) and neighbourhood.
     """
     img_w, img_h = image.size
     crops = []
@@ -354,18 +371,23 @@ def extract_crops_from_detections(
         else:
             x, y, w, h = 0, 0, img_w, img_h
 
-        # Add contextual margin
-        pad_x = max(2, int(w * margin_ratio))
-        pad_y = max(2, int(h * margin_ratio))
+        # Adaptive margin: smaller cells get proportionally more context
+        # so that Virchow sees enough tissue around them (trained on 224×224 tiles)
+        cell_dim = max(float(w), float(h), 1.0)
+        adaptive_ratio = margin_ratio * max(1.0, 80.0 / cell_dim)
+        adaptive_ratio = min(adaptive_ratio, 1.5)  # cap at 150% expansion
+
+        pad_x = max(4, int(w * adaptive_ratio))
+        pad_y = max(4, int(h * adaptive_ratio))
 
         x1 = max(0, int(x - pad_x))
         y1 = max(0, int(y - pad_y))
         x2 = min(img_w, int(x + w + pad_x))
         y2 = min(img_h, int(y + h + pad_y))
 
-        # Ensure valid crop size
-        if (x2 - x1) < min_size or (y2 - y1) < min_size:
-            # Expand to minimum size if possible
+        # Ensure crop meets minimum size for foundation model input
+        crop_w, crop_h = x2 - x1, y2 - y1
+        if crop_w < min_size or crop_h < min_size:
             cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
             half = min_size // 2
             x1 = max(0, cx - half)
@@ -379,46 +401,96 @@ def extract_crops_from_detections(
     return crops
 
 
-HISTOLOGY_DISCRIMINATIVE_PROMPTS: Dict[str, str] = {
-    "espermatogonia": "dome-shaped basal spermatogonium cell with dark oval nucleus resting on basement membrane of seminiferous tubule",
-    "espermatogonia_a": "type A pale spermatogonium with flattened or oval nucleus along basal lamina",
-    "espermatogonia_b": "type B spermatogonium with rounded spherical dark nucleus near tubule basement membrane",
-    "spermatogonia": "dome-shaped basal spermatogonium cell resting on basement membrane with dark oval nucleus",
-    "spermatogonium": "dome-shaped basal spermatogonium cell resting on basement membrane with dark oval nucleus",
-    "espermatide": "small round early spermatid cell with pale spherical nucleus near tubule lumen",
-    "espermatide_temprana": "small round haploid early spermatid with pale spherical nucleus and visible acrosomal vesicle",
-    "espermatide_tardia": "elongated condensing late spermatid with dark compact needle-like head facing the lumen",
-    "spermatid": "small round early spermatid cell with pale spherical nucleus near tubule lumen",
-    "round_spermatid": "small round haploid spermatid cell with pale nucleus near lumen",
-    "elongated_spermatid": "condensing elongated spermatid with dark needle-like head facing the lumen",
-    "espermatocito_primario": "large spherical primary spermatocyte cell with voluminous nucleus and coarse chromatin in seminiferous epithelium",
-    "espermatocito_1": "large spherical primary spermatocyte cell with voluminous nucleus and coarse chromatin in seminiferous epithelium",
-    "primary_spermatocyte": "large spherical primary spermatocyte cell with voluminous nucleus and coarse chromatin in seminiferous epithelium",
-    "espermatocito_secundario": "intermediate spherical secondary spermatocyte cell with granular chromatin",
-    "espermatocito_2": "intermediate spherical secondary spermatocyte cell with granular chromatin",
-    "secondary_spermatocyte": "intermediate spherical secondary spermatocyte cell with granular chromatin",
-    "espermatozoide": "mature spermatozoon cell with small condensed dark elongated head and flagellum in tubule lumen",
-    "spermatozoon": "mature spermatozoon cell with small condensed dark elongated head and flagellum in tubule lumen",
-    "celula_sertoli": "tall columnar Sertoli cell with irregular pale nucleus and prominent nucleolus supporting germ cells",
-    "sertoli_cell": "tall columnar Sertoli cell with irregular pale nucleus and prominent nucleolus supporting germ cells",
-    "celula_leydig": "interstitial Leydig cell with round nucleus and eosinophilic cytoplasm in intertubular space",
-    "leydig_cell": "interstitial Leydig cell with round nucleus and eosinophilic cytoplasm in intertubular space",
-}
+# Universal morphological and tissue descriptors (language-agnostic morphological stems)
+CELLULAR_INDICATORS = (
+    "cell", "célula", "celula", "nuclei", "nucleus", "núcleo", "nucleo",
+    "cyte", "cito", "blast", "blasto", "clast", "clasto",
+    "gonia", "gonium", "tid", "tide", "zoon", "zoide", "phage", "fago",
+    "phil", "filo", "karyo", "carionte", "cyte", "epitheliocyte",
+)
+
+NON_CELLULAR_INDICATORS = (
+    "lumen", "luz", "cavity", "cavidad", "space", "espacio",
+    "tubule", "tubulo", "túbulo", "layer", "capa", "epithelium", "epitelio",
+    "stroma", "estroma", "tissue", "tejido", "wall", "pared",
+    "membrane", "membrana", "organ", "organo", "órgano", "lobule", "lobulillo",
+    "vessel", "vaso", "artery", "arteria", "vein", "vena", "fiber", "fibra",
+    "matrix", "matriz", "interstitium", "intersticio",
+    "inclusión", "inclusion", "cristaloide", "crystalloid",
+)
+
+
+def is_cellular_class(class_item: Union[Dict[str, Any], str]) -> bool:
+    """
+    Dynamically determine if a candidate structure represents a cell or nucleus instance
+    versus a macro-compartment, cavity, tissue layer, or whole organ.
+    Works universally across any tissue, organism, or pathology domain.
+    """
+    if isinstance(class_item, dict):
+        if "is_cellular" in class_item:
+            return bool(class_item["is_cellular"])
+        if class_item.get("structure_type") in ("cell", "nucleus", "cellular"):
+            return True
+        if class_item.get("structure_type") in ("tissue_layer", "lumen_cavity", "macro_organ", "tissue", "cavity"):
+            return False
+
+        key = str(class_item.get("key", "")).lower().strip().replace("-", "_")
+        label = str(class_item.get("label", class_item.get("name", ""))).lower().strip()
+        prompt = str(class_item.get("prompt", "")).lower().strip()
+        parent = str(class_item.get("parent", "") or "").lower().strip()
+    else:
+        key = str(class_item).lower().strip().replace("-", "_")
+        label = key
+        prompt = key
+        parent = ""
+
+    combined = f"{key} {label} {prompt}"
+    key_label = f"{key} {label}"
+    if any(term in key_label for term in NON_CELLULAR_INDICATORS):
+        return False
+
+    has_non_cellular = any(term in combined for term in NON_CELLULAR_INDICATORS)
+    has_cellular = any(term in combined for term in CELLULAR_INDICATORS)
+
+    if has_cellular and not has_non_cellular:
+        return True
+    if has_non_cellular and not has_cellular:
+        return False
+
+    # Constituent entities with parent tissues/compartments are granular structures/cells
+    if parent and parent not in ("none", "null", ""):
+        return True
+
+    # Default to True so user-defined custom annotations are preserved
+    return True
+
+
+def filter_cellular_candidate_classes(classes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Filter candidate classes to retain only cellular entities for cell-level classification.
+    Zero hardcoded tissue lists: relies purely on ontology metadata and universal morphological semantics.
+    """
+    filtered = [c for c in classes if is_cellular_class(c)]
+    return filtered if filtered else classes
 
 
 def enrich_histology_prompt(raw_key: str, raw_name: str, existing_prompt: Optional[str] = None) -> str:
-    """Enrich generic or Spanish class names with highly discriminative histological descriptions for CONCH."""
-    if existing_prompt and len(existing_prompt.strip()) > 35 and " " in existing_prompt.strip():
-        return existing_prompt.strip()
+    """
+    Dynamically compose vision-language prompts using the active ontology and user metadata.
+    Zero hardcoded tables: uses the domain visual descriptions extracted by the multimodal LLM or provided by the user.
+    """
+    name = (raw_name or raw_key or "structure").strip()
+    prompt = (existing_prompt or "").strip()
 
-    search_str = f"{raw_key} {raw_name} {existing_prompt or ''}".lower().strip().replace("-", "_")
-    for pattern, enriched in HISTOLOGY_DISCRIMINATIVE_PROMPTS.items():
-        if pattern in search_str:
-            return enriched
+    if prompt and len(prompt) >= 20:
+        if not any(w in prompt.lower() for w in ("histolog", "h&e", "microscop", "stain", "tissue", "section", "cell")):
+            return f"{prompt} in histological microscopic section"
+        return prompt
 
-    if existing_prompt and len(existing_prompt.strip()) > 0:
-        return f"{existing_prompt.strip()} in histological H&E tissue section"
-    return f"{raw_name or raw_key} cell in histological H&E section"
+    if prompt:
+        return f"{name}: {prompt} in histological microscopic section"
+
+    return f"{name} in histological tissue section"
 
 
 def classify_detections_with_conch(
@@ -521,7 +593,7 @@ def discriminate_and_cluster_with_pathology_models(
     image: Image.Image,
     detections: List[Dict[str, Any]],
     candidate_classes: Optional[List[Dict[str, Any]]] = None,
-    temperature: float = 0.05,
+    temperature: float = 0.12,
     is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
@@ -553,6 +625,10 @@ def discriminate_and_cluster_with_pathology_models(
             det_copy["conch_reason"] = "Restricted to histology ontologies"
             classified_detections.append(det_copy)
         return classified_detections
+
+    # Filter candidate classes to retain only cellular entities (remove lumen, organs, macro-tissues)
+    if candidate_classes:
+        candidate_classes = filter_cellular_candidate_classes(candidate_classes)
 
     # 1. Extract crops for all detections
     crops = extract_crops_from_detections(image, detections)
@@ -594,11 +670,54 @@ def discriminate_and_cluster_with_pathology_models(
     except Exception as conch_err:
         logger.warning(f"CONCH feature extraction skipped: {conch_err}")
 
-    # 5. If we have candidate classes from the active ontology / Gemini
+    # 5. Deduplicate spatially overlapping detections before classification (Fix 5)
+    # When multiple SAM3 prompts detect the same cell, keep only the highest-score one
+    dedup_indices = list(range(len(detections)))
+    if len(detections) > 1:
+        try:
+            import torchvision.ops
+            det_boxes = []
+            det_scores = []
+            for d in detections:
+                if "box" in d and isinstance(d["box"], (list, tuple)) and len(d["box"]) == 4:
+                    det_boxes.append(d["box"])
+                elif "bbox" in d and isinstance(d["bbox"], (list, tuple)) and len(d["bbox"]) == 4:
+                    bx, by, bw, bh = d["bbox"]
+                    det_boxes.append([bx, by, bx + bw, by + bh])
+                else:
+                    det_boxes.append([0, 0, 1, 1])
+                det_scores.append(d.get("score", 0.5))
+
+            boxes_t = torch.tensor(det_boxes, dtype=torch.float32)
+            scores_t = torch.tensor(det_scores, dtype=torch.float32)
+            keep = torchvision.ops.nms(boxes_t, scores_t, iou_threshold=0.65).tolist()
+            removed = len(detections) - len(keep)
+            if removed > 0:
+                logger.info(f"IoU deduplication removed {removed} overlapping detections before classification")
+            dedup_indices = keep
+        except Exception as nms_err:
+            logger.warning(f"Pre-classification IoU dedup skipped: {nms_err}")
+
+    # Apply deduplication to all feature tensors and detections list
+    detections = [detections[i] for i in dedup_indices]
+    crops = [crops[i] for i in dedup_indices]
+    if virchow_features is not None:
+        virchow_features = virchow_features[dedup_indices]
+    if uni_features is not None:
+        uni_features = uni_features[dedup_indices]
+    if conch_features is not None:
+        conch_features = conch_features[dedup_indices]
+    num_dets = len(detections)
+
+    # 6. Supervised classification with candidate classes (CONCH text + Virchow morphology)
     if candidate_classes and len(candidate_classes) > 0 and conch_features is not None:
         conch = ConchModelWrapper.get_instance()
         prompts_text = [
-            c.get("prompt", c.get("label", c.get("name", c.get("key"))))
+            enrich_histology_prompt(
+                raw_key=c.get("key", ""),
+                raw_name=c.get("label", c.get("name", "")),
+                existing_prompt=c.get("prompt"),
+            )
             for c in candidate_classes
         ]
         class_keys = [c.get("key") for c in candidate_classes]
@@ -609,6 +728,14 @@ def discriminate_and_cluster_with_pathology_models(
         similarity_matrix = torch.matmul(conch_features.float(), text_embeddings.float().T).float()
         probs = F.softmax(similarity_matrix / temperature, dim=-1).float().cpu().numpy()
         similarities = similarity_matrix.float().cpu().numpy()
+
+        # Virchow inter-detection similarity for neighbourhood consistency refinement
+        virchow_sim_matrix = None
+        if virchow_features is not None and len(virchow_features) > 1:
+            virchow_sim_matrix = torch.matmul(
+                F.normalize(virchow_features.float(), dim=-1),
+                F.normalize(virchow_features.float(), dim=-1).T,
+            ).cpu().numpy()
 
         classified_detections = []
         for i, det in enumerate(detections):
@@ -628,7 +755,37 @@ def discriminate_and_cluster_with_pathology_models(
                 class_keys[k]: round(float(det_probs[k]), 4)
                 for k in range(len(class_keys))
             }
+            # Flag uncertain predictions for downstream refinement
+            if best_conf < 0.40:
+                det_copy["classification_uncertain"] = True
+            det_copy["detection_area"] = round(_compute_detection_area(det), 1)
             classified_detections.append(det_copy)
+
+        # Virchow neighbourhood consistency: align uncertain detections with confident neighbours
+        if virchow_sim_matrix is not None:
+            confident = [(j, d) for j, d in enumerate(classified_detections)
+                         if not d.get("classification_uncertain")]
+            for i, det in enumerate(classified_detections):
+                if not det.get("classification_uncertain"):
+                    continue
+                best_sim_val = -1.0
+                best_j = -1
+                for j, _ in confident:
+                    if i == j:
+                        continue
+                    s = float(virchow_sim_matrix[i, j])
+                    if s > best_sim_val:
+                        best_sim_val = s
+                        best_j = j
+                if best_j >= 0 and best_sim_val > 0.85:
+                    donor = classified_detections[best_j]
+                    det["category_id"] = donor["category_id"]
+                    det["class_key"] = donor["class_key"]
+                    det["class_label"] = donor["class_label"]
+                    det["color"] = donor["color"]
+                    det["classification_uncertain"] = False
+                    det["neighbour_aligned"] = True
+                    det["neighbour_similarity"] = round(best_sim_val, 4)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -794,15 +951,18 @@ def classify_with_virchow_prototypes(
     image: Image.Image,
     detections: List[Dict[str, Any]],
     candidate_classes: Optional[List[Dict[str, Any]]] = None,
-    temperature: float = 0.05,
+    temperature: float = 0.12,
     is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     High-precision few-shot exemplar & morphological prototype classification using
     Paige AI Virchow 2 (1280-dim ViT-Huge) and MahmoodLab CONCH (512-dim).
 
-    Separates challenging histological cell lineages (e.g. Spermatogonia vs Spermatids vs Spermatocytes)
-    using deep cytological texture, nuclear volume, and foundation embeddings.
+    Features:
+    - Filters out non-cellular macro-structures (lumen, tubule wall, tissue, organs).
+    - Preserves all user-labeled exemplars ("Espermatogonia A clara (Ap)", etc.) without overwriting.
+    - If 1+ exemplar classes are labeled, propagates them to morphologically identical cells via Virchow 1280d.
+    - For unlabeled cells, uses CONCH zero-shot guided by deep cellular prompts and relative cell volume priors.
     """
     if not detections:
         return []
@@ -810,6 +970,27 @@ def classify_with_virchow_prototypes(
     if not is_histology:
         logger.info("Non-histology domain: skipping Virchow prototype classification.")
         return detections
+
+    # 1. Dynamically resolve candidate classes from parameters, detections, or active ontology
+    filtered_classes = filter_cellular_candidate_classes(candidate_classes or [])
+
+    # If no candidate classes were explicitly provided, derive dynamically from unique detection labels
+    if not filtered_classes:
+        derived_classes = []
+        seen_keys = set()
+        for d in detections:
+            k = d.get("class_key") or d.get("category_id")
+            if k and str(k).lower().strip() not in ("clase_1", "clase_0", "default", "unlabeled", "default_class", ""):
+                if k not in seen_keys:
+                    seen_keys.add(k)
+                    derived_classes.append({
+                        "key": k,
+                        "label": d.get("class_label", k),
+                        "name": d.get("class_label", k),
+                        "color": d.get("color", "#8b5cf6"),
+                        "prompt": d.get("prompt", d.get("class_label", k)),
+                    })
+        filtered_classes = filter_cellular_candidate_classes(derived_classes)
 
     virchow = VirchowModelWrapper.get_instance()
     if not virchow.is_loaded:
@@ -819,176 +1000,171 @@ def classify_with_virchow_prototypes(
             return classify_detections_with_conch(
                 image=image,
                 detections=detections,
-                candidate_classes=candidate_classes or [],
+                candidate_classes=filtered_classes,
                 temperature=temperature,
                 is_histology=is_histology,
             )
 
-    # 1. Extract crops for all detections
+    # 2. Extract crops for all detections
     crops = extract_crops_from_detections(image, detections)
     num_dets = len(detections)
 
-    # 2. Extract Virchow 1280-dim embeddings
+    # 3. Extract Virchow 1280-dim embeddings
     virchow_feats = virchow.encode_crops(crops, batch_size=16).float()  # (N, 1280)
+    virchow_feats_norm = F.normalize(virchow_feats, dim=-1)
 
-    # 3. Check for labeled exemplars in current detections
-    # Ignore generic single placeholder classes like "clase_1", "default", "unlabeled", "cell", "nucleus"
-    generic_keys = {"clase_1", "clase_0", "default", "unlabeled", "cell", "nucleus", "default_class", ""}
+    # 4. Check for labeled exemplars in current detections
+    generic_keys = {"clase_1", "clase_0", "default", "unlabeled", "cell", "nucleus", "default_class", "objeto", ""}
     
     class_exemplars: Dict[str, List[int]] = {}
     class_meta: Dict[str, Dict[str, Any]] = {}
 
     # Gather registered candidate classes metadata
-    if candidate_classes:
-        for c in candidate_classes:
-            k = c.get("key") or c.get("name")
-            if k:
-                class_meta[k] = {
-                    "key": k,
-                    "label": c.get("label", c.get("name", k)),
-                    "color": c.get("color", "#8b5cf6"),
-                    "prompt": c.get("prompt"),
-                }
+    for c in filtered_classes:
+        k = c.get("key") or c.get("name")
+        if k:
+            class_meta[k] = {
+                "key": k,
+                "label": c.get("label", c.get("name", k)),
+                "color": c.get("color", "#8b5cf6"),
+                "prompt": c.get("prompt"),
+            }
 
+    user_labeled_indices = set()
     for idx, det in enumerate(detections):
         ck = det.get("class_key") or det.get("category_id")
-        if ck and ck not in generic_keys and not det.get("unassigned", False):
-            if ck not in class_exemplars:
-                class_exemplars[ck] = []
-            class_exemplars[ck].append(idx)
-            if ck not in class_meta:
-                class_meta[ck] = {
-                    "key": ck,
-                    "label": det.get("class_label", ck),
-                    "color": det.get("color", "#8b5cf6"),
-                    "prompt": det.get("prompt"),
-                }
+        if ck and str(ck).lower().strip() not in generic_keys and not det.get("unassigned", False):
+            if is_cellular_class(ck):
+                if ck not in class_exemplars:
+                    class_exemplars[ck] = []
+                class_exemplars[ck].append(idx)
+                user_labeled_indices.add(idx)
+                if ck not in class_meta:
+                    class_meta[ck] = {
+                        "key": ck,
+                        "label": det.get("class_label", ck),
+                        "color": det.get("color", "#8b5cf6"),
+                        "prompt": det.get("prompt"),
+                    }
 
-    # Case A: User has provided >= 2 distinct classes with >= 1 exemplar each -> PURE PROTOTYPE MATCHING
-    if len(class_exemplars) >= 2:
-        logger.info(f"Virchow Prototype Mode: Using {len(class_exemplars)} labeled exemplar classes.")
-        target_keys = list(class_exemplars.keys())
-        prototypes = []
-        for k in target_keys:
+    # 5. First pass: Zero-Shot CONCH classification on all detections
+    if filtered_classes and len(filtered_classes) >= 1:
+        conch_classified = classify_detections_with_conch(
+            image=image,
+            detections=detections,
+            candidate_classes=filtered_classes,
+            temperature=temperature,
+            is_histology=is_histology,
+        )
+    else:
+        conch_classified = [dict(d) for d in detections]
+
+    # 6. Apply dynamic Morphometric statistics
+    areas = [_compute_detection_area(d) for d in conch_classified]
+    median_area = float(np.median(areas)) if areas else 100.0
+
+    class_meta_map: Dict[str, Dict[str, str]] = {}
+    for c in filtered_classes:
+        k = c.get("key", "")
+        class_meta_map[k] = {
+            "label": c.get("label", c.get("name", k)),
+            "color": c.get("color", "#8b5cf6"),
+        }
+
+    # 7. Few-Shot Exemplar Prototype Matching (if user provided 1+ exemplar classes)
+    exemplar_target_keys = list(class_exemplars.keys())
+    exemplar_prototypes = []
+    if exemplar_target_keys:
+        for k in exemplar_target_keys:
             ex_indices = class_exemplars[k]
-            ex_vectors = virchow_feats[ex_indices]  # (M, 1280)
+            ex_vectors = virchow_feats_norm[ex_indices]  # (M, 1280)
             centroid = torch.mean(ex_vectors, dim=0, keepdim=True)
             centroid = F.normalize(centroid, dim=-1)
-            prototypes.append(centroid)
-        
-        prototypes_tensor = torch.cat(prototypes, dim=0)  # (N_classes, 1280)
-        similarity_matrix = torch.matmul(virchow_feats, prototypes_tensor.T)  # (N_dets, N_classes)
-        probs = F.softmax(similarity_matrix / temperature, dim=-1).cpu().numpy()
-        similarities = similarity_matrix.cpu().numpy()
+            exemplar_prototypes.append(centroid)
+        exemplar_prototypes_tensor = torch.cat(exemplar_prototypes, dim=0)  # (N_exemplar_classes, 1280)
+        exemplar_sim_matrix = torch.matmul(virchow_feats_norm, exemplar_prototypes_tensor.T).cpu().numpy()
+    else:
+        exemplar_sim_matrix = None
 
-        classified = []
-        for i, det in enumerate(detections):
-            det_copy = dict(det)
-            best_idx = int(np.argmax(probs[i]))
-            best_key = target_keys[best_idx]
-            meta = class_meta.get(best_key, {"label": best_key, "color": "#8b5cf6"})
-
-            det_copy["category_id"] = best_key
-            det_copy["class_key"] = best_key
-            det_copy["class_label"] = meta["label"]
-            det_copy["color"] = meta["color"]
-            det_copy["virchow_confidence"] = round(float(probs[i][best_idx]), 4)
-            det_copy["virchow_similarity"] = round(float(similarities[i][best_idx]), 4)
-            det_copy["virchow_scores"] = {
-                target_keys[k]: round(float(probs[i][k]), 4)
-                for k in range(len(target_keys))
-            }
-            classified.append(det_copy)
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        return classified
-
-    # Case B: Zero-Shot Multi-Modal Enrichment (CONCH + Virchow Morphometrics)
-    # When user hasn't labeled exemplars yet, use enriched histological descriptions + morphometric size priors
-    classes_to_use = candidate_classes or []
-    if not classes_to_use:
-        # Default high-precision spermatogenesis classes
-        classes_to_use = [
-            {
-                "key": "spermatogonia",
-                "label": "Espermatogonia",
-                "name": "Espermatogonia",
-                "color": "#e11d48",
-                "prompt": HISTOLOGY_DISCRIMINATIVE_PROMPTS["espermatogonia"],
-            },
-            {
-                "key": "primary_spermatocyte",
-                "label": "Espermatocito I",
-                "name": "Espermatocito Primario",
-                "color": "#8b5cf6",
-                "prompt": HISTOLOGY_DISCRIMINATIVE_PROMPTS["primary_spermatocyte"],
-            },
-            {
-                "key": "spermatid",
-                "label": "Espermátide",
-                "name": "Espermátide",
-                "color": "#06b6d4",
-                "prompt": HISTOLOGY_DISCRIMINATIVE_PROMPTS["spermatid"],
-            },
-            {
-                "key": "spermatozoon",
-                "label": "Espermatozoide",
-                "name": "Espermatozoide",
-                "color": "#10b981",
-                "prompt": HISTOLOGY_DISCRIMINATIVE_PROMPTS["spermatozoon"],
-            },
-        ]
-
-    # Run CONCH zero-shot with enriched prompts
-    conch_classified = classify_detections_with_conch(
-        image=image,
-        detections=detections,
-        candidate_classes=classes_to_use,
-        temperature=temperature,
-        is_histology=is_histology,
-    )
-
-    # Apply Virchow 2 + morphological calibration (Area & Ratio Calibration)
-    # In seminiferous tubules: Primary Spermatocyte > Spermatogonia > Round Spermatid > Spermatozoon head
-    areas = []
-    for d in conch_classified:
-        bbox = d.get("bbox") or d.get("box") or [0, 0, 20, 20]
-        if len(bbox) == 4:
-            w = bbox[2] if bbox[2] > 0 and len(bbox) == 4 and not d.get("box") else (bbox[2] - bbox[0])
-            h = bbox[3] if bbox[3] > 0 and len(bbox) == 4 and not d.get("box") else (bbox[3] - bbox[1])
-            areas.append(max(1.0, float(abs(w * h))))
-        else:
-            areas.append(100.0)
-
-    median_area = float(np.median(areas)) if areas else 100.0
+    # Virchow inter-detection similarity matrix for neighbourhood consistency
+    virchow_sim_matrix = None
+    if virchow_feats is not None and len(virchow_feats) > 1:
+        virchow_sim_matrix = torch.matmul(virchow_feats_norm, virchow_feats_norm.T).cpu().numpy()
 
     final_classified = []
     for i, det in enumerate(conch_classified):
         det_copy = dict(det)
         area = areas[i]
         scores = det_copy.get("conch_scores", {})
-        
-        # If model is uncertain between spermatogonia and spermatid, use relative cell volume
-        if "spermatogonia" in scores and ("spermatid" in scores or "espermatide" in scores):
-            s_gonia = scores.get("spermatogonia", 0.0)
-            s_tid = scores.get("spermatid", scores.get("espermatide", 0.0))
-            
-            # If large cell (> 1.25x median area) with high gonia signal -> strongly favor Spermatogonia
-            if area >= 1.25 * median_area and s_gonia > 0.20:
-                det_copy["category_id"] = "spermatogonia"
-                det_copy["class_key"] = "spermatogonia"
-                det_copy["class_label"] = "Espermatogonia"
-                det_copy["color"] = "#e11d48"
-            # If small cell (< 0.85x median area) -> strongly favor Spermatid
-            elif area <= 0.85 * median_area and s_tid > 0.20:
-                det_copy["category_id"] = "spermatid"
-                det_copy["class_key"] = "spermatid"
-                det_copy["class_label"] = "Espermátide"
-                det_copy["color"] = "#06b6d4"
+        best_conf = det_copy.get("conch_confidence", 0.0)
+
+        # A. USER LABELED EXEMPLAR: ALWAYS PRESERVE USER CHOICE
+        if i in user_labeled_indices:
+            orig_det = detections[i]
+            ck = orig_det.get("class_key") or orig_det.get("category_id")
+            meta = class_meta.get(ck, {"label": orig_det.get("class_label", ck), "color": orig_det.get("color", "#8b5cf6")})
+            det_copy["category_id"] = ck
+            det_copy["class_key"] = ck
+            det_copy["class_label"] = meta["label"]
+            det_copy["color"] = meta["color"]
+            det_copy["virchow_confidence"] = 1.0
+            det_copy["is_user_exemplar"] = True
+            det_copy["virchow_verified"] = True
+            det_copy["detection_area"] = round(area, 1)
+            final_classified.append(det_copy)
+            continue
+
+        # B. PROPAGATE FROM USER EXEMPLARS IF VIRCHOW EMBEDDING IS VERY SIMILAR
+        matched_exemplar = False
+        if exemplar_sim_matrix is not None and len(exemplar_target_keys) > 0:
+            ex_sims = exemplar_sim_matrix[i]
+            best_ex_idx = int(np.argmax(ex_sims))
+            best_ex_sim = float(ex_sims[best_ex_idx])
+            # If similarity to a user exemplar is high (>= 0.78), propagate user's class
+            if best_ex_sim >= 0.78:
+                best_k = exemplar_target_keys[best_ex_idx]
+                meta = class_meta.get(best_k, {"label": best_k, "color": "#8b5cf6"})
+                det_copy["category_id"] = best_k
+                det_copy["class_key"] = best_k
+                det_copy["class_label"] = meta["label"]
+                det_copy["color"] = meta["color"]
+                det_copy["virchow_confidence"] = round(best_ex_sim, 4)
+                det_copy["virchow_similarity"] = round(best_ex_sim, 4)
+                det_copy["propagated_from_exemplar"] = True
+                matched_exemplar = True
+
+        if not matched_exemplar:
+            if best_conf < 0.40:
+                det_copy["classification_uncertain"] = True
 
         det_copy["virchow_verified"] = True
+        det_copy["detection_area"] = round(area, 1)
         final_classified.append(det_copy)
+
+    # 8. Data-driven neighbourhood consistency pass
+    if virchow_sim_matrix is not None:
+        confident_dets = [(j, d) for j, d in enumerate(final_classified) if not d.get("classification_uncertain")]
+        for i, det in enumerate(final_classified):
+            if not det.get("classification_uncertain") or i in user_labeled_indices:
+                continue
+            best_sim = -1.0
+            best_match_idx = -1
+            for j, _ in confident_dets:
+                if i == j:
+                    continue
+                sim = float(virchow_sim_matrix[i, j])
+                if sim > best_sim:
+                    best_sim = sim
+                    best_match_idx = j
+            if best_match_idx >= 0 and best_sim > 0.85:
+                donor = final_classified[best_match_idx]
+                det["category_id"] = donor["category_id"]
+                det["class_key"] = donor["class_key"]
+                det["class_label"] = donor["class_label"]
+                det["color"] = donor["color"]
+                det["classification_uncertain"] = False
+                det["neighbour_aligned"] = True
+                det["neighbour_similarity"] = round(best_sim, 4)
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

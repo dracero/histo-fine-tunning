@@ -209,6 +209,9 @@
 							<button type="button" id="classify-conch-btn" class="btn-action btn-primary-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem;">
 								🔬 Auto-Clasificar con CONCH
 							</button>
+							<button type="button" id="langgraph-classify-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(124,58,237,0.25);" title="Pipeline Multi-Agente con LangGraph, Detección de Etiquetas/Leyendas, CONCH y Virchow2">
+								🤖 LangGraph Multi-Agente (Leyendas + CONCH/Virchow)
+							</button>
 						</div>
 						<div id="classes-list" class="classes-list">
 							<p class="empty-hint">Segmenta una imagen para ver las clases detectadas.</p>
@@ -422,6 +425,12 @@
 							<button type="button" id="extract-virchow-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Extraer vectores de características de 1280d de Virchow (Paige AI)">
 								🧬 Virchow (1280d)
 							</button>
+							<button type="button" id="gemini-multimodal-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(168,85,247,0.35);" title="Fusión Multimodal: Gemini Vision + Virchow 2 (1280d) + CONCH (512d)">
+								✨ Gemini + Virchow2 + CONCH
+							</button>
+							<button type="button" id="toggle-langgraph-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.35);" title="Pipeline Multi-Agente: LangGraph + Gemini OCR/Etiquetas + CONCH + Virchow2">
+								🤖 LangGraph Multi-Agente
+							</button>
 							<span class="separator">|</span>
 							<label class="toggle-container">
 								<input type="checkbox" id="toggle-polygons" checked />
@@ -471,6 +480,7 @@
 			<div class="tooltip-category" id="tooltip-category">-</div>
 			<div class="tooltip-score">Confianza: <span id="tooltip-score-val">0.00</span></div>
 			<div class="tooltip-coords">Box: <span id="tooltip-coords-val">0, 0</span></div>
+			<div id="tooltip-reason-val" style="display: none; font-size: 0.72rem; color: #cbd5e1; margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.2); max-width: 260px; line-height: 1.3;"></div>
 			<div class="tooltip-hint">Click = seleccionar · Shift+Click = multi-select</div>
 		</div>
 
@@ -903,6 +913,7 @@
 	const tooltipCategory = document.getElementById("tooltip-category");
 	const tooltipScore = document.getElementById("tooltip-score-val");
 	const tooltipCoords = document.getElementById("tooltip-coords-val");
+	const tooltipReason = document.getElementById("tooltip-reason-val");
 
 	const contextMenu = document.getElementById("context-menu");
 	const ctxHeader = document.getElementById("ctx-header");
@@ -1529,13 +1540,27 @@
 			tooltipCategory.textContent = label;
 			tooltipCategory.style.color = color;
 			let scoreText = `${(det.score * 100).toFixed(1)}%`;
+			if (det.gemini_confidence !== undefined) {
+				scoreText += ` · ✨ Gemini: ${(det.gemini_confidence * 100).toFixed(0)}%`;
+			}
 			if (det.conch_confidence) {
 				scoreText += ` · 🔬 CONCH: ${(det.conch_confidence * 100).toFixed(0)}%`;
+			}
+			if (det.virchow_similarity) {
+				scoreText += ` · 🧬 Virchow: ${(det.virchow_similarity * 100).toFixed(0)}%`;
 			}
 			tooltipScore.textContent = scoreText;
 			if (det.box) {
 				const [x1, y1, x2, y2] = det.box;
 				tooltipCoords.textContent = `${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}`;
+			}
+			if (tooltipReason) {
+				if (det.gemini_reasoning) {
+					tooltipReason.textContent = `💡 ${det.gemini_reasoning}`;
+					tooltipReason.style.display = "block";
+				} else {
+					tooltipReason.style.display = "none";
+				}
 			}
 			tooltip.style.display = "block";
 		});
@@ -2629,6 +2654,8 @@
 	// CONCH buttons
 	const classifyConchBtn = document.getElementById("classify-conch-btn");
 	const toggleConchClassifyBtn = document.getElementById("toggle-conch-classify-btn");
+	const langgraphClassifyBtn = document.getElementById("langgraph-classify-btn");
+	const toggleLanggraphBtn = document.getElementById("toggle-langgraph-btn");
 
 	// --- 1. Pathology Foundation Models Status ---
 	async function initPathologyModelsStatus() {
@@ -3012,6 +3039,401 @@
 	}
 
 	extractVirchowBtn?.addEventListener("click", runVirchowExtraction);
+
+	// --- 4. Gemini Multimodal Vision + Virchow 2 + CONCH Fusion ---
+	const geminiMultimodalBtn = document.getElementById("gemini-multimodal-btn");
+
+	async function runGeminiMultimodalFusion() {
+		if (!activeImageKey) {
+			alert("Selecciona primero una imagen con segmentaciones.");
+			return;
+		}
+
+		const data = imageStore.get(activeImageKey);
+		if (!data || !data.groups || data.groups.length === 0) {
+			alert("Esta imagen no tiene detecciones. Ejecuta primero la segmentación.");
+			return;
+		}
+
+		let allDets = [];
+		data.groups.forEach((g) => {
+			if (g.detections) {
+				g.detections.forEach((d) => {
+					allDets.push({
+						...d,
+						id: d.id,
+						class_key: d.class_key || g.key,
+						class_label: d.class_label || g.label,
+						category_id: d.category_id || g.key,
+						color: d.color || g.color,
+						bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+						score: d.score !== undefined ? d.score : 0.95,
+					});
+				});
+			}
+		});
+
+		if (allDets.length === 0) {
+			alert("No hay detecciones válidas en la imagen.");
+			return;
+		}
+
+		// Prepare candidate classes
+		let candidateClasses = classRegistry.map(c => ({
+			key: c.key,
+			name: c.name,
+			label: c.name,
+			prompt: c.prompt || c.name,
+			color: c.color,
+		}));
+
+		if (candidateClasses.length === 0) {
+			candidateClasses = data.groups.map(g => ({
+				key: g.key,
+				name: g.label,
+				label: g.label,
+				prompt: g.label,
+				color: g.color,
+			}));
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `✨ Gemini + Virchow2 + CONCH: Analizando ${allDets.length} células con visión espacial y embeddings...`;
+
+		try {
+			let imageFile = data.file;
+			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+				const arr = data.dataUrl.split(",");
+				const mime = arr[0].match(/:(.*?);/)[1];
+				const bstr = atob(arr[1]);
+				let n = bstr.length;
+				const u8arr = new Uint8Array(n);
+				while (n--) u8arr[n] = bstr.charCodeAt(n);
+				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+			}
+
+			const formData = new FormData();
+			formData.append("image", imageFile);
+			formData.append("detections", JSON.stringify(allDets));
+			formData.append("classes", JSON.stringify(candidateClasses));
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			const res = await fetch(`${API_URL}/classify-multimodal-gemini`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				let errText = `Error HTTP ${res.status}`;
+				try {
+					const errObj = await res.json();
+					errText = errObj.detail || errObj.message || errText;
+				} catch (_) {
+					const raw = await res.text();
+					if (raw) errText = raw.slice(0, 150);
+				}
+				throw new Error(errText);
+			}
+
+			const result = await res.json();
+			const classified = result.detections || [];
+
+			if (classified.length > 0) {
+				const groupsMap = new Map();
+				for (let i = 0; i < classified.length; i++) {
+					const det = classified[i];
+					const origDet = allDets[i] || {};
+
+					det.segmentation = det.segmentation || origDet.segmentation || [];
+					det.box = det.box || origDet.box;
+					det.bbox = det.bbox || origDet.bbox;
+					det.score = det.gemini_confidence !== undefined ? det.gemini_confidence : (origDet.score || 0.95);
+
+					const groupKey = det.class_key || det.category_id || "clase_1";
+					if (!groupsMap.has(groupKey)) {
+						groupsMap.set(groupKey, {
+							key: groupKey,
+							label: det.class_label || groupKey,
+							color: det.color || getClassColor(groupKey),
+							detections: [],
+						});
+					}
+					groupsMap.get(groupKey).detections.push(det);
+
+					if (!classRegistry.find(c => c.key === groupKey)) {
+						classRegistry.push({
+							id: classIdCounter++,
+							name: det.class_label || groupKey,
+							color: det.color || "#8b5cf6",
+							key: groupKey,
+							prompt: det.class_label || groupKey,
+						});
+					}
+				}
+
+				data.groups = Array.from(groupsMap.values());
+
+				selectedDetections.clear();
+				updateSelectionToolbar();
+				renderOverlay();
+				updateClassesList();
+				renderGallery();
+				updateExportStats();
+
+				statusText.textContent = `✨ Fusión Multimodal: ${classified.length} células clasificadas por Gemini + Virchow2 + CONCH.`;
+			} else {
+				statusText.textContent = `ℹ️ No se generaron clasificaciones nuevas.`;
+			}
+
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3000);
+
+		} catch (e) {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+			alert("Error en Fusión Multimodal (Gemini + Virchow2 + CONCH): " + e.message);
+		}
+	}
+
+	geminiMultimodalBtn?.addEventListener("click", runGeminiMultimodalFusion);
+
+	// --- LangGraph Multi-Agent Workflow Runner ---
+	async function runLangGraphClassification() {
+		if (!activeImageKey || !imageStore.has(activeImageKey)) {
+			alert("Carga o selecciona una imagen primero.");
+			return;
+		}
+
+		const data = imageStore.get(activeImageKey);
+		const key = activeImageKey;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `🤖 LangGraph: Preparando imagen y ontología...`;
+
+		try {
+			// 1. Resolve image file from File, dataUrl, or URL
+			let imageFile = data.file;
+			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+				const arr = data.dataUrl.split(",");
+				const mime = (arr[0].match(/:(.*?);/) || [])[1] || "image/png";
+				const bstr = atob(arr[1]);
+				let n = bstr.length;
+				const u8arr = new Uint8Array(n);
+				while (n--) u8arr[n] = bstr.charCodeAt(n);
+				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+			} else if (!(imageFile instanceof File || imageFile instanceof Blob) && data.url) {
+				const blob = await fetch(data.url).then(r => r.blob());
+				imageFile = new File([blob], data.filename || "image.jpg", { type: blob.type || "image/jpeg" });
+			}
+
+			if (!imageFile) throw new Error("No se pudo obtener el archivo de imagen.");
+
+			// 2. Check if we have detections; if not, auto-segment first
+			let allDets = [];
+			(data.groups || []).forEach(g => {
+				(g.detections || []).forEach(d => {
+					allDets.push({
+						...d,
+						id: d.id,
+						class_key: d.class_key || g.key,
+						class_label: d.class_label || g.label,
+						category_id: d.category_id || g.key,
+						color: d.color || g.color,
+						bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+						segmentation: d.segmentation || [],
+						score: d.score !== undefined ? d.score : 0.95,
+					});
+				});
+			});
+
+			if (allDets.length === 0) {
+				statusText.textContent = `🤖 LangGraph: Auto-segmentando núcleos celulares con Cellpose-SAM...`;
+				const segFormData = new FormData();
+				segFormData.append("image", imageFile);
+				segFormData.append("model_engine", currentEngine || "cellpose");
+				segFormData.append("cellpose_model", currentCellposeModel || "cpsam");
+				if (thresholdSlider) {
+					segFormData.append("umbral", thresholdSlider.value);
+				}
+				if (window._activeOntologyName) {
+					segFormData.append("ontology_name", window._activeOntologyName);
+				}
+
+				const segResponse = await fetch(`${API_URL}/segment-auto`, {
+					method: "POST",
+					body: segFormData,
+				});
+
+				if (!segResponse.ok) {
+					let errDetail = "Error al auto-segmentar núcleos.";
+					try {
+						const errObj = await segResponse.json();
+						errDetail = errObj.detail || errDetail;
+					} catch (_) {}
+					throw new Error(errDetail);
+				}
+
+				const segResult = await segResponse.json();
+				data.groups = segResult.groups || [];
+				data.width = segResult.width || data.width;
+				data.height = segResult.height || data.height;
+				data.annotated = true;
+
+				allDets = [];
+				(data.groups || []).forEach(g => {
+					(g.detections || []).forEach(d => {
+						allDets.push({
+							...d,
+							id: d.id,
+							class_key: d.class_key || g.key,
+							class_label: d.class_label || g.label,
+							category_id: d.category_id || g.key,
+							color: d.color || g.color,
+							bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+							box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+							segmentation: d.segmentation || [],
+							score: d.score !== undefined ? d.score : 0.95,
+						});
+					});
+				});
+
+				if (allDets.length === 0) {
+					throw new Error("No se detectaron núcleos celulares en la imagen para clasificar.");
+				}
+			}
+
+			// 3. Execute LangGraph Multi-Agent Workflow
+			statusText.textContent = `🤖 LangGraph: Evaluando leyendas en imagen + CONCH + Virchow2 + Gemini Reasoning...`;
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			if (candidateClasses.length === 0 && data.groups && data.groups.length > 0) {
+				candidateClasses = data.groups.map(g => ({
+					key: g.key,
+					name: g.label || g.key,
+					label: g.label || g.key,
+					prompt: g.label || g.key,
+					color: g.color,
+				}));
+			}
+
+			const formData = new FormData();
+			formData.append("image", imageFile);
+			formData.append("detections", JSON.stringify(allDets));
+			if (candidateClasses && candidateClasses.length > 0) {
+				formData.append("classes", JSON.stringify(candidateClasses));
+			}
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			const res = await fetch(`${API_URL}/pipeline/agentic-classify`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				let errText = `Error HTTP ${res.status}`;
+				try {
+					const errObj = await res.json();
+					errText = errObj.detail || errObj.message || errText;
+				} catch (_) {
+					const raw = await res.text();
+					if (raw) errText = raw.slice(0, 150);
+				}
+				throw new Error(errText);
+			}
+
+			const result = await res.json();
+			const classified = result.detections || [];
+			const detectedLabels = result.detected_figure_labels || [];
+			const abbrevMap = result.figure_abbreviations || {};
+
+			if (classified.length > 0) {
+				const groupsMap = new Map();
+				for (let i = 0; i < classified.length; i++) {
+					const det = classified[i];
+					const origDet = allDets[i] || {};
+
+					det.segmentation = det.segmentation || origDet.segmentation || [];
+					det.box = det.box || origDet.box;
+					det.bbox = det.bbox || origDet.bbox;
+					det.score = det.confidence !== undefined ? det.confidence : (origDet.score || 0.95);
+
+					const groupKey = det.class_key || det.category_id || "clase_1";
+					if (!groupsMap.has(groupKey)) {
+						groupsMap.set(groupKey, {
+							key: groupKey,
+							label: det.class_label || groupKey,
+							color: det.color || getClassColor(groupKey),
+							detections: [],
+						});
+					}
+					groupsMap.get(groupKey).detections.push(det);
+
+					if (!classRegistry.find(c => c.key === groupKey)) {
+						classRegistry.push({
+							id: classIdCounter++,
+							name: det.class_label || groupKey,
+							color: det.color || "#8b5cf6",
+							key: groupKey,
+							prompt: det.class_label || groupKey,
+						});
+					}
+				}
+
+				data.groups = Array.from(groupsMap.values());
+
+				if (key === activeImageKey) {
+					viewerControls.style.display = "flex";
+					selectedDetections.clear();
+					updateSelectionToolbar();
+					renderOverlay();
+					updateClassesList();
+				}
+				renderGallery();
+				updateExportStats();
+
+				let labelNote = "";
+				if (detectedLabels.length > 0) {
+					const abbrevKeys = Object.entries(abbrevMap).map(([k, v]) => `${k}→${v}`).join(", ");
+					labelNote = ` | 🏷️ ${detectedLabels.length} etiquetas/flechas en figura (${abbrevKeys || "detectadas"})`;
+				}
+
+				statusText.textContent = `🤖 LangGraph: ${classified.length} núcleos clasificados exitosamente${labelNote}.`;
+			} else {
+				statusText.textContent = `ℹ️ No se generaron clasificaciones nuevas.`;
+			}
+
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3500);
+
+		} catch (e) {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+			console.error("LangGraph error:", e);
+			alert("Error en Pipeline Multi-Agente (LangGraph): " + e.message);
+		}
+	}
+
+	langgraphClassifyBtn?.addEventListener("click", runLangGraphClassification);
+	toggleLanggraphBtn?.addEventListener("click", runLangGraphClassification);
 
 	document.querySelectorAll(".load-ontology-cells-btn").forEach(btn => {
 		btn.addEventListener("click", async () => {

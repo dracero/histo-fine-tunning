@@ -46,12 +46,12 @@ except ImportError as e:
     logger.error(f"Error importing SAM3 modules: {e}")
     raise
 
-# Try importing Ultralytics SAM 3 Semantic Predictor
+# Try importing Ultralytics SAM 3 Semantic Predictor (optional)
 try:
     from ultralytics.models.sam import SAM3SemanticPredictor
 except ImportError:
     SAM3SemanticPredictor = None
-    logger.warning("Ultralytics SAM3SemanticPredictor not found.")
+    logger.debug("Ultralytics SAM3SemanticPredictor not installed; using native Meta SAM 3 & Cellpose.")
 
 # Import Roboflow integration
 from roboflow_integration import (
@@ -94,12 +94,14 @@ from pathology_models import (
     extract_detection_embeddings_virchow,
     discriminate_and_cluster_with_pathology_models,
     group_detections_by_class,
+    filter_cellular_candidate_classes,
 )
 
 # Import Dynamic Multimodal LLM Vision Assistant (Gemini 2.5 Flash)
 from gemini_vision import (
     refine_prompt_multimodal,
     discover_visual_primitives_from_image,
+    classify_with_multimodal_gemini_fusion,
 )
 
 # Import Cellpose & Cellpose-SAM Histological Segmentation Module
@@ -110,6 +112,12 @@ from cellpose_segmenter import (
     AVAILABLE_CELLPOSE_MODELS,
     load_cellpose_model,
     offload_cellpose_to_cpu,
+)
+
+# Import LangGraph Multi-Agent Histopathology Workflow
+from histology_graph import (
+    HistologyMultiAgentPipeline,
+    build_histology_graph,
 )
 
 # Global variables for model and processor
@@ -828,14 +836,18 @@ async def segment_auto(
 
         logger.info(f"Ontology domain histology status: is_histology={is_histo}")
 
+        # Filter candidate classes to retain only cellular entities (remove lumen, tubule wall, tissue, organs)
+        cellular_prompts = filter_cellular_candidate_classes(prompts_to_run)
+        effective_classes = cellular_prompts if cellular_prompts else prompts_to_run
+
         classified_detections = []
         if filtered_candidates:
             try:
                 classified_detections = discriminate_and_cluster_with_pathology_models(
                     image=pil_image,
                     detections=filtered_candidates,
-                    candidate_classes=prompts_to_run,
-                    temperature=0.05,
+                    candidate_classes=effective_classes,
+                    temperature=0.12,
                     is_histology=is_histo,
                 )
             except Exception as disc_err:
@@ -843,7 +855,7 @@ async def segment_auto(
                 classified_detections = filtered_candidates
 
         # 5. Group into structured categories for UI rendering
-        all_groups = group_detections_by_class(classified_detections, candidate_classes=prompts_to_run)
+        all_groups = group_detections_by_class(classified_detections, candidate_classes=effective_classes)
         total_detections = sum(g["count"] for g in all_groups)
 
         if torch.cuda.is_available():
@@ -1283,29 +1295,13 @@ async def classify_conch(
         else:
             is_histo = is_histology_ontology({"structures": classes_list})
 
-        NON_CELLULAR_KEYS = {
-            "testis", "testiculo", "testicular_lobule", "lobulillo_testicular",
-            "seminiferous_tubule", "tubulos_seminiferos", "tubular_wall", "pared_tubular",
-            "luz_tubular", "tubular_lumen", "epitelio_seminifero", "seminiferous_epithelium",
-            "celulas_germinales", "germ_cell", "fibras_colagenas", "collagen_fibers",
-            "lamina_basal_del_epitelio", "epithelial_basal_lamina"
-        }
-
         # 1. Filter candidate classes to retain only real cellular subtypes
-        final_candidate_classes = [
-            c for c in classes_list
-            if c.get("key", "").lower().strip() not in NON_CELLULAR_KEYS
-            and c.get("label", "").lower().strip() not in ("luz tubular", "epitelio seminifero", "tubulo seminifero", "tubulos seminiferos")
-        ]
+        final_candidate_classes = filter_cellular_candidate_classes(classes_list)
 
         # 2. If ontology is available, pull the exact cellular structures
         if ont_doc and "structures" in ont_doc and len(ont_doc["structures"]) > 0:
             ont_structs = ont_doc["structures"]
-            cellular_structs = [
-                s for s in ont_structs
-                if s.get("key", "").lower().strip() not in NON_CELLULAR_KEYS
-                and s.get("label", s.get("name", "")).lower().strip() not in ("luz tubular", "epitelio seminifero", "tubulo seminifero", "tubulos seminiferos")
-            ]
+            cellular_structs = filter_cellular_candidate_classes(ont_structs)
             if len(cellular_structs) >= 2:
                 logger.info(f"Using {len(cellular_structs)} cellular structures from ontology '{ontology_name}' for CONCH.")
                 final_candidate_classes = [
@@ -1319,53 +1315,16 @@ async def classify_conch(
                     for s in cellular_structs
                 ]
 
-        # 3. If still empty or insufficient, use high-precision histological spermatogenesis cellular palette
+        # 3. If still empty, discover candidate visual structures dynamically using Gemini Vision
         if len(final_candidate_classes) < 2:
-            logger.info("Using default high-precision spermatogenesis cellular classes for CONCH.")
-            final_candidate_classes = [
-                {
-                    "key": "primary_spermatocyte",
-                    "label": "Espermatocito Primario",
-                    "name": "Espermatocito Primario",
-                    "prompt": "large spherical primary spermatocyte cell with voluminous nucleus and coarse chromatin in seminiferous epithelium",
-                    "color": "#38bdf8",
-                },
-                {
-                    "key": "secondary_spermatocyte",
-                    "label": "Espermatocito Secundario",
-                    "name": "Espermatocito Secundario",
-                    "prompt": "intermediate spherical secondary spermatocyte cell with granular chromatin",
-                    "color": "#4ade80",
-                },
-                {
-                    "key": "spermatozoon",
-                    "label": "Espermatozoide",
-                    "name": "Espermatozoide",
-                    "prompt": "mature spermatozoon cell with small condensed dark elongated head and flagellum in tubule lumen",
-                    "color": "#ef4444",
-                },
-                {
-                    "key": "spermatid",
-                    "label": "Espermátide",
-                    "name": "Espermátide",
-                    "prompt": "small round early spermatid cell with pale spherical nucleus near lumen",
-                    "color": "#e11d48",
-                },
-                {
-                    "key": "spermatogonia",
-                    "label": "Espermatogonia",
-                    "name": "Espermatogonia",
-                    "prompt": "dome-shaped basal spermatogonium cell resting on basement membrane",
-                    "color": "#a855f7",
-                },
-                {
-                    "key": "sertoli_cell",
-                    "label": "Célula de Sertoli",
-                    "name": "Célula de Sertoli",
-                    "prompt": "tall supportive Sertoli cell with pale indented nucleus and prominent nucleolus",
-                    "color": "#f59e0b",
-                },
-            ]
+            logger.info("No explicit cellular classes provided. Discovering visual structures dynamically with Gemini Vision...")
+            try:
+                discovered = discover_visual_primitives_from_image(pil_image)
+                if discovered:
+                    final_candidate_classes = filter_cellular_candidate_classes(discovered)
+            except Exception as gemini_err:
+                logger.warning(f"Dynamic structure discovery failed: {gemini_err}")
+                final_candidate_classes = classes_list
 
         classified = classify_detections_with_conch(
             image=pil_image,
@@ -1486,7 +1445,7 @@ async def classify_virchow_prototypes_endpoint(
     image: UploadFile = File(...),
     detections: str = Form(...),
     classes: Optional[str] = Form(None),
-    temperature: float = Form(0.05),
+    temperature: float = Form(0.12),
     ontology_name: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
@@ -1537,6 +1496,156 @@ async def classify_virchow_prototypes_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in Virchow prototype classification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/classify-multimodal-gemini")
+async def classify_multimodal_gemini_endpoint(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    classes: Optional[str] = Form(None),
+    ontology_name: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Multimodal Agentic Classification:
+    Fuses Gemini Multimodal Spatial Vision + Virchow 2 (1280d) Texture + CONCH (512d) Embeddings.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+
+        if not isinstance(detections_list, list):
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
+
+        candidate_classes = []
+        if classes and classes.strip():
+            try:
+                candidate_classes = json.loads(classes)
+            except Exception as parse_err:
+                logger.warning(f"Failed to parse candidate classes: {parse_err}")
+                candidate_classes = []
+
+        # Load ontology doc if available
+        ont_doc = None
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc and "structures" in ont_doc and not candidate_classes:
+                candidate_classes = ont_doc["structures"]
+
+        classified = classify_with_multimodal_gemini_fusion(
+            image=pil_image,
+            detections=detections_list,
+            candidate_classes=candidate_classes,
+            ontology_name=ontology_name,
+            ontology_context=ont_doc,
+        )
+
+        return {
+            "success": True,
+            "total_classified": len(classified),
+            "detections": classified,
+            "fusion_mode": "Gemini Multimodal Vision + Paige AI Virchow 2 (1280d) + CONCH (512d)",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Multimodal Gemini classification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================== LangGraph Multi-Agent Workflow ========================
+
+@app.get("/api/pipeline/agentic-status")
+def agentic_status() -> Dict[str, Any]:
+    """Check LangGraph Multi-Agent Histopathology Workflow status."""
+    has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
+    return {
+        "status": "ready",
+        "framework": "LangGraph + Gemini 2.5/3.1 + CONCH + Virchow 2",
+        "gemini_configured": has_gemini,
+        "nodes": [
+            "ontology_reader",
+            "image_label_detector",
+            "segmentation_cropper",
+            "foundation_matcher",
+            "final_classifier",
+        ],
+    }
+
+
+@app.post("/api/pipeline/agentic-classify")
+async def pipeline_agentic_classify(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    classes: Optional[str] = Form(None),
+    ontology_name: Optional[str] = Form(None),
+    raw_ontology: Optional[str] = Form(None),
+    user_context_hint: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Run the LangGraph Multi-Agent Histopathology Pipeline:
+    1. Read and structure active ontology (Gemini / Ontology Store).
+    2. Extract visual labels, abbreviations, letters, and arrows from the image (Gemini Vision).
+    3. Calculate morphometric descriptors and link spatial proximity hints.
+    4. Compute CONCH zero-shot similarities and Virchow 2 ViT-H 1280d embeddings.
+    5. Adjudicate cellular classes, resolve ambiguity, and assign final annotations.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {json_err}")
+
+        if not isinstance(detections_list, list):
+            raise HTTPException(status_code=400, detail="Detections must be a list of detection objects.")
+
+        parsed_classes = None
+        if classes and classes.strip():
+            try:
+                parsed_classes = json.loads(classes)
+            except Exception as e:
+                logger.warning(f"Could not parse candidate classes: {e}")
+
+        parsed_raw_ontology = None
+        if raw_ontology and raw_ontology.strip():
+            try:
+                parsed_raw_ontology = json.loads(raw_ontology)
+            except Exception as e:
+                logger.warning(f"Could not parse raw_ontology: {e}")
+
+        pipeline = HistologyMultiAgentPipeline.get_instance()
+        results = pipeline.run(
+            image=pil_image,
+            detections=detections_list,
+            ontology_name=ontology_name,
+            candidate_classes=parsed_classes,
+            raw_ontology=parsed_raw_ontology,
+            user_context_hint=user_context_hint,
+        )
+
+        return {
+            "success": True,
+            "detections": results.get("detections", []),
+            "detected_figure_labels": results.get("detected_figure_labels", []),
+            "figure_abbreviations": results.get("figure_abbreviations", {}),
+            "figure_visual_notes": results.get("figure_visual_notes", ""),
+            "classification_summary": results.get("classification_summary", {}),
+            "reasoning_log": results.get("reasoning_log", []),
+            "candidate_classes": results.get("candidate_classes", []),
+            "execution_metrics": results.get("execution_metrics", {}),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in LangGraph agentic classify pipeline: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

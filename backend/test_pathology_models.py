@@ -199,6 +199,53 @@ class TestPathologyModels(unittest.TestCase):
             import shutil
             shutil.rmtree(test_dir)
 
+    def test_multimodal_gemini_fusion(self):
+        from gemini_vision import classify_with_multimodal_gemini_fusion
+
+        detections = [
+            {
+                "id": "det_1",
+                "bbox": [20, 20, 50, 50],
+                "box": [20, 20, 70, 70],
+                "polygon": [[20, 20], [70, 20], [70, 70], [20, 70]],
+                "confidence": 0.85,
+            },
+            {
+                "id": "det_2",
+                "bbox": [100, 100, 60, 60],
+                "box": [100, 100, 160, 160],
+                "polygon": [[100, 100], [160, 100], [160, 160], [100, 160]],
+                "confidence": 0.90,
+            }
+        ]
+
+        candidate_classes = [
+            {
+                "key": "spermatogonia",
+                "prompt": "small dark round cell at basement membrane",
+                "label": "Espermatogonia",
+                "color": "#e11d48",
+            },
+            {
+                "key": "sertoli_cell",
+                "prompt": "tall columnar supportive cell",
+                "label": "Célula de Sertoli",
+                "color": "#06b6d4",
+            }
+        ]
+
+        classified = classify_with_multimodal_gemini_fusion(
+            image=self.test_img,
+            detections=detections,
+            candidate_classes=candidate_classes,
+        )
+
+        self.assertEqual(len(classified), 2)
+        self.assertIn("class_key", classified[0])
+        self.assertIn("gemini_confidence", classified[0])
+        self.assertIn("gemini_reasoning", classified[0])
+
 
 if __name__ == "__main__":
     unittest.main()
+

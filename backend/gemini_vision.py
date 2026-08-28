@@ -219,6 +219,7 @@ def classify_with_multimodal_gemini_fusion(
         classify_detections_with_conch,
         filter_cellular_candidate_classes,
         VirchowModelWrapper,
+        UniModelWrapper,
         _compute_detection_area,
     )
     import torch
@@ -241,7 +242,7 @@ def classify_with_multimodal_gemini_fusion(
         for i, c in enumerate(cellular_classes)
     }
 
-    # 2. Extract crops and compute Virchow 2 (1280-dim) & CONCH (512-dim)
+    # 2. Extract crops and compute Virchow 2 (1280-dim), UNI (1024-dim) & CONCH (512-dim)
     crops = extract_crops_from_detections(image, detections)
     num_dets = len(detections)
 
@@ -258,6 +259,20 @@ def classify_with_multimodal_gemini_fusion(
             logger.info(f"Computed Virchow 2 (1280d) features for {num_dets} cells")
     except Exception as virchow_err:
         logger.warning(f"Virchow feature computation skipped: {virchow_err}")
+
+    uni_feats = None
+    uni_sim_matrix = None
+    try:
+        uni = UniModelWrapper.get_instance()
+        if not uni.is_loaded:
+            uni.load()
+        if uni.is_loaded:
+            uni_feats = uni.encode_crops(crops, batch_size=16).float()
+            uni_norm = F.normalize(uni_feats, dim=-1)
+            uni_sim_matrix = torch.matmul(uni_norm, uni_norm.T).cpu().numpy()
+            logger.info(f"Computed UNI (1024d) features for {num_dets} cells")
+    except Exception as uni_err:
+        logger.warning(f"UNI feature computation skipped: {uni_err}")
 
     conch_classified = classify_detections_with_conch(
         image=image,

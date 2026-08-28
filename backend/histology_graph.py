@@ -23,6 +23,17 @@ import numpy as np
 from PIL import Image
 import torch
 
+import sys
+from pathlib import Path
+
+# Ensure backend and root are in sys.path for direct and modular imports
+_backend_dir = str(Path(__file__).resolve().parent)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+_root_dir = str(Path(__file__).resolve().parent.parent)
+if _root_dir not in sys.path:
+    sys.path.insert(0, _root_dir)
+
 try:
     from langgraph.graph import StateGraph, START, END
 except ImportError:
@@ -30,16 +41,34 @@ except ImportError:
     START = "__start__"
     END = "__end__"
 
-from backend.gemini_vision import _get_gemini_client
-from backend.pathology_models import (
-    classify_detections_with_conch,
-    classify_with_virchow_prototypes,
-    filter_cellular_candidate_classes,
-    enrich_histology_prompt,
-    ConchModelWrapper,
-    VirchowModelWrapper,
-)
-from backend.pdf_ontology import list_ontologies, load_ontology
+try:
+    from backend.gemini_vision import _get_gemini_client
+    from backend.pathology_models import (
+        classify_detections_with_conch,
+        classify_with_virchow_prototypes,
+        classify_with_morphological_ensemble,
+        filter_cellular_candidate_classes,
+        enrich_histology_prompt,
+        extract_crops_from_detections,
+        ConchModelWrapper,
+        VirchowModelWrapper,
+        UniModelWrapper,
+    )
+    from backend.pdf_ontology import list_ontologies, load_ontology
+except ImportError:
+    from gemini_vision import _get_gemini_client
+    from pathology_models import (
+        classify_detections_with_conch,
+        classify_with_virchow_prototypes,
+        classify_with_morphological_ensemble,
+        filter_cellular_candidate_classes,
+        enrich_histology_prompt,
+        extract_crops_from_detections,
+        ConchModelWrapper,
+        VirchowModelWrapper,
+        UniModelWrapper,
+    )
+    from pdf_ontology import list_ontologies, load_ontology
 
 logger = logging.getLogger("sam3-langgraph")
 
@@ -79,9 +108,10 @@ class HistologyGraphState(TypedDict, total=False):
     detections: List[Dict[str, Any]]
     segmentation_source: str
 
-    # Node 4: Foundation Models (CONCH & Virchow2)
+    # Node 4: Foundation Models (CONCH, Virchow2 & UNI)
     conch_scored_detections: List[Dict[str, Any]]
     virchow_features_computed: bool
+    uni_features_computed: bool
 
     # Node 5: Final Decisions & Reasoning
     final_detections: List[Dict[str, Any]]
@@ -469,50 +499,63 @@ def foundation_matcher_node(state: HistologyGraphState) -> Dict[str, Any]:
 
     # 1. Run CONCH Zero-Shot Classification on all detections
     try:
-        logger.info(f"[FoundationMatcherNode] Running CONCH zero-shot matching on {len(detections)} cells with {len(candidate_classes)} candidate classes...")
+        logger.info(f"[FoundationMatcherNode] Running CONCH zero-shot matching on {len(detections)} cells with {len(candidate_classes)} candidate classes (T=0.12)...")
         scored_detections = classify_detections_with_conch(
             image=img_pil,
             detections=detections,
             candidate_classes=candidate_classes,
-            temperature=0.08,
+            temperature=0.12,
             is_histology=True,
         )
     except Exception as e:
         logger.warning(f"[FoundationMatcherNode] CONCH zero-shot skipped or failed: {e}")
 
-    # 2. Run Virchow 2 Morphological Prototype Evaluation if available
+    # 2. Run Morphological Ensemble Evaluation (Virchow 2 1280d + UNI 1024d)
     virchow_computed = False
+    uni_computed = False
     try:
         virchow_wrapper = VirchowModelWrapper.get_instance()
-        if virchow_wrapper.is_loaded:
-            logger.info("[FoundationMatcherNode] Running Virchow 2 prototype evaluation...")
-            scored_detections = classify_with_virchow_prototypes(
+        if not virchow_wrapper.is_loaded:
+            virchow_wrapper.load()
+        virchow_computed = bool(virchow_wrapper.is_loaded)
+
+        uni_wrapper = UniModelWrapper.get_instance()
+        if not uni_wrapper.is_loaded:
+            uni_wrapper.load()
+        uni_computed = bool(uni_wrapper.is_loaded)
+
+        if virchow_computed or uni_computed:
+            logger.info(f"[FoundationMatcherNode] Running Dual Foundation Ensemble (Virchow 2: {virchow_computed}, UNI: {uni_computed})...")
+            scored_detections = classify_with_morphological_ensemble(
                 image=img_pil,
                 detections=scored_detections,
                 candidate_classes=candidate_classes,
                 temperature=0.12,
                 is_histology=True,
             )
-            virchow_computed = True
+        else:
+            logger.warning("[FoundationMatcherNode] Neither Virchow 2 nor UNI could be loaded; continuing with CONCH zero-shot.")
     except Exception as e:
-        logger.warning(f"[FoundationMatcherNode] Virchow 2 skipped: {e}")
+        logger.warning(f"[FoundationMatcherNode] Morphological ensemble skipped: {e}")
 
     logger.info(f"[FoundationMatcherNode] Completed in {time.time() - start_t:.3f}s")
     return {
         "conch_scored_detections": scored_detections,
         "virchow_features_computed": virchow_computed,
+        "uni_features_computed": uni_computed,
     }
 
 
 # ---------------------------------------------------------------------------
-# Node 5: Final Classifier & Synthesis Agent (Gemini 3.1 / 2.5 Flash)
+# Node 5: Final Classifier & Synthesis Agent (Gemini 3.1 / 2.5 Flash Multimodal)
 # ---------------------------------------------------------------------------
 
 def final_classifier_node(state: HistologyGraphState) -> Dict[str, Any]:
     """
     Synthesizes:
     - CONCH zero-shot predictions & probability distribution across classes
-    - Virchow 2 morphological properties
+    - Dual Foundation Morphological Ensemble (Virchow 2 1280d + UNI 1024d)
+    - Visual crops passed directly to Gemini for multimodal visual arbitration
     - Spatial figure labels / legend codes (Agent 2)
     - Domain ontology constraints (Agent 1)
     to output canonical, diversified, reasoned cellular classes for each nucleus.
@@ -523,14 +566,27 @@ def final_classifier_node(state: HistologyGraphState) -> Dict[str, Any]:
     figure_labels = state.get("detected_figure_labels") or []
     abbrev_map = state.get("figure_abbreviations_map") or {}
     visual_notes = state.get("figure_visual_notes") or ""
+    img_pil = state.get("image_pil")
+    img_bytes = state.get("image_bytes")
 
     if not detections:
         return {
             "final_detections": [],
-            "classification_summary": {"total": 0, "by_class": {}},
+            "classification_summary": {"total": 0, "by_class": {}, "by_decision_source": {}},
             "reasoning_log": [],
-            "execution_metrics": {"total_time_seconds": round(time.time() - start_t, 3)},
+            "execution_metrics": {
+                "total_time_seconds": round(time.time() - start_t, 3),
+                "decision_counts": {},
+                "morphometric_heuristic_count": 0,
+            },
         }
+
+    if img_pil is None and img_bytes:
+        try:
+            img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+        except Exception as e:
+            logger.warning(f"[FinalClassifierNode] Could not load image from bytes: {e}")
+            img_pil = None
 
     client = _get_gemini_client()
     final_detections: List[Dict[str, Any]] = []
@@ -582,56 +638,70 @@ def final_classifier_node(state: HistologyGraphState) -> Dict[str, Any]:
                 sorted_scores = sorted(scores.values(), reverse=True) if scores else []
                 margin = (sorted_scores[0] - sorted_scores[1]) if len(sorted_scores) >= 2 else 1.0
 
-                # If low confidence or very close margin, flag for optional Gemini reasoning
-                if conf < 0.40 or margin < 0.05:
+                # Recalibrated ambiguity condition: low confidence (< 0.55) or close margin (< 0.10)
+                if conf < 0.55 or margin < 0.10:
                     ambiguous_items.append(d)
             else:
                 ambiguous_items.append(d)
 
-    # Step 2: If there are ambiguous items and Gemini client is configured, run LLM adjudication
+    # Step 2: Visual Multimodal Arbitration with Gemini Vision (Passing Image Crops)
     if ambiguous_items and client is not None:
         try:
-            # Batch items in chunks of 50 to ensure high throughput and prevent context truncation
-            chunk_size = 50
+            chunk_size = 15  # Chunk size optimized for high-quality multimodal visual attention
             for chunk_start in range(0, len(ambiguous_items), chunk_size):
                 chunk = ambiguous_items[chunk_start : chunk_start + chunk_size]
-                items_payload = []
-                for it in chunk:
-                    items_payload.append({
-                        "id": it.get("id"),
-                        "conch_top_class": it.get("class_key"),
-                        "conch_confidence": round(float(it.get("conch_confidence") or 0.0), 3),
-                        "conch_top_scores": it.get("conch_scores", {}),
-                        "area_px": round(float(it.get("area", 0)), 1),
-                        "circularity": round(float(it.get("circularity", 1.0)), 2),
-                        "mean_intensity": round(float(it.get("mean_intensity", 128)), 1),
-                        "spatial_hint": it.get("spatial_label_hint"),
-                    })
 
-                prompt_text = f"""
-You are a senior pathologist adjudicating ambiguous cellular nucleus classifications in histological tissue.
+                # Extract visual crops for the ambiguous cells in this chunk
+                chunk_crops = extract_crops_from_detections(img_pil, chunk, margin_ratio=0.35, min_size=80) if img_pil is not None else [None] * len(chunk)
+
+                header_prompt = f"""You are a senior histological pathologist performing visual multimodal arbitration on ambiguous cellular nuclei in tissue sections.
 
 Available Ontological Classes:
-{json.dumps([{"key": c["key"], "label": c.get("label"), "prompt": c.get("prompt")} for c in candidate_classes], ensure_ascii=False)}
+{json.dumps([{"key": c["key"], "label": c.get("label", c.get("name")), "prompt": c.get("prompt")} for c in candidate_classes], ensure_ascii=False, indent=2)}
 
-Detected Figure Abbreviations & Legend:
-{json.dumps(abbrev_map, ensure_ascii=False)}
+Detected Figure Legend & Abbreviations:
+{json.dumps(abbrev_map, ensure_ascii=False, indent=2)}
 Figure Visual Notes: {visual_notes}
 
-Ambiguous Nuclei Detections:
-{json.dumps(items_payload, ensure_ascii=False)}
-
-Task:
-For each detection, decide the optimal class_key from the Available Ontological Classes list, confidence (0.0 to 1.0), and a concise 1-sentence reasoning (incorporating cytological morphometry, foundation model scores, and any figure label hints).
-
-Return ONLY a valid JSON list of objects:
-[
-  {{ "id": "cell_0001", "class_key": "spermatogonia", "confidence": 0.88, "reasoning": "Basal location and high chromatin density match spermatogonia." }}
-]
+Examine each cell's high-resolution visual crop, its cytological morphometry, its dual-foundation embeddings (Virchow 2 + UNI), and its CONCH zero-shot scores to determine the precise class_key.
 """
+                contents_payload: List[Any] = [header_prompt]
+
+                for idx, it in enumerate(chunk):
+                    crop_img = chunk_crops[idx]
+                    det_id = it.get("id", f"cell_{idx+1}")
+                    morph_ensemble_str = ""
+                    if it.get("morphological_ensemble_similarity") is not None:
+                        morph_ensemble_str = f"Morphological Ensemble Affinity (Virchow 2 + UNI): {float(it['morphological_ensemble_similarity']):.3f}\n"
+                    elif it.get("virchow_similarity") is not None:
+                        morph_ensemble_str = f"Virchow 2 Affinity: {float(it['virchow_similarity']):.3f}\n"
+
+                    item_text = (
+                        f"--- Cell #{det_id} ---\n"
+                        f"CONCH Top-1: '{it.get('class_key')}' (confidence: {float(it.get('conch_confidence') or 0.0):.2f})\n"
+                        f"{morph_ensemble_str}"
+                        f"Score Distribution: {json.dumps(it.get('conch_scores', {}))}\n"
+                        f"Morphometry: Area={it.get('area', 0)}px, Circularity={it.get('circularity', 1.0)}, MeanIntensity={it.get('mean_intensity', 128)}\n"
+                        f"Spatial Figure Hint: {json.dumps(it.get('spatial_label_hint'))}\n"
+                        f"Visual Crop of Cell #{det_id}:"
+                    )
+                    contents_payload.append(item_text)
+                    if crop_img is not None:
+                        contents_payload.append(crop_img)
+
+                footer_instruction = """
+Task:
+For each cell above, output your visual adjudication as a valid JSON array of objects:
+[
+  { "id": "<cell_id>", "class_key": "<class_key_from_available_classes>", "confidence": 0.88, "reasoning": "<concise visual cytological justification e.g. large voluminous nucleus with open chromatin patterns>" }
+]
+Return ONLY valid JSON.
+"""
+                contents_payload.append(footer_instruction)
+
                 response = client.models.generate_content(
                     model="gemini-2.5-flash",
-                    contents=[prompt_text],
+                    contents=contents_payload,
                     config={"response_mime_type": "application/json"},
                 )
 
@@ -647,13 +717,14 @@ Return ONLY a valid JSON list of objects:
                         it["class_label"] = matched_cls.get("label", matched_cls.get("name", ck))
                         it["color"] = matched_cls.get("color", "#8b5cf6")
                         it["confidence"] = float(dec.get("confidence", 0.85))
-                        it["decision_source"] = "gemini_reasoning_synthesis"
-                        it["agent_reasoning"] = dec.get("reasoning", "Adjudicated by Gemini reasoning agent.")
+                        it["decision_source"] = "gemini_multimodal_arbitration"
+                        it["agent_reasoning"] = dec.get("reasoning", "Adjudicated visually by Gemini multimodal agent.")
 
         except Exception as e:
-            logger.warning(f"[FinalClassifierNode] LLM adjudication skipped or failed: {e}")
+            logger.warning(f"[FinalClassifierNode] Multimodal visual adjudication skipped or failed: {e}")
 
     # Step 3: Final validation — ensure EVERY cell has a valid class in class_map and preserve variety
+    morphometric_fallback_count = 0
     for d in detections:
         ck = d.get("class_key")
         if not ck or ck not in class_map:
@@ -674,7 +745,6 @@ Return ONLY a valid JSON list of objects:
                 area = float(d.get("area", 100.0))
                 circ = float(d.get("circularity", 0.8))
                 class_keys = list(class_map.keys())
-                # Pick appropriate class index based on relative morphometric bin
                 bin_idx = (int(area * 10 + circ * 100)) % len(class_keys)
                 assigned_k = class_keys[bin_idx]
                 matched_c = class_map[assigned_k]
@@ -684,12 +754,16 @@ Return ONLY a valid JSON list of objects:
                 d["confidence"] = 0.70
                 d["decision_source"] = "morphometric_heuristic"
                 d["agent_reasoning"] = f"Classified by morphometric feature distribution."
+                morphometric_fallback_count += 1
 
     # Collect summary stats and build reasoning log
     class_counts: Dict[str, int] = {}
+    decision_counts: Dict[str, int] = {}
     for d in detections:
         ck = d.get("class_key", "unclassified")
+        ds = d.get("decision_source", "unknown")
         class_counts[ck] = class_counts.get(ck, 0) + 1
+        decision_counts[ds] = decision_counts.get(ds, 0) + 1
         final_detections.append(d)
         reasoning_log.append({
             "id": d.get("id"),
@@ -703,17 +777,32 @@ Return ONLY a valid JSON list of objects:
     summary = {
         "total_nuclei_classified": len(final_detections),
         "by_class": class_counts,
+        "by_decision_source": decision_counts,
         "figure_labels_detected": len(figure_labels),
+        "ambiguous_nuclei_adjudicated": len(ambiguous_items),
+        "morphometric_fallback_count": morphometric_fallback_count,
     }
 
     elapsed = time.time() - start_t
-    logger.info(f"[FinalClassifierNode] Successfully finalized {len(final_detections)} nuclei across {len(class_counts)} classes: {class_counts} in {elapsed:.3f}s")
+    logger.info(
+        f"[FinalClassifierNode] Decision breakdown: {decision_counts} | "
+        f"Classes: {class_counts} in {elapsed:.3f}s"
+    )
+    if morphometric_fallback_count > 0:
+        logger.warning(
+            f"[FinalClassifierNode] ⚠ {morphometric_fallback_count}/{len(final_detections)} "
+            f"({morphometric_fallback_count / len(final_detections) * 100:.1f}%) detections fell back to morphometric_heuristic."
+        )
 
     return {
         "final_detections": final_detections,
         "classification_summary": summary,
         "reasoning_log": reasoning_log,
-        "execution_metrics": {"total_time_seconds": round(elapsed, 3)},
+        "execution_metrics": {
+            "total_time_seconds": round(elapsed, 3),
+            "decision_counts": decision_counts,
+            "morphometric_heuristic_count": morphometric_fallback_count,
+        },
     }
 
 

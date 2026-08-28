@@ -26,19 +26,20 @@ logger = logging.getLogger("sam3-backend")
 # Device configuration: route auxiliary models (CONCH/UNI) to CPU on GPUs with <12GB VRAM
 # to save GPU VRAM for SAM 3.
 def _get_aux_device() -> torch.device:
-    env_dev = os.getenv("AUX_MODELS_DEVICE", "").strip().lower()
+    env_dev = os.getenv("PATHOLOGY_DEVICE", "").lower().strip()
     if env_dev == "cuda" and torch.cuda.is_available():
         return torch.device("cuda")
     if env_dev == "cpu":
         return torch.device("cpu")
-    # Auto-detect: if GPU VRAM is < 12GB (e.g. RTX 3060 6GB), use CPU for auxiliary classification
+    # Auto-detect: if CUDA is available, use GPU (with half precision) on modern RTX cards (>= 5.5GB)
     if torch.cuda.is_available():
         try:
             total_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            if total_mem_gb >= 12.0:
+            if total_mem_gb >= 5.5:
                 return torch.device("cuda")
         except Exception as e:
             logger.debug(f"Could not read GPU device properties: {e}")
+        return torch.device("cuda")
     return torch.device("cpu")
 
 DEVICE = _get_aux_device()
@@ -497,7 +498,7 @@ def classify_detections_with_conch(
     image: Image.Image,
     detections: List[Dict[str, Any]],
     candidate_classes: List[Dict[str, str]],
-    temperature: float = 0.05,
+    temperature: float = 0.12,
     is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
@@ -955,20 +956,21 @@ def classify_with_virchow_prototypes(
     is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    High-precision few-shot exemplar & morphological prototype classification using
-    Paige AI Virchow 2 (1280-dim ViT-Huge) and MahmoodLab CONCH (512-dim).
+    High-precision few-shot exemplar & morphological prototype ensemble classification using
+    Paige AI Virchow 2 (1280-dim ViT-Huge), MahmoodLab UNI (1024-dim ViT-Large) and MahmoodLab CONCH (512-dim).
 
     Features:
-    - Filters out non-cellular macro-structures (lumen, tubule wall, tissue, organs).
-    - Preserves all user-labeled exemplars ("Espermatogonia A clara (Ap)", etc.) without overwriting.
-    - If 1+ exemplar classes are labeled, propagates them to morphologically identical cells via Virchow 1280d.
+    - Dual deep foundation embeddings: combines Virchow 2 (1280d) and UNI (1024d) for robust cytological representation.
+    - Preserves all user-labeled exemplars without overwriting.
+    - If 1+ exemplar classes are labeled, propagates them to morphologically identical cells via the blended ensemble.
+    - Inter-cell neighbourhood consistency using dual-foundation cosine affinity.
     - For unlabeled cells, uses CONCH zero-shot guided by deep cellular prompts and relative cell volume priors.
     """
     if not detections:
         return []
 
     if not is_histology:
-        logger.info("Non-histology domain: skipping Virchow prototype classification.")
+        logger.info("Non-histology domain: skipping foundation prototype classification.")
         return detections
 
     # 1. Dynamically resolve candidate classes from parameters, detections, or active ontology
@@ -992,26 +994,45 @@ def classify_with_virchow_prototypes(
                     })
         filtered_classes = filter_cellular_candidate_classes(derived_classes)
 
+    # Load Virchow 2 and UNI models
     virchow = VirchowModelWrapper.get_instance()
     if not virchow.is_loaded:
-        success = virchow.load()
-        if not success:
-            logger.warning("Virchow could not be loaded, falling back to CONCH zero-shot.")
-            return classify_detections_with_conch(
-                image=image,
-                detections=detections,
-                candidate_classes=filtered_classes,
-                temperature=temperature,
-                is_histology=is_histology,
-            )
+        virchow.load()
+
+    uni = UniModelWrapper.get_instance()
+    if not uni.is_loaded:
+        uni.load()
+
+    if not virchow.is_loaded and not uni.is_loaded:
+        logger.warning("Neither Virchow nor UNI could be loaded, falling back to CONCH zero-shot.")
+        return classify_detections_with_conch(
+            image=image,
+            detections=detections,
+            candidate_classes=filtered_classes,
+            temperature=temperature,
+            is_histology=is_histology,
+        )
 
     # 2. Extract crops for all detections
     crops = extract_crops_from_detections(image, detections)
     num_dets = len(detections)
 
-    # 3. Extract Virchow 1280-dim embeddings
-    virchow_feats = virchow.encode_crops(crops, batch_size=16).float()  # (N, 1280)
-    virchow_feats_norm = F.normalize(virchow_feats, dim=-1)
+    # 3. Extract Virchow 1280-dim and UNI 1024-dim embeddings
+    virchow_feats_norm = None
+    if virchow.is_loaded:
+        try:
+            virchow_feats = virchow.encode_crops(crops, batch_size=16).float()  # (N, 1280)
+            virchow_feats_norm = F.normalize(virchow_feats, dim=-1)
+        except Exception as e:
+            logger.warning(f"Virchow feature extraction failed: {e}")
+
+    uni_feats_norm = None
+    if uni.is_loaded:
+        try:
+            uni_feats = uni.encode_crops(crops, batch_size=16).float()  # (N, 1024)
+            uni_feats_norm = F.normalize(uni_feats, dim=-1)
+        except Exception as e:
+            logger.warning(f"UNI feature extraction failed: {e}")
 
     # 4. Check for labeled exemplars in current detections
     generic_keys = {"clase_1", "clase_0", "default", "unlabeled", "cell", "nucleus", "default_class", "objeto", ""}
@@ -1019,7 +1040,6 @@ def classify_with_virchow_prototypes(
     class_exemplars: Dict[str, List[int]] = {}
     class_meta: Dict[str, Dict[str, Any]] = {}
 
-    # Gather registered candidate classes metadata
     for c in filtered_classes:
         k = c.get("key") or c.get("name")
         if k:
@@ -1048,7 +1068,13 @@ def classify_with_virchow_prototypes(
                     }
 
     # 5. First pass: Zero-Shot CONCH classification on all detections
-    if filtered_classes and len(filtered_classes) >= 1:
+    already_conch_scored = (
+        len(detections) > 0
+        and all(bool(d.get("conch_scores")) for d in detections)
+    )
+    if already_conch_scored:
+        conch_classified = [dict(d) for d in detections]
+    elif filtered_classes and len(filtered_classes) >= 1:
         conch_classified = classify_detections_with_conch(
             image=image,
             detections=detections,
@@ -1061,35 +1087,49 @@ def classify_with_virchow_prototypes(
 
     # 6. Apply dynamic Morphometric statistics
     areas = [_compute_detection_area(d) for d in conch_classified]
-    median_area = float(np.median(areas)) if areas else 100.0
 
-    class_meta_map: Dict[str, Dict[str, str]] = {}
-    for c in filtered_classes:
-        k = c.get("key", "")
-        class_meta_map[k] = {
-            "label": c.get("label", c.get("name", k)),
-            "color": c.get("color", "#8b5cf6"),
-        }
-
-    # 7. Few-Shot Exemplar Prototype Matching (if user provided 1+ exemplar classes)
+    # 7. Few-Shot Exemplar Prototype Matching with Virchow 2 + UNI Ensemble
     exemplar_target_keys = list(class_exemplars.keys())
-    exemplar_prototypes = []
-    if exemplar_target_keys:
-        for k in exemplar_target_keys:
-            ex_indices = class_exemplars[k]
-            ex_vectors = virchow_feats_norm[ex_indices]  # (M, 1280)
-            centroid = torch.mean(ex_vectors, dim=0, keepdim=True)
-            centroid = F.normalize(centroid, dim=-1)
-            exemplar_prototypes.append(centroid)
-        exemplar_prototypes_tensor = torch.cat(exemplar_prototypes, dim=0)  # (N_exemplar_classes, 1280)
-        exemplar_sim_matrix = torch.matmul(virchow_feats_norm, exemplar_prototypes_tensor.T).cpu().numpy()
-    else:
-        exemplar_sim_matrix = None
+    ensemble_sim_matrix = None
 
-    # Virchow inter-detection similarity matrix for neighbourhood consistency
-    virchow_sim_matrix = None
-    if virchow_feats is not None and len(virchow_feats) > 1:
-        virchow_sim_matrix = torch.matmul(virchow_feats_norm, virchow_feats_norm.T).cpu().numpy()
+    if exemplar_target_keys:
+        virchow_ex_sims = None
+        if virchow_feats_norm is not None:
+            virchow_protos = []
+            for k in exemplar_target_keys:
+                ex_indices = class_exemplars[k]
+                centroid = torch.mean(virchow_feats_norm[ex_indices], dim=0, keepdim=True)
+                virchow_protos.append(F.normalize(centroid, dim=-1))
+            virchow_protos_tensor = torch.cat(virchow_protos, dim=0)
+            virchow_ex_sims = torch.matmul(virchow_feats_norm, virchow_protos_tensor.T).cpu().numpy()
+
+        uni_ex_sims = None
+        if uni_feats_norm is not None:
+            uni_protos = []
+            for k in exemplar_target_keys:
+                ex_indices = class_exemplars[k]
+                centroid = torch.mean(uni_feats_norm[ex_indices], dim=0, keepdim=True)
+                uni_protos.append(F.normalize(centroid, dim=-1))
+            uni_protos_tensor = torch.cat(uni_protos, dim=0)
+            uni_ex_sims = torch.matmul(uni_feats_norm, uni_protos_tensor.T).cpu().numpy()
+
+        if virchow_ex_sims is not None and uni_ex_sims is not None:
+            ensemble_sim_matrix = 0.5 * virchow_ex_sims + 0.5 * uni_ex_sims
+        elif virchow_ex_sims is not None:
+            ensemble_sim_matrix = virchow_ex_sims
+        elif uni_ex_sims is not None:
+            ensemble_sim_matrix = uni_ex_sims
+
+    # Inter-detection similarity matrix for neighbourhood consistency
+    inter_sim_matrix = None
+    if virchow_feats_norm is not None and uni_feats_norm is not None and num_dets > 1:
+        v_sim = torch.matmul(virchow_feats_norm, virchow_feats_norm.T).cpu().numpy()
+        u_sim = torch.matmul(uni_feats_norm, uni_feats_norm.T).cpu().numpy()
+        inter_sim_matrix = 0.5 * v_sim + 0.5 * u_sim
+    elif virchow_feats_norm is not None and num_dets > 1:
+        inter_sim_matrix = torch.matmul(virchow_feats_norm, virchow_feats_norm.T).cpu().numpy()
+    elif uni_feats_norm is not None and num_dets > 1:
+        inter_sim_matrix = torch.matmul(uni_feats_norm, uni_feats_norm.T).cpu().numpy()
 
     final_classified = []
     for i, det in enumerate(conch_classified):
@@ -1108,41 +1148,45 @@ def classify_with_virchow_prototypes(
             det_copy["class_label"] = meta["label"]
             det_copy["color"] = meta["color"]
             det_copy["virchow_confidence"] = 1.0
+            det_copy["uni_confidence"] = 1.0
             det_copy["is_user_exemplar"] = True
-            det_copy["virchow_verified"] = True
+            det_copy["virchow_verified"] = virchow.is_loaded
+            det_copy["uni_verified"] = uni.is_loaded
             det_copy["detection_area"] = round(area, 1)
             final_classified.append(det_copy)
             continue
 
-        # B. PROPAGATE FROM USER EXEMPLARS IF VIRCHOW EMBEDDING IS VERY SIMILAR
+        # B. PROPAGATE FROM USER EXEMPLARS IF ENSEMBLE EMBEDDING IS VERY SIMILAR
         matched_exemplar = False
-        if exemplar_sim_matrix is not None and len(exemplar_target_keys) > 0:
-            ex_sims = exemplar_sim_matrix[i]
+        if ensemble_sim_matrix is not None and len(exemplar_target_keys) > 0:
+            ex_sims = ensemble_sim_matrix[i]
             best_ex_idx = int(np.argmax(ex_sims))
             best_ex_sim = float(ex_sims[best_ex_idx])
-            # If similarity to a user exemplar is high (>= 0.78), propagate user's class
-            if best_ex_sim >= 0.78:
+            # If blended similarity to a user exemplar is high (>= 0.76), propagate user's class
+            if best_ex_sim >= 0.76:
                 best_k = exemplar_target_keys[best_ex_idx]
                 meta = class_meta.get(best_k, {"label": best_k, "color": "#8b5cf6"})
                 det_copy["category_id"] = best_k
                 det_copy["class_key"] = best_k
                 det_copy["class_label"] = meta["label"]
                 det_copy["color"] = meta["color"]
+                det_copy["morphological_ensemble_similarity"] = round(best_ex_sim, 4)
                 det_copy["virchow_confidence"] = round(best_ex_sim, 4)
-                det_copy["virchow_similarity"] = round(best_ex_sim, 4)
                 det_copy["propagated_from_exemplar"] = True
+                det_copy["decision_source"] = "foundation_morphological_ensemble"
                 matched_exemplar = True
 
         if not matched_exemplar:
             if best_conf < 0.40:
                 det_copy["classification_uncertain"] = True
 
-        det_copy["virchow_verified"] = True
+        det_copy["virchow_verified"] = virchow.is_loaded
+        det_copy["uni_verified"] = uni.is_loaded
         det_copy["detection_area"] = round(area, 1)
         final_classified.append(det_copy)
 
-    # 8. Data-driven neighbourhood consistency pass
-    if virchow_sim_matrix is not None:
+    # 8. Data-driven neighbourhood consistency pass with blended similarity
+    if inter_sim_matrix is not None:
         confident_dets = [(j, d) for j, d in enumerate(final_classified) if not d.get("classification_uncertain")]
         for i, det in enumerate(final_classified):
             if not det.get("classification_uncertain") or i in user_labeled_indices:
@@ -1152,11 +1196,11 @@ def classify_with_virchow_prototypes(
             for j, _ in confident_dets:
                 if i == j:
                     continue
-                sim = float(virchow_sim_matrix[i, j])
+                sim = float(inter_sim_matrix[i, j])
                 if sim > best_sim:
                     best_sim = sim
                     best_match_idx = j
-            if best_match_idx >= 0 and best_sim > 0.85:
+            if best_match_idx >= 0 and best_sim > 0.84:
                 donor = final_classified[best_match_idx]
                 det["category_id"] = donor["category_id"]
                 det["class_key"] = donor["class_key"]
@@ -1170,6 +1214,10 @@ def classify_with_virchow_prototypes(
         torch.cuda.empty_cache()
 
     return final_classified
+
+
+# Alias for explicit ensemble nomenclature
+classify_with_morphological_ensemble = classify_with_virchow_prototypes
 
 
 def get_pathology_models_status() -> Dict[str, Any]:
@@ -1199,4 +1247,23 @@ def get_pathology_models_status() -> Dict[str, Any]:
             "is_loaded": virchow.is_loaded,
             "architecture": "ViT-Huge-SwiGLU-patch14-224",
         },
+    }
+
+
+def preload_all_pathology_models() -> Dict[str, Any]:
+    """Preload all foundation models (CONCH, UNI, Virchow 2) onto GPU/CPU."""
+    conch = ConchModelWrapper.get_instance()
+    uni = UniModelWrapper.get_instance()
+    virchow = VirchowModelWrapper.get_instance()
+
+    c_ok = conch.load() if not conch.is_loaded else True
+    u_ok = uni.load() if not uni.is_loaded else True
+    v_ok = virchow.load() if not virchow.is_loaded else True
+
+    return {
+        "status": "ready" if (c_ok and u_ok and v_ok) else "partial",
+        "conch_loaded": c_ok,
+        "uni_loaded": u_ok,
+        "virchow_loaded": v_ok,
+        "device": str(DEVICE),
     }

@@ -1,4 +1,5 @@
 import os
+import sys
 import io
 import time
 import math
@@ -6,7 +7,16 @@ import base64
 import json
 import logging
 import warnings
+from pathlib import Path
 from typing import List, Dict, Any
+
+# Ensure backend and root are in sys.path for direct imports
+_backend_dir = str(Path(__file__).resolve().parent)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+_root_dir = str(Path(__file__).resolve().parent.parent)
+if _root_dir not in sys.path:
+    sys.path.insert(0, _root_dir)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -88,8 +98,10 @@ from pdf_ontology import (
 # Import Pathology Foundation Models (CONCH & UNI)
 from pathology_models import (
     get_pathology_models_status,
+    preload_all_pathology_models,
     classify_detections_with_conch,
     classify_with_virchow_prototypes,
+    classify_with_morphological_ensemble,
     extract_detection_embeddings_uni,
     extract_detection_embeddings_virchow,
     discriminate_and_cluster_with_pathology_models,
@@ -129,23 +141,31 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def prepare_engine_vram(target_engine: str) -> None:
     """
     Dynamically swap models between GPU and CPU to ensure the active model
-    always has full access to the RTX 3050 GPU VRAM without running into CUDA OOM.
+    always has full access to the GPU VRAM without running into CUDA OOM.
     """
-    global processor, device
+    global processor, sam3_semantic_predictor, device
     if not torch.cuda.is_available():
         return
 
     if target_engine in ("cellpose", "cpsam"):
-        # 1. Offload SAM 3 to CPU to free 4.9 GB VRAM for Cellpose
+        # 1. Offload SAM 3 to CPU to free VRAM for Cellpose
         if processor is not None and hasattr(processor, "model"):
             try:
                 if str(processor.device) != "cpu":
                     processor.model.to("cpu")
                     processor.device = "cpu"
-                    torch.cuda.empty_cache()
-                    logger.info("Temporarily swapped SAM 3 to CPU to give 100% GPU VRAM to Cellpose-SAM.")
             except Exception as e:
-                logger.warning(f"Could not offload SAM 3 to CPU: {e}")
+                logger.warning(f"Could not offload SAM 3 processor to CPU: {e}")
+
+        if sam3_semantic_predictor is not None and hasattr(sam3_semantic_predictor, "model") and sam3_semantic_predictor.model is not None:
+            try:
+                sam3_semantic_predictor.model.to("cpu")
+                sam3_semantic_predictor.device = torch.device("cpu")
+            except Exception as e:
+                logger.warning(f"Could not offload SAM 3 predictor to CPU: {e}")
+
+        torch.cuda.empty_cache()
+        logger.info("Temporarily swapped SAM 3 to CPU to give 100% GPU VRAM to Cellpose-SAM.")
     else:
         # 2. Offload Cellpose and restore SAM 3 to GPU
         offload_cellpose_to_cpu()
@@ -154,10 +174,18 @@ def prepare_engine_vram(target_engine: str) -> None:
                 if str(processor.device) == "cpu":
                     processor.model.to(device)
                     processor.device = device
-                    torch.cuda.empty_cache()
-                    logger.info("Restored SAM 3 to GPU for fast zero-shot segmentation.")
             except Exception as e:
-                logger.warning(f"Could not restore SAM 3 to GPU: {e}")
+                logger.warning(f"Could not restore SAM 3 processor to GPU: {e}")
+
+        if sam3_semantic_predictor is not None and hasattr(sam3_semantic_predictor, "model") and sam3_semantic_predictor.model is not None:
+            try:
+                sam3_semantic_predictor.model.to(device)
+                sam3_semantic_predictor.device = torch.device(device)
+            except Exception as e:
+                logger.warning(f"Could not restore SAM 3 predictor to GPU: {e}")
+
+        torch.cuda.empty_cache()
+        logger.info("Restored SAM 3 to GPU for fast zero-shot segmentation.")
 
 
 @asynccontextmanager
@@ -197,7 +225,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 2. Initialize Meta SAM 3 image model & processor
     try:
-        model = build_sam3_image_model(device=device)
+        bpe_path = os.path.abspath("sam3/sam3/assets/bpe_simple_vocab_16e6.txt.gz")
+        ckpt_path = model_file if (model_file and os.path.exists(model_file)) else None
+        model = build_sam3_image_model(
+            device=device,
+            bpe_path=bpe_path if os.path.exists(bpe_path) else None,
+            checkpoint_path=ckpt_path,
+            load_from_HF=False if ckpt_path else True,
+        )
         # Initialize with flexible threshold (will be dynamically adjusted per request)
         processor = Sam3Processor(model, device=device, confidence_threshold=0.05)
         logger.info(f"SAM 3.1 Processor loaded successfully on {device} in {time.time() - start_time:.2f} seconds.")
@@ -540,7 +575,7 @@ def get_segmentation_models() -> Dict[str, Any]:
             "submodels": [
                 {"id": k, "name": v} for k, v in cellpose_info.get("models", {}).items()
             ],
-            "default_submodel": "cyto3",
+            "default_submodel": cellpose_info.get("default_model", "cpsam"),
         },
     ]
     return {
@@ -673,6 +708,8 @@ async def segment_image(
             "engine": "sam3",
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error during segmentation: {e}", exc_info=True)
         if torch.cuda.is_available():
@@ -874,6 +911,8 @@ async def segment_auto(
             "is_histology": is_histo,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error during auto-segmentation: {e}", exc_info=True)
         if torch.cuda.is_available():
@@ -1254,8 +1293,14 @@ def delete_extracted_pdf_image(pdf_id: str, filename: str) -> Dict[str, Any]:
 
 @app.get("/api/pathology-models-status")
 def pathology_models_status() -> Dict[str, Any]:
-    """Check availability and device status for CONCH and UNI foundation models."""
+    """Check availability and device status for CONCH, UNI, and Virchow foundation models."""
     return get_pathology_models_status()
+
+
+@app.post("/api/pathology-models-preload")
+def pathology_models_preload() -> Dict[str, Any]:
+    """Explicitly trigger preloading of CONCH, UNI, and Virchow 2 onto GPU."""
+    return preload_all_pathology_models()
 
 
 @app.post("/api/classify-detections-conch")

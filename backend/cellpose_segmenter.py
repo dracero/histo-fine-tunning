@@ -28,6 +28,7 @@ AVAILABLE_CELLPOSE_MODELS = {
     "cpsam": "Cellpose-SAM (ViT-L Segment Anything - Recomendado)",
     "cpsam_v2": "Cellpose-SAM v2 (High-Res ViT-L)",
     "cpdino": "Cellpose DINO (ViT-L Histología)",
+    "cpdino-vitb": "Cellpose DINO ViT-B (Ligero y Rápido)",
 }
 
 

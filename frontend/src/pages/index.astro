@@ -118,6 +118,7 @@
 									<option value="cpsam">Cellpose-SAM (ViT SAM Backbone - Recomendado)</option>
 									<option value="cpsam_v2">Cellpose-SAM v2 (High-Res ViT SAM)</option>
 									<option value="cpdino">Cellpose DINO (ViT-L Histología)</option>
+									<option value="cpdino-vitb">Cellpose DINO ViT-B (Ligero y Rápido)</option>
 								</select>
 								<div style="display: flex; gap: 0.4rem; align-items: center;">
 									<label for="cellpose-diameter-input" style="font-size: 0.68rem; color: var(--text-muted); white-space: nowrap;">Diámetro célula (px):</label>
@@ -2673,24 +2674,39 @@
 
 			if (data.conch) {
 				conchPill.classList.add("active");
-				conchDot.classList.add("purple");
-				conchPill.title = `CONCH: ${data.conch.architecture} (${data.conch.embedding_dim}d) - ${data.device}`;
+				conchDot.className = "dot " + (data.conch.is_loaded ? "purple" : "blue");
+				conchPill.title = `CONCH: ${data.conch.architecture} (${data.conch.embedding_dim}d) - ${data.conch.is_loaded ? "🟢 Cargado en VRAM" : "⚪ En reposo (Click para precargar)"}`;
 			}
 			if (data.uni) {
 				uniPill.classList.add("active");
-				uniDot.classList.add("green");
-				uniPill.title = `UNI: ${data.uni.architecture} (${data.uni.embedding_dim}d) - ${data.device}`;
+				uniDot.className = "dot " + (data.uni.is_loaded ? "green" : "blue");
+				uniPill.title = `UNI: ${data.uni.architecture} (${data.uni.embedding_dim}d) - ${data.uni.is_loaded ? "🟢 Cargado en VRAM" : "⚪ En reposo (Click para precargar)"}`;
 			}
 			if (data.virchow) {
 				virchowPill.classList.add("active");
-				virchowDot.classList.add("green");
-				virchowPill.title = `Virchow: ${data.virchow.architecture} (${data.virchow.embedding_dim}d) - ${data.device}`;
+				virchowDot.className = "dot " + (data.virchow.is_loaded ? "green" : "blue");
+				virchowPill.title = `Virchow: ${data.virchow.architecture} (${data.virchow.embedding_dim}d) - ${data.virchow.is_loaded ? "🟢 Cargado en VRAM" : "⚪ En reposo (Click para precargar)"}`;
 			}
 		} catch (e) {
 			console.warn("Pathology models status check skipped:", e);
 		}
 	}
 	setTimeout(initPathologyModelsStatus, 1500);
+
+	// Preload foundation models on click
+	[document.getElementById("conch-pill"), document.getElementById("uni-pill"), document.getElementById("virchow-pill")].forEach(p => {
+		p?.addEventListener("click", async () => {
+			try {
+				p.style.opacity = "0.6";
+				const res = await fetch(`${API_URL}/pathology-models-preload`, { method: "POST" });
+				if (res.ok) {
+					await initPathologyModelsStatus();
+				}
+			} catch (_) {} finally {
+				p.style.opacity = "1.0";
+			}
+		});
+	});
 
 	// --- 2. Zero-Shot Classification with CONCH ---
 	async function runConchClassification() {

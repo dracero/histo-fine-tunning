@@ -638,8 +638,8 @@ def final_classifier_node(state: HistologyGraphState) -> Dict[str, Any]:
                 sorted_scores = sorted(scores.values(), reverse=True) if scores else []
                 margin = (sorted_scores[0] - sorted_scores[1]) if len(sorted_scores) >= 2 else 1.0
 
-                # Recalibrated ambiguity condition: low confidence (< 0.55) or close margin (< 0.10)
-                if conf < 0.55 or margin < 0.10:
+                # Calibrated ambiguity condition: only truly borderline margins (< 0.12) or very low confidence (< 0.40)
+                if conf < 0.40 or margin < 0.12:
                     ambiguous_items.append(d)
             else:
                 ambiguous_items.append(d)
@@ -647,7 +647,7 @@ def final_classifier_node(state: HistologyGraphState) -> Dict[str, Any]:
     # Step 2: Visual Multimodal Arbitration with Gemini Vision (Passing Image Crops)
     if ambiguous_items and client is not None:
         try:
-            chunk_size = 15  # Chunk size optimized for high-quality multimodal visual attention
+            chunk_size = 12  # Chunk size optimized for high-quality multimodal visual attention
             for chunk_start in range(0, len(ambiguous_items), chunk_size):
                 chunk = ambiguous_items[chunk_start : chunk_start + chunk_size]
 
@@ -713,17 +713,30 @@ Return ONLY valid JSON.
                     if dec and dec.get("class_key") in class_map:
                         ck = dec["class_key"]
                         matched_cls = class_map[ck]
+                        conch_k = it.get("class_key")
+                        conch_c = float(it.get("conch_confidence") or 0.5)
+                        g_c = float(dec.get("confidence", 0.85))
+
+                        # Calibrated confidence calculation
+                        if ck == conch_k:
+                            final_c = min(0.98, max(conch_c, 0.75) + 0.10)
+                            reason = f"Consenso (CONCH {conch_c:.2f} + Gemini HD). {dec.get('reasoning', '')}"
+                        else:
+                            conch_scores = it.get("conch_scores", {})
+                            final_c = round(0.65 * g_c + 0.35 * conch_scores.get(ck, 0.30), 4)
+                            reason = f"Arbitraje visual Gemini sobre crop HD: {dec.get('reasoning', '')}"
+
                         it["class_key"] = ck
                         it["class_label"] = matched_cls.get("label", matched_cls.get("name", ck))
                         it["color"] = matched_cls.get("color", "#8b5cf6")
-                        it["confidence"] = float(dec.get("confidence", 0.85))
+                        it["confidence"] = final_c
                         it["decision_source"] = "gemini_multimodal_arbitration"
-                        it["agent_reasoning"] = dec.get("reasoning", "Adjudicated visually by Gemini multimodal agent.")
+                        it["agent_reasoning"] = reason
 
         except Exception as e:
             logger.warning(f"[FinalClassifierNode] Multimodal visual adjudication skipped or failed: {e}")
 
-    # Step 3: Final validation — ensure EVERY cell has a valid class in class_map and preserve variety
+    # Step 3: Final validation — ensure EVERY cell has a valid class in class_map
     morphometric_fallback_count = 0
     for d in detections:
         ck = d.get("class_key")
@@ -741,19 +754,16 @@ Return ONLY valid JSON.
                 d["decision_source"] = "foundation_conch_argmax"
                 d["agent_reasoning"] = f"Assigned to top scoring class '{best_k}'."
             else:
-                # If no scores exist, distribute based on morphometrics (e.g. area / circularity)
-                area = float(d.get("area", 100.0))
-                circ = float(d.get("circularity", 0.8))
+                # If no scores exist, assign the first candidate class
                 class_keys = list(class_map.keys())
-                bin_idx = (int(area * 10 + circ * 100)) % len(class_keys)
-                assigned_k = class_keys[bin_idx]
-                matched_c = class_map[assigned_k]
+                assigned_k = class_keys[0] if class_keys else "unclassified"
+                matched_c = class_map.get(assigned_k, {"label": assigned_k, "color": "#8b5cf6"})
                 d["class_key"] = assigned_k
                 d["class_label"] = matched_c.get("label", matched_c.get("name", assigned_k))
                 d["color"] = matched_c.get("color", "#8b5cf6")
-                d["confidence"] = 0.70
-                d["decision_source"] = "morphometric_heuristic"
-                d["agent_reasoning"] = f"Classified by morphometric feature distribution."
+                d["confidence"] = 0.50
+                d["decision_source"] = "default_ontology_assignment"
+                d["agent_reasoning"] = "Asignado por clase predeterminada de la ontología."
                 morphometric_fallback_count += 1
 
     # Collect summary stats and build reasoning log

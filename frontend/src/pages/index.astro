@@ -59,13 +59,13 @@
 					<!-- ==================== IMAGES TAB ==================== -->
 					<div class="tab-content active" id="images-tab">
 						<label for="file-input" class="upload-zone" id="drop-zone" style="cursor: pointer;">
-							<input type="file" id="file-input" accept="image/*" multiple class="file-hidden" />
+							<input type="file" id="file-input" accept="image/*,.pdf,application/pdf" multiple class="file-hidden" />
 							<div class="upload-content" id="upload-content">
 								<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
 								</svg>
-								<p class="upload-text">Arrastra imágenes o <span class="text-link">seleccionalas</span></p>
-								<p class="upload-hint">PNG, JPG, JPEG, TIFF — Múltiples archivos</p>
+								<p class="upload-text">Arrastra imágenes o un <span class="text-link">PDF</span></p>
+								<p class="upload-hint">PNG, JPG, JPEG, TIFF o PDF científico</p>
 							</div>
 						</label>
 
@@ -207,8 +207,8 @@
 									🧬 Cargar Células de la Ontología (PDF)
 								</button>
 							</div>
-							<button type="button" id="classify-conch-btn" class="btn-action btn-primary-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem;">
-								🔬 Auto-Clasificar con CONCH
+							<button type="button" id="classify-conch-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(13,148,136,0.35);" title="Ensamble directo de 3 modelos de patología (Virchow 2 1280d + UNI 1024d + CONCH 512d) sin LLM">
+								🧬 Auto-Clasificar (Virchow + UNI + CONCH)
 							</button>
 							<button type="button" id="langgraph-classify-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(124,58,237,0.25);" title="Pipeline Multi-Agente con LangGraph, Detección de Etiquetas/Leyendas, CONCH y Virchow2">
 								🤖 LangGraph Multi-Agente (Leyendas + CONCH/Virchow)
@@ -288,8 +288,8 @@
 									<p class="upload-text" style="font-size: 0.82rem; font-weight: 600; margin-bottom: 0.25rem;">Arrastrá un PDF acá o hacé click para elegirlo</p>
 									<p class="upload-subtext" style="font-size: 0.72rem; color: var(--text-muted);">Soporta documentos científicos y papers histológicos (.pdf)</p>
 								</div>
-								<input type="file" id="pdf-file-input" accept=".pdf,application/pdf" style="display: none;" />
 							</div>
+							<input type="file" id="pdf-file-input" accept=".pdf,application/pdf" style="display: none;" />
 
 							<!-- PDF extraction results summary -->
 							<div id="pdf-results" style="display: none;">
@@ -423,10 +423,10 @@
 							<button type="button" id="toggle-conch-classify-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;" title="Clasificar detecciones con CONCH zero-shot">
 								🔬 Clasificar CONCH
 							</button>
-							<button type="button" id="extract-virchow-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Extraer vectores de características de 1280d de Virchow (Paige AI)">
-								🧬 Virchow (1280d)
+							<button type="button" id="extract-virchow-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Ensamble de Modelos de Patología (Virchow 2 1280d + UNI 1024d + CONCH 512d) sin agentes ni LLM">
+								🧬 Virchow + UNI + CONCH
 							</button>
-							<button type="button" id="gemini-multimodal-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(168,85,247,0.35);" title="Fusión Multimodal: Gemini Vision + Virchow 2 (1280d) + CONCH (512d)">
+							<button type="button" id="gemini-multimodal-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(168,85,247,0.35);" title="Fusión Multimodal: Virchow 2 (1280d) + UNI (1024d) + CONCH (512d) + Arbitraje Gemini HD">
 								✨ Gemini + Virchow2 + CONCH
 							</button>
 							<button type="button" id="toggle-langgraph-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.35);" title="Pipeline Multi-Agente: LangGraph + Gemini OCR/Etiquetas + CONCH + Virchow2">
@@ -939,15 +939,22 @@
 	const progressTextEl = document.getElementById("rf-log-content") || document.getElementById("progress-text");
 
 	// ======================= TABS =======================
+	function switchTab(tabId) {
+		if (!tabId) return;
+		document.querySelectorAll(".tab-btn").forEach(btn => {
+			btn.classList.toggle("active", btn.dataset.tab === tabId);
+		});
+		document.querySelectorAll(".tab-content").forEach(c => {
+			c.classList.toggle("active", c.id === tabId);
+		});
+		if (tabId === "pdf-tab") {
+			loadSavedOntologies(true);
+		}
+	}
+
 	document.querySelectorAll(".tab-btn").forEach(btn => {
 		btn.addEventListener("click", () => {
-			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-			btn.classList.add("active");
-			document.getElementById(btn.dataset.tab).classList.add("active");
-			if (btn.dataset.tab === "pdf-tab") {
-				loadSavedOntologies(true);
-			}
+			switchTab(btn.dataset.tab);
 		});
 	});
 
@@ -969,15 +976,12 @@
 	async function handleFiles(files, autoSegment = false) {
 		const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
 		if (pdfFiles.length > 0) {
-			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-			document.querySelector('[data-tab="pdf-tab"]')?.classList.add("active");
-			document.getElementById("pdf-tab")?.classList.add("active");
+			switchTab("pdf-tab");
 			handlePdfUpload(pdfFiles[0]);
 			return;
 		}
 
-		const imageFiles = files.filter(f => f.type.startsWith("image/"));
+		const imageFiles = files.filter(f => f.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(f.name));
 		if (imageFiles.length === 0) { alert("Selecciona archivos de imagen o un PDF."); return; }
 
 		const addedKeys = [];
@@ -990,8 +994,8 @@
 				file: file,
 				filename: file.name,
 				dataUrl: dataUrl,
-				width: dims.width,
-				height: dims.height,
+				width: dims.width || 800,
+				height: dims.height || 600,
 				groups: [],
 				annotated: false,
 			});
@@ -1010,21 +1014,30 @@
 			}
 		}
 
-		fileInput.value = "";
+		if (fileInput) fileInput.value = "";
 	}
 
 	function readFileAsDataUrl(file) {
 		return new Promise((resolve) => {
 			const reader = new FileReader();
 			reader.onload = (e) => resolve(e.target.result);
+			reader.onerror = (err) => {
+				console.warn("FileReader error, returning empty dataUrl:", err);
+				resolve("");
+			};
 			reader.readAsDataURL(file);
 		});
 	}
 
 	function getImageDimensions(dataUrl) {
 		return new Promise((resolve) => {
+			if (!dataUrl) return resolve({ width: 800, height: 600 });
 			const img = new Image();
-			img.onload = () => resolve({ width: img.width, height: img.height });
+			img.onload = () => resolve({ width: img.naturalWidth || img.width || 800, height: img.naturalHeight || img.height || 600 });
+			img.onerror = () => {
+				console.warn("Could not decode image dimensions, fallback to 800x600");
+				resolve({ width: 800, height: 600 });
+			};
 			img.src = dataUrl;
 		});
 	}
@@ -1540,15 +1553,16 @@
 		el.addEventListener("mouseenter", () => {
 			tooltipCategory.textContent = label;
 			tooltipCategory.style.color = color;
-			let scoreText = `${(det.score * 100).toFixed(1)}%`;
-			if (det.gemini_confidence !== undefined) {
-				scoreText += ` · ✨ Gemini: ${(det.gemini_confidence * 100).toFixed(0)}%`;
-			}
+			let scoreText = `${(det.score * 100).toFixed(0)}%`;
 			if (det.conch_confidence) {
 				scoreText += ` · 🔬 CONCH: ${(det.conch_confidence * 100).toFixed(0)}%`;
 			}
-			if (det.virchow_similarity) {
-				scoreText += ` · 🧬 Virchow: ${(det.virchow_similarity * 100).toFixed(0)}%`;
+			if (det.virchow_similarity || det.morphological_ensemble_similarity) {
+				const vScore = det.virchow_similarity || det.morphological_ensemble_similarity;
+				scoreText += ` · 🧬 Virchow2: ${(vScore * 100).toFixed(0)}%`;
+			}
+			if (det.gemini_confidence !== undefined && det.multimodal_fused) {
+				scoreText += ` · ✨ Gemini HD: ${(det.gemini_confidence * 100).toFixed(0)}%`;
 			}
 			tooltipScore.textContent = scoreText;
 			if (det.box) {
@@ -1556,8 +1570,9 @@
 				tooltipCoords.textContent = `${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}`;
 			}
 			if (tooltipReason) {
-				if (det.gemini_reasoning) {
-					tooltipReason.textContent = `💡 ${det.gemini_reasoning}`;
+				const reasoningText = det.gemini_reasoning || det.agent_reasoning;
+				if (reasoningText) {
+					tooltipReason.textContent = `💡 ${reasoningText}`;
 					tooltipReason.style.display = "block";
 				} else {
 					tooltipReason.style.display = "none";
@@ -2883,6 +2898,7 @@
 
 	// --- 3. Virchow 2 (1280d) High-Precision Prototype & Morphological Classifier ---
 	const extractVirchowBtn = document.getElementById("extract-virchow-btn");
+	extractVirchowBtn?.addEventListener("click", runVirchowExtraction);
 
 	async function runVirchowExtraction() {
 		if (!activeImageKey) {
@@ -2941,7 +2957,7 @@
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `🧬 Virchow 2 (1280d): Clasificando ${allDets.length} células con alta precisión...`;
+		statusText.textContent = `🧬 Ensamble de Patología (Virchow 2 + UNI + CONCH): Clasificando ${allDets.length} células con alta precisión...`;
 
 		try {
 			let imageFile = data.file;
@@ -3054,7 +3070,6 @@
 		}
 	}
 
-	extractVirchowBtn?.addEventListener("click", runVirchowExtraction);
 
 	// --- 4. Gemini Multimodal Vision + Virchow 2 + CONCH Fusion ---
 	const geminiMultimodalBtn = document.getElementById("gemini-multimodal-btn");
@@ -3167,7 +3182,7 @@
 					det.segmentation = det.segmentation || origDet.segmentation || [];
 					det.box = det.box || origDet.box;
 					det.bbox = det.bbox || origDet.bbox;
-					det.score = det.gemini_confidence !== undefined ? det.gemini_confidence : (origDet.score || 0.95);
+					det.score = det.score !== undefined ? det.score : (det.gemini_confidence !== undefined ? det.gemini_confidence : (origDet.score || 0.95));
 
 					const groupKey = det.class_key || det.category_id || "clase_1";
 					if (!groupsMap.has(groupKey)) {
@@ -3525,28 +3540,23 @@
 			const pdfs = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
 			if (pdfs.length > 0) {
 				e.preventDefault();
-				document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-				document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-				document.querySelector('[data-tab="pdf-tab"]')?.classList.add("active");
-				document.getElementById("pdf-tab")?.classList.add("active");
+				switchTab("pdf-tab");
 				handlePdfUpload(pdfs[0]);
 			}
 		}
 	}, false);
 
-	window._handlePdfUpload = function(input) {
-		console.log("[PDF] window._handlePdfUpload called, files:", input.files);
-		if (input.files && input.files.length > 0) {
-			handlePdfUpload(input.files[0]);
-		}
-	};
-
 	pdfDropZone?.addEventListener("click", () => {
-		pdfFileInput?.click();
+		console.log("[PDF] pdfDropZone clicked, opening file picker...");
+		if (pdfFileInput) {
+			pdfFileInput.value = "";
+			pdfFileInput.click();
+		}
 	});
 
 	pdfFileInput?.addEventListener("change", (e) => {
 		const target = e.target;
+		console.log("[PDF] pdfFileInput change event, files:", target ? target.files : null);
 		if (target && target.files && target.files.length > 0) {
 			handlePdfUpload(target.files[0]);
 		}
@@ -3610,9 +3620,9 @@
 			if (ontologyWorkbench) ontologyWorkbench.style.display = "block";
 
 			// Step-by-step real-time progress
-			const mergeTarget = window._activeOntologyName || null;
-			const mergeLabel = mergeTarget
-				? `[2/3] Generando ontología con Gemini IA (merge → ${mergeTarget})...`
+			const explicitDomain = document.getElementById("domain-name-input")?.value?.trim() || null;
+			const mergeLabel = explicitDomain
+				? `[2/3] Generando ontología "${explicitDomain}" con Gemini IA...`
 				: `[2/3] Generando ontología temática con Gemini IA...`;
 			if (uploadContent) {
 				uploadContent.innerHTML = `
@@ -3630,16 +3640,12 @@
 					filename: data.filename,
 					text: data.text_preview,
 					images: data.images || [],
-					domain_name: mergeTarget || null,
+					domain_name: explicitDomain || null,
 				};
-				// If there's an active ontology, merge into it
-				if (mergeTarget) {
-					ontologyPayload.merge_into_ontology = mergeTarget;
-				}
 
 				console.log("[PDF] Generating ontology, payload:", {
 					pdf_id: ontologyPayload.pdf_id,
-					merge_into: mergeTarget || "(new)",
+					domain_name: ontologyPayload.domain_name || "(auto)",
 					text_len: ontologyPayload.text?.length || 0,
 					images_count: ontologyPayload.images?.length || 0,
 				});
@@ -3734,22 +3740,22 @@
 				uploadContent.innerHTML = `
 					<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; width: 100%; padding: 0.25rem 0;">
 						<span style="font-size: 0.8rem; color: #10b981; font-weight: 600;">✅ PDF procesado y ontología lista</span>
-						<span style="font-size: 0.72rem; color: var(--text-muted);">${data.total_images || 0} imágenes extraídas</span>
-						<button type="button" id="go-to-annotate-btn" class="btn-small btn-primary-action" style="margin-top: 0.25rem; font-size: 0.75rem; padding: 0.35rem 0.75rem; pointer-events: auto; cursor: pointer;">
-							🎨 Ir a Anotar en Sección Imágenes ➔
-						</button>
+						<span style="font-size: 0.72rem; color: var(--text-muted);">${data.total_images || 0} imágenes extraídas (${data.filename})</span>
+						<div style="display: flex; gap: 0.4rem; margin-top: 0.25rem; flex-wrap: wrap; justify-content: center;">
+							<button type="button" id="go-to-annotate-btn" class="btn-small btn-primary-action" style="font-size: 0.72rem; padding: 0.3rem 0.6rem; pointer-events: auto; cursor: pointer;">
+								🎨 Ir a Anotar en Sección Imágenes ➔
+							</button>
+						</div>
+						<span style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.2rem;">(Hacé click afuera del botón o arrastrá para cambiar de PDF)</span>
 					</div>
 				`;
 				document.getElementById("go-to-annotate-btn")?.addEventListener("click", async (e) => {
 					e.stopPropagation();
+					e.preventDefault();
 					if (data.images && data.images.length > 0) {
 						await importAllPdfImagesToGallery(data.images, data.pdf_id, true);
 					} else {
-						// Switch to images tab
-						document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-						document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-						document.querySelector('[data-tab="images-tab"]')?.classList.add("active");
-						document.getElementById("images-tab")?.classList.add("active");
+						switchTab("images-tab");
 					}
 				});
 			}
@@ -3873,32 +3879,37 @@
 		}
 
 		// Also load images if available in the ontology document or backend disk
-		if (ontology.pdf_id) {
+		if (ontology.pdf_id || (ontology.extracted_images && ontology.extracted_images.length > 0)) {
+			const targetPdfId = ontology.pdf_id || (ontology.extracted_images && ontology.extracted_images[0]?.pdf_id) || "unknown";
 			_currentPdfData = {
-				pdf_id: ontology.pdf_id,
+				pdf_id: targetPdfId,
 				filename: ontology.source_pdf || "paper.pdf",
 				images: ontology.extracted_images || [],
 			};
+			updatePdfSourceSelect();
 
-			// Fetch live images list from backend
-			fetch(`${API_URL}/pdf-images/${ontology.pdf_id}`)
-				.then(r => r.ok ? r.json() : null)
-				.then(data => {
-					if (data && data.images && data.images.length > 0) {
-						_currentPdfData.images = data.images;
-						renderPdfImagesCrud(data.images, ontology.pdf_id);
-					} else if (ontology.extracted_images && ontology.extracted_images.length > 0) {
-						renderPdfImagesCrud(ontology.extracted_images, ontology.pdf_id);
-					}
-				})
-				.catch(err => {
-					console.warn("Could not fetch live PDF images:", err);
-					if (ontology.extracted_images && ontology.extracted_images.length > 0) {
-						renderPdfImagesCrud(ontology.extracted_images, ontology.pdf_id);
-					}
-				});
-		} else if (ontology.extracted_images && ontology.extracted_images.length > 0) {
-			renderPdfImagesCrud(ontology.extracted_images, "unknown");
+			if (ontology.pdf_id) {
+				// Fetch live images list from backend
+				fetch(`${API_URL}/pdf-images/${ontology.pdf_id}`)
+					.then(r => r.ok ? r.json() : null)
+					.then(data => {
+						if (data && data.images && data.images.length > 0) {
+							_currentPdfData.images = data.images;
+							renderPdfImagesCrud(data.images, ontology.pdf_id);
+							updatePdfSourceSelect();
+						} else if (ontology.extracted_images && ontology.extracted_images.length > 0) {
+							renderPdfImagesCrud(ontology.extracted_images, ontology.pdf_id);
+						}
+					})
+					.catch(err => {
+						console.warn("Could not fetch live PDF images:", err);
+						if (ontology.extracted_images && ontology.extracted_images.length > 0) {
+							renderPdfImagesCrud(ontology.extracted_images, ontology.pdf_id);
+						}
+					});
+			} else if (ontology.extracted_images && ontology.extracted_images.length > 0) {
+				renderPdfImagesCrud(ontology.extracted_images, targetPdfId);
+			}
 		}
 	}
 
@@ -3940,10 +3951,7 @@
 		window._activeOntologyName = domain;
 
 		// Switch to images tab
-		document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-		document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-		document.querySelector('[data-tab="images-tab"]').classList.add("active");
-		document.getElementById("images-tab").classList.add("active");
+		switchTab("images-tab");
 
 		// Update status
 		statusIdle.innerHTML = `
@@ -4172,8 +4180,11 @@
 		return { filename, pdf_id: targetPdfId };
 	}
 
-	async function transferPdfImageToGallery(img, pdf_id, switchTab = false) {
+	async function transferPdfImageToGallery(img, pdf_id, shouldSwitchTab = false) {
 		try {
+			if (shouldSwitchTab) {
+				switchTab("images-tab");
+			}
 			const meta = resolvePdfImageMeta(img, pdf_id);
 			if (!meta || !meta.filename) {
 				throw new Error("Identificador de PDF o nombre de archivo inválido.");
@@ -4187,14 +4198,6 @@
 			const file = new File([blob], meta.filename, { type: blob.type || "image/png" });
 
 			await handleFiles([file], false);
-
-			if (switchTab) {
-				// Switch to images tab only when explicitly requested
-				document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-				document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-				document.querySelector('[data-tab="images-tab"]')?.classList.add("active");
-				document.getElementById("images-tab")?.classList.add("active");
-			}
 		} catch (e) {
 			const msg = e.message && e.message.includes("Failed to fetch")
 				? "No se pudo conectar con el servidor backend (puerto 8000). Si se estaba reiniciando, espera unos segundos y vuelve a intentarlo."
@@ -4203,32 +4206,39 @@
 		}
 	}
 
-	async function importAllPdfImagesToGallery(images, pdf_id, switchTab = true) {
+	async function importAllPdfImagesToGallery(images, pdf_id, shouldSwitchTab = true) {
 		if (!images || images.length === 0) {
 			alert("No hay imágenes para cargar.");
 			return;
 		}
 
-		const files = [];
+		if (shouldSwitchTab) {
+			switchTab("images-tab");
+		}
+
 		const fallbackPdfId = pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
 
-		for (const img of images) {
+		// Download all images in parallel for speed
+		const downloadPromises = images.map(async (img) => {
 			try {
 				const meta = resolvePdfImageMeta(img, fallbackPdfId);
-				if (!meta || !meta.filename) continue;
+				if (!meta || !meta.filename) return null;
 				const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(meta.pdf_id)}/${encodeURIComponent(meta.filename)}`;
 				const response = await fetch(imgUrl);
 				if (!response.ok) {
 					console.warn(`No se pudo descargar ${meta.filename} (HTTP ${response.status})`);
-					continue;
+					return null;
 				}
 				const blob = await response.blob();
-				const file = new File([blob], meta.filename, { type: blob.type || "image/png" });
-				files.push(file);
+				return new File([blob], meta.filename, { type: blob.type || "image/png" });
 			} catch (err) {
 				console.warn("Error fetching PDF image:", img, err);
+				return null;
 			}
-		}
+		});
+
+		const results = await Promise.all(downloadPromises);
+		const files = results.filter(f => f !== null);
 
 		if (files.length === 0) {
 			alert("No se pudieron descargar las imágenes del PDF. Verifica que el backend esté activo.");
@@ -4236,26 +4246,52 @@
 		}
 
 		await handleFiles(files, false);
-
-		if (switchTab) {
-			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-			document.querySelector('[data-tab="images-tab"]')?.classList.add("active");
-			document.getElementById("images-tab")?.classList.add("active");
-		}
 	}
 
 	// Button: Import all PDF images from PDF Workbench
 	importAllPdfToGalleryBtn?.addEventListener("click", async () => {
-		if (!_currentPdfData || !_currentPdfData.images || _currentPdfData.images.length === 0) {
-			alert("No hay imágenes en el PDF actual para cargar.");
-			return;
-		}
 		const origText = importAllPdfToGalleryBtn.innerHTML;
 		importAllPdfToGalleryBtn.disabled = true;
 		importAllPdfToGalleryBtn.innerHTML = '⏳ Cargando imágenes...';
 		try {
-			await importAllPdfImagesToGallery(_currentPdfData.images, _currentPdfData.pdf_id, true);
+			let images = _currentPdfData?.images;
+			let pdfId = _currentPdfData?.pdf_id;
+
+			// If _currentPdfData is empty, attempt to resolve from active ontology or dropdown
+			if (!images || images.length === 0) {
+				const activeOnt = window._activeOntologyName || pdfSourceSelect?.value;
+				if (activeOnt && activeOnt !== "__current__") {
+					try {
+						const res = await fetch(`${API_URL}/ontology/${encodeURIComponent(activeOnt)}`);
+						if (res.ok) {
+							const ont = await res.json();
+							pdfId = ont.pdf_id || "unknown";
+							if (ont.pdf_id) {
+								const imgRes = await fetch(`${API_URL}/pdf-images/${encodeURIComponent(ont.pdf_id)}`);
+								if (imgRes.ok) {
+									const imgData = await imgRes.json();
+									images = imgData.images;
+								}
+							}
+							if (!images || images.length === 0) {
+								images = ont.extracted_images;
+							}
+						}
+					} catch (err) {
+						console.warn("Could not fetch fallback ontology images:", err);
+					}
+				}
+			}
+
+			if (!images || images.length === 0) {
+				alert("No hay imágenes en el PDF actual para cargar.");
+				return;
+			}
+
+			await importAllPdfImagesToGallery(images, pdfId, true);
+		} catch (e) {
+			console.error("Error in importAllPdfToGalleryBtn:", e);
+			alert("Error al cargar imágenes: " + e.message);
 		} finally {
 			importAllPdfToGalleryBtn.disabled = false;
 			importAllPdfToGalleryBtn.innerHTML = origText;
@@ -4311,7 +4347,7 @@
 
 		if (val === "__current__") {
 			if (_currentPdfData && _currentPdfData.images) {
-				await importAllPdfImagesToGallery(_currentPdfData.images, _currentPdfData.pdf_id, false);
+				await importAllPdfImagesToGallery(_currentPdfData.images, _currentPdfData.pdf_id, true);
 			}
 			return;
 		}
@@ -4326,13 +4362,13 @@
 				if (imgRes.ok) {
 					const imgData = await imgRes.json();
 					if (imgData.images && imgData.images.length > 0) {
-						await importAllPdfImagesToGallery(imgData.images, ont.pdf_id, false);
+						await importAllPdfImagesToGallery(imgData.images, ont.pdf_id, true);
 						return;
 					}
 				}
 			}
 			if (ont.extracted_images && ont.extracted_images.length > 0) {
-				await importAllPdfImagesToGallery(ont.extracted_images, ont.pdf_id || "unknown", false);
+				await importAllPdfImagesToGallery(ont.extracted_images, ont.pdf_id || "unknown", true);
 			} else {
 				alert("Esta ontología no contiene imágenes asociadas.");
 			}
@@ -4502,10 +4538,7 @@
 		updateExportStats();
 
 		// Switch to images tab and select the first segmented image
-		document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-		document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-		document.querySelector('[data-tab="images-tab"]').classList.add("active");
-		document.getElementById("images-tab").classList.add("active");
+		switchTab("images-tab");
 
 		if (firstAddedKey) {
 			selectImage(firstAddedKey);

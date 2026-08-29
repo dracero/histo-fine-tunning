@@ -68,7 +68,7 @@ class ConchModelWrapper:
         return cls._instance
 
     def load(self, force_reload: bool = False) -> bool:
-        """Load CONCH model weights onto GPU/CPU."""
+        """Load CONCH model weights onto GPU/CPU with automatic CPU fallback on CUDA OOM."""
         if self.is_loaded and not force_reload:
             return True
 
@@ -76,17 +76,32 @@ class ConchModelWrapper:
             from conch.open_clip_custom import create_model_from_pretrained, get_tokenizer
 
             logger.info(f"Loading CONCH model on {self.device}...")
-            model, preprocess = create_model_from_pretrained(
-                "conch_ViT-B-16",
-                checkpoint_path="hf_hub:MahmoodLab/CONCH",
-                device=self.device,
-            )
+            try:
+                model, preprocess = create_model_from_pretrained(
+                    "conch_ViT-B-16",
+                    checkpoint_path="hf_hub:MahmoodLab/CONCH",
+                    device=self.device,
+                )
+            except (torch.cuda.OutOfMemoryError, RuntimeError) as cuda_err:
+                if "out of memory" in str(cuda_err).lower() or isinstance(cuda_err, torch.cuda.OutOfMemoryError):
+                    logger.warning(f"CUDA OOM while loading CONCH on {self.device}, falling back to CPU: {cuda_err}")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    self.device = torch.device("cpu")
+                    model, preprocess = create_model_from_pretrained(
+                        "conch_ViT-B-16",
+                        checkpoint_path="hf_hub:MahmoodLab/CONCH",
+                        device=self.device,
+                    )
+                else:
+                    raise cuda_err
+
             model.eval()
             self.model = model
             self.preprocess = preprocess
             self.tokenizer = get_tokenizer()
             self.is_loaded = True
-            logger.info("CONCH model loaded successfully.")
+            logger.info(f"CONCH model loaded successfully on {self.device}.")
             return True
         except Exception as e:
             logger.error(f"Failed to load CONCH model: {e}", exc_info=True)
@@ -156,7 +171,7 @@ class UniModelWrapper:
         return cls._instance
 
     def load(self, force_reload: bool = False) -> bool:
-        """Load UNI model weights onto GPU/CPU."""
+        """Load UNI model weights onto GPU/CPU with automatic CPU fallback on CUDA OOM."""
         if self.is_loaded and not force_reload:
             return True
 
@@ -174,7 +189,18 @@ class UniModelWrapper:
                 dynamic_img_size=True,
             )
             model.load_state_dict(torch.load(checkpoint_path, map_location="cpu"), strict=True)
-            model.to(self.device)
+            try:
+                model.to(self.device)
+            except (torch.cuda.OutOfMemoryError, RuntimeError) as cuda_err:
+                if "out of memory" in str(cuda_err).lower() or isinstance(cuda_err, torch.cuda.OutOfMemoryError):
+                    logger.warning(f"CUDA OOM while moving UNI to {self.device}, falling back to CPU: {cuda_err}")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    self.device = torch.device("cpu")
+                    model.to(self.device)
+                else:
+                    raise cuda_err
+
             model.eval()
 
             transform = transforms.Compose([
@@ -187,7 +213,7 @@ class UniModelWrapper:
             self.model = model
             self.transform = transform
             self.is_loaded = True
-            logger.info("UNI model loaded successfully.")
+            logger.info(f"UNI model loaded successfully on {self.device}.")
             return True
         except Exception as e:
             logger.error(f"Failed to load UNI model: {e}", exc_info=True)
@@ -269,10 +295,21 @@ class VirchowModelWrapper:
             )
 
             # Move to target device (in half precision on CUDA to save VRAM and maximize throughput)
-            if self.device.type == "cuda":
-                model = model.to(self.device).half()
-            else:
-                model = model.to(self.device)
+            try:
+                if self.device.type == "cuda":
+                    model = model.to(self.device).half()
+                else:
+                    model = model.to(self.device)
+            except (torch.cuda.OutOfMemoryError, RuntimeError) as cuda_err:
+                if "out of memory" in str(cuda_err).lower() or isinstance(cuda_err, torch.cuda.OutOfMemoryError):
+                    logger.warning(f"CUDA OOM while moving Virchow to {self.device}, falling back to CPU: {cuda_err}")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    self.device = torch.device("cpu")
+                    model = model.to(self.device).float()
+                else:
+                    raise cuda_err
+
             model.eval()
 
             try:
@@ -494,26 +531,69 @@ def enrich_histology_prompt(raw_key: str, raw_name: str, existing_prompt: Option
     return f"{name} in histological tissue section"
 
 
+def encode_candidate_classes_conch(
+    conch: ConchModelWrapper,
+    candidate_classes: List[Dict[str, Any]],
+) -> Tuple[torch.Tensor, List[str], List[str], List[str]]:
+    """
+    Encode candidate classes using prompt ensembling across multiple pathology templates.
+    Averages text embeddings across templates for each class to produce robust zero-shot class centroids.
+    """
+    class_keys = [c.get("key") for c in candidate_classes]
+    class_labels = [c.get("label", c.get("name", c.get("key"))) for c in candidate_classes]
+    class_colors = [c.get("color", "#8b5cf6") for c in candidate_classes]
+
+    all_class_embeddings = []
+    for c in candidate_classes:
+        name = str(c.get("label") or c.get("name") or c.get("key") or "cell").strip()
+        prompt = str(c.get("prompt") or name).strip()
+
+        templates = [
+            f"a high-magnification photomicrograph of {name}, {prompt}",
+            f"a histological tissue section showing {name}, {prompt}",
+            f"a microscopic view of {name}, {prompt}, hematoxylin and eosin stain",
+            f"histopathology image of {name}: {prompt}",
+            enrich_histology_prompt(c.get("key", ""), name, c.get("prompt")),
+        ]
+        # Deduplicate non-empty templates
+        templates = list(dict.fromkeys([t.strip() for t in templates if t.strip()]))
+
+        try:
+            template_embeds = conch.encode_texts(templates)  # (N_templates, 512)
+            mean_embed = torch.mean(template_embeds, dim=0, keepdim=True)
+            mean_embed_norm = F.normalize(mean_embed.float(), dim=-1)
+            all_class_embeddings.append(mean_embed_norm)
+        except Exception as e:
+            logger.warning(f"Error encoding prompt ensemble for class {name}: {e}")
+            fallback_text = enrich_histology_prompt(c.get("key", ""), name, c.get("prompt"))
+            single_emb = conch.encode_texts([fallback_text])
+            all_class_embeddings.append(single_emb)
+
+    class_text_embeddings = torch.cat(all_class_embeddings, dim=0)  # (N_classes, 512)
+    return class_text_embeddings, class_keys, class_labels, class_colors
+
+
 def classify_detections_with_conch(
     image: Image.Image,
     detections: List[Dict[str, Any]],
     candidate_classes: List[Dict[str, str]],
-    temperature: float = 0.12,
+    temperature: float = 0.08,
     is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    Perform Zero-Shot Pathology Classification on a list of detections using CONCH.
+    Perform High-Precision Zero-Shot Pathology Classification on a list of detections using CONCH
+    with multi-template prompt ensembling and calibrated confidence margins.
 
     Args:
         image: Original full PIL image.
         detections: List of detection dicts (each containing 'id', 'bbox', 'polygon', etc.)
         candidate_classes: List of dicts with 'key', 'prompt', 'label', 'color'
-        temperature: Softmax scaling temperature.
+        temperature: Softmax scaling temperature (default calibrated to 0.08).
         is_histology: If False, skip CONCH as it is reserved for histology domains.
 
     Returns:
         List of classified detections with updated class_key, class_label, color,
-        conch_confidence, and class_scores.
+        conch_confidence, conch_margin, and class_scores.
     """
     if not detections or not candidate_classes:
         return detections
@@ -531,23 +611,13 @@ def classify_detections_with_conch(
         if not success:
             raise RuntimeError("CONCH model could not be initialized.")
 
-    # 1. Prepare and enrich text prompts
-    prompts_text = [
-        enrich_histology_prompt(
-            raw_key=c.get("key", ""),
-            raw_name=c.get("label", c.get("name", "")),
-            existing_prompt=c.get("prompt"),
-        )
-        for c in candidate_classes
-    ]
-    class_keys = [c.get("key") for c in candidate_classes]
-    class_labels = [c.get("label", c.get("name", c.get("key"))) for c in candidate_classes]
-    class_colors = [c.get("color", "#8b5cf6") for c in candidate_classes]
+    # 1. Encode text prompts with multi-template ensemble
+    text_embeddings, class_keys, class_labels, class_colors = encode_candidate_classes_conch(
+        conch=conch,
+        candidate_classes=candidate_classes,
+    )
 
-    # Encode text prompts
-    text_embeddings = conch.encode_texts(prompts_text)  # (N_classes, 512)
-
-    # 2. Extract crops for all detections
+    # 2. Extract contextual crops for all detections
     crops = extract_crops_from_detections(image, detections)
 
     # Encode image crops
@@ -558,17 +628,22 @@ def classify_detections_with_conch(
     text_embeddings = text_embeddings.float()
     similarity_matrix = torch.matmul(image_embeddings, text_embeddings.T).float()
 
-    # Softmax probabilities
+    # Softmax probabilities with calibrated temperature
     probs = F.softmax(similarity_matrix / temperature, dim=-1).float().cpu().numpy()
     similarities = similarity_matrix.float().cpu().numpy()
 
-    # 4. Assign best matching class
+    # 4. Assign best matching class and compute discriminative margins
     classified_detections = []
     for i, det in enumerate(detections):
         det_copy = dict(det)
         det_probs = probs[i]
-        best_idx = int(np.argmax(det_probs))
+        sorted_indices = np.argsort(det_probs)[::-1]
+        best_idx = int(sorted_indices[0])
+        second_idx = int(sorted_indices[1]) if len(sorted_indices) > 1 else best_idx
+
         best_conf = float(det_probs[best_idx])
+        second_conf = float(det_probs[second_idx]) if len(sorted_indices) > 1 else 0.0
+        margin = float(best_conf - second_conf)
         best_sim = float(similarities[i][best_idx])
 
         det_copy["category_id"] = class_keys[best_idx]
@@ -577,6 +652,8 @@ def classify_detections_with_conch(
         det_copy["color"] = class_colors[best_idx]
         det_copy["conch_confidence"] = round(best_conf, 4)
         det_copy["conch_similarity"] = round(best_sim, 4)
+        det_copy["conch_margin"] = round(margin, 4)
+        det_copy["score"] = round(best_conf, 4)
         det_copy["conch_scores"] = {
             class_keys[k]: round(float(det_probs[k]), 4)
             for k in range(len(class_keys))
@@ -1183,6 +1260,10 @@ def classify_with_virchow_prototypes(
         det_copy["virchow_verified"] = virchow.is_loaded
         det_copy["uni_verified"] = uni.is_loaded
         det_copy["detection_area"] = round(area, 1)
+        det_copy["score"] = det_copy.get("score", round(best_conf, 4))
+        if not det_copy.get("decision_source"):
+            det_copy["decision_source"] = "tripartite_foundation_ensemble"
+            det_copy["agent_reasoning"] = f"Clasificado por Ensamble de Patología (CONCH {float(det_copy.get('conch_confidence', 0.0)):.0%}, Virchow 2: {virchow.is_loaded}, UNI: {uni.is_loaded})"
         final_classified.append(det_copy)
 
     # 8. Data-driven neighbourhood consistency pass with blended similarity
@@ -1209,6 +1290,7 @@ def classify_with_virchow_prototypes(
                 det["classification_uncertain"] = False
                 det["neighbour_aligned"] = True
                 det["neighbour_similarity"] = round(best_sim, 4)
+                det["agent_reasoning"] += f" (Consistencia morfológica Virchow2+UNI: {best_sim:.2f})"
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

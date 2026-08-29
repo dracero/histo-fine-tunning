@@ -41,7 +41,7 @@ import cv2
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import List, Dict, Any, AsyncGenerator, Optional
 
 # Configure logging
@@ -188,15 +188,27 @@ def prepare_engine_vram(target_engine: str) -> None:
         logger.info("Restored SAM 3 to GPU for fast zero-shot segmentation.")
 
 
+@contextmanager
+def sam3_inference_context():
+    """Thread-safe context manager ensuring inference_mode and correct autocast dtype for SAM 3."""
+    autocast_dtype = (
+        torch.bfloat16
+        if (device == "cuda" and torch.cuda.is_bf16_supported())
+        else (torch.float16 if device == "cuda" else torch.float32)
+    )
+    with torch.inference_mode():
+        if device == "cuda":
+            with torch.autocast(device_type=device, dtype=autocast_dtype):
+                yield
+        else:
+            yield
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global processor, sam3_semantic_predictor
     logger.info("Initializing SAM 3 models...")
     start_time = time.time()
-
-    # Enable bfloat16 autocast globally, as recommended by the official SAM3 notebooks
-    torch.autocast(device_type=device, dtype=torch.bfloat16).__enter__()
-    torch.inference_mode().__enter__()
 
     # 1. Initialize Ultralytics SAM3SemanticPredictor if available
     if SAM3SemanticPredictor is not None:
@@ -643,35 +655,36 @@ async def segment_image(
             concept_list = ["cell nucleus"]
 
         detections = []
-        # Priority 1: Ultralytics SAM3SemanticPredictor (Fast multi-concept zero-shot)
-        if sam3_semantic_predictor is not None:
-            try:
-                if hasattr(sam3_semantic_predictor, "args") and sam3_semantic_predictor.args is not None:
-                    sam3_semantic_predictor.args.conf = float(umbral)
-                sam3_semantic_predictor.set_image(pil_image)
-                results = sam3_semantic_predictor(text=concept_list)
-                detections = _extract_detections_ultralytics(
-                    results=results,
-                    elements=concept_list,
-                    img_w=width,
-                    img_h=height,
-                    conf_thresh=float(umbral)
-                )
-            except Exception as ultra_err:
-                logger.warning(f"SAM3SemanticPredictor failed, falling back to processor: {ultra_err}")
-                detections = []
+        with sam3_inference_context():
+            # Priority 1: Ultralytics SAM3SemanticPredictor (Fast multi-concept zero-shot)
+            if sam3_semantic_predictor is not None:
+                try:
+                    if hasattr(sam3_semantic_predictor, "args") and sam3_semantic_predictor.args is not None:
+                        sam3_semantic_predictor.args.conf = float(umbral)
+                    sam3_semantic_predictor.set_image(pil_image)
+                    results = sam3_semantic_predictor(text=concept_list)
+                    detections = _extract_detections_ultralytics(
+                        results=results,
+                        elements=concept_list,
+                        img_w=width,
+                        img_h=height,
+                        conf_thresh=float(umbral)
+                    )
+                except Exception as ultra_err:
+                    logger.warning(f"SAM3SemanticPredictor failed, falling back to processor: {ultra_err}")
+                    detections = []
 
-        # Priority 2: Fallback to Sam3Processor if predictor was unavailable or returned empty due to error
-        if not detections and processor is not None:
-            inf_image, w, h, sx, sy = _prepare_image_for_inference(pil_image)
-            processor.confidence_threshold = max(0.01, min(0.35, float(umbral)))
-            inference_state = processor.set_image(inf_image)
-            for c_text in concept_list:
-                output = processor.set_text_prompt(state=inference_state, prompt=c_text)
-                c_dets = _extract_detections(output, umbral, sx, sy, img_w=width, img_h=height)
-                for d in c_dets:
-                    d["category_name"] = c_text
-                detections.extend(c_dets)
+            # Priority 2: Fallback to Sam3Processor if predictor was unavailable or returned empty due to error
+            if not detections and processor is not None:
+                inf_image, w, h, sx, sy = _prepare_image_for_inference(pil_image)
+                processor.confidence_threshold = max(0.01, min(0.35, float(umbral)))
+                inference_state = processor.set_image(inf_image)
+                for c_text in concept_list:
+                    output = processor.set_text_prompt(state=inference_state, prompt=c_text)
+                    c_dets = _extract_detections(output, umbral, sx, sy, img_w=width, img_h=height)
+                    for d in c_dets:
+                        d["category_name"] = c_text
+                    detections.extend(c_dets)
 
         # Group detections by category_name for frontend compatibility
         palette = ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#84cc16"]
@@ -756,7 +769,7 @@ async def segment_auto(
             return cellpose_res
 
         # Engine Branch 2: Meta SAM 3.1
-        if processor is None:
+        if processor is None and sam3_semantic_predictor is None:
             raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
 
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
@@ -799,46 +812,59 @@ async def segment_auto(
             ]
 
         # 2. SAM 3.1 Inference with adaptive sensitivity
-        proc_thresh = max(0.01, min(0.35, float(umbral)))
-        processor.confidence_threshold = proc_thresh
-
         all_raw_detections = []
-        with torch.inference_mode():
-            inference_state = processor.set_image(inf_image)
+        with sam3_inference_context():
+            if processor is not None:
+                proc_thresh = max(0.01, min(0.35, float(umbral)))
+                processor.confidence_threshold = proc_thresh
+                inference_state = processor.set_image(inf_image)
 
-            for p_idx, prompt_info in enumerate(prompts_to_run):
-                prompt_text = prompt_info.get("prompt", "")
-                prompt_key = prompt_info.get("key", "struct")
-                prompt_label = prompt_info.get("label", prompt_info.get("name", prompt_key))
-                prompt_color = prompt_info.get("color", "#8b5cf6")
+                for p_idx, prompt_info in enumerate(prompts_to_run):
+                    prompt_text = prompt_info.get("prompt", "")
+                    prompt_key = prompt_info.get("key", "struct")
+                    prompt_label = prompt_info.get("label", prompt_info.get("name", prompt_key))
+                    prompt_color = prompt_info.get("color", "#8b5cf6")
 
-                if not prompt_text:
-                    continue
+                    if not prompt_text:
+                        continue
 
-                processor.reset_all_prompts(inference_state)
-                output = processor.set_text_prompt(state=inference_state, prompt=prompt_text)
+                    processor.reset_all_prompts(inference_state)
+                    output = processor.set_text_prompt(state=inference_state, prompt=prompt_text)
 
-                detections = _extract_detections(
-                    output,
-                    umbral=umbral,
-                    scale_x=scale_x,
-                    scale_y=scale_y,
-                    include_polygons=True,
+                    detections = _extract_detections(
+                        output,
+                        umbral=umbral,
+                        scale_x=scale_x,
+                        scale_y=scale_y,
+                        include_polygons=True,
+                        img_w=width,
+                        img_h=height,
+                        iou_threshold=0.65,
+                    )
+
+                    for d in detections:
+                        d_copy = dict(d)
+                        d_copy["initial_class_key"] = prompt_key
+                        d_copy["initial_label"] = prompt_label
+                        d_copy["color"] = prompt_color
+                        all_raw_detections.append(d_copy)
+
+                    # Clear CUDA cache periodically every 5 prompts to avoid VRAM fragmentation
+                    if p_idx > 0 and p_idx % 5 == 0 and torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+            elif sam3_semantic_predictor is not None:
+                concept_texts = [p.get("prompt", "") for p in prompts_to_run if p.get("prompt")]
+                if hasattr(sam3_semantic_predictor, "args") and sam3_semantic_predictor.args is not None:
+                    sam3_semantic_predictor.args.conf = float(umbral)
+                sam3_semantic_predictor.set_image(pil_image)
+                results = sam3_semantic_predictor(text=concept_texts)
+                all_raw_detections = _extract_detections_ultralytics(
+                    results=results,
+                    elements=concept_texts,
                     img_w=width,
                     img_h=height,
-                    iou_threshold=0.65,
+                    conf_thresh=float(umbral)
                 )
-
-                for d in detections:
-                    d_copy = dict(d)
-                    d_copy["initial_class_key"] = prompt_key
-                    d_copy["initial_label"] = prompt_label
-                    d_copy["color"] = prompt_color
-                    all_raw_detections.append(d_copy)
-
-                # Clear CUDA cache periodically every 5 prompts to avoid VRAM fragmentation
-                if p_idx > 0 and p_idx % 5 == 0 and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -946,55 +972,56 @@ async def segment_point(
         px = int(x * orig_w) if x <= 1.0 else int(x)
         py = int(y * orig_h) if y <= 1.0 else int(y)
 
-        # 1. Try text prompt on full image first
-        inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
-        state = processor.set_image(inf_image)
-        output = processor.set_text_prompt(state=state, prompt=prompt if prompt else "object")
-        detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True)
+        with sam3_inference_context():
+            # 1. Try text prompt on full image first
+            inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
+            state = processor.set_image(inf_image)
+            output = processor.set_text_prompt(state=state, prompt=prompt if prompt else "object")
+            detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True)
 
-        matched_det = None
-        min_dist = float("inf")
+            matched_det = None
+            min_dist = float("inf")
 
-        for det in detections:
-            bbox = det["bbox"]  # [x, y, w, h]
-            bx, by, bw, bh = bbox
-            if bx <= px <= bx + bw and by <= py <= by + bh:
-                matched_det = det
-                break
-            cx, cy = bx + bw / 2, by + bh / 2
-            dist = math.hypot(px - cx, py - cy)
-            if dist < min_dist:
-                min_dist = dist
-                matched_det = det
+            for det in detections:
+                bbox = det["bbox"]  # [x, y, w, h]
+                bx, by, bw, bh = bbox
+                if bx <= px <= bx + bw and by <= py <= by + bh:
+                    matched_det = det
+                    break
+                cx, cy = bx + bw / 2, by + bh / 2
+                dist = math.hypot(px - cx, py - cy)
+                if dist < min_dist:
+                    min_dist = dist
+                    matched_det = det
 
-        # 2. Localized crop fallback around (px, py) if no detection matched
-        if matched_det is None or min_dist > 150:
-            crop_size = min(max(orig_w, orig_h) // 3, 300)
-            left = max(0, px - crop_size // 2)
-            top = max(0, py - crop_size // 2)
-            right = min(orig_w, left + crop_size)
-            bottom = min(orig_h, top + crop_size)
+            # 2. Localized crop fallback around (px, py) if no detection matched
+            if matched_det is None or min_dist > 150:
+                crop_size = min(max(orig_w, orig_h) // 3, 300)
+                left = max(0, px - crop_size // 2)
+                top = max(0, py - crop_size // 2)
+                right = min(orig_w, left + crop_size)
+                bottom = min(orig_h, top + crop_size)
 
-            crop_img = pil_image.crop((left, top, right, bottom))
-            crop_inf, cw, ch, c_scale_x, c_scale_y = _prepare_image_for_inference(crop_img)
+                crop_img = pil_image.crop((left, top, right, bottom))
+                crop_inf, cw, ch, c_scale_x, c_scale_y = _prepare_image_for_inference(crop_img)
 
-            c_state = processor.set_image(crop_inf)
-            c_output = processor.set_text_prompt(state=c_state, prompt=prompt if prompt else "object")
-            c_dets = _extract_detections(c_output, 0.01, c_scale_x, c_scale_y, include_polygons=True)
+                c_state = processor.set_image(crop_inf)
+                c_output = processor.set_text_prompt(state=c_state, prompt=prompt if prompt else "object")
+                c_dets = _extract_detections(c_output, 0.01, c_scale_x, c_scale_y, include_polygons=True)
 
-            if c_dets:
-                best_c = c_dets[0]
-                bx, by, bw, bh = best_c["bbox"]
-                best_c["bbox"] = [bx + left, by + top, bw, bh]
-                if "segmentation" in best_c:
-                    new_seg = []
-                    for poly in best_c["segmentation"]:
-                        new_poly = []
-                        for i in range(0, len(poly), 2):
-                            new_poly.extend([poly[i] + left, poly[i+1] + top])
-                        new_seg.append(new_poly)
-                    best_c["segmentation"] = new_seg
-                matched_det = best_c
+                if c_dets:
+                    best_c = c_dets[0]
+                    bx, by, bw, bh = best_c["bbox"]
+                    best_c["bbox"] = [bx + left, by + top, bw, bh]
+                    if "segmentation" in best_c:
+                        new_seg = []
+                        for poly in best_c["segmentation"]:
+                            new_poly = []
+                            for i in range(0, len(poly), 2):
+                                new_poly.extend([poly[i] + left, poly[i+1] + top])
+                            new_seg.append(new_poly)
+                        best_c["segmentation"] = new_seg
+                    matched_det = best_c
 
         # Fallback bounding box polygon if no detection returned
         if matched_det is None:

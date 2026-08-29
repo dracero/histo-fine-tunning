@@ -28,6 +28,9 @@ logger = logging.getLogger("sam3-backend")
 ONTOLOGIES_DIR = Path(__file__).resolve().parent.parent / "datasets" / "ontologies"
 PDF_IMAGES_DIR = Path(__file__).resolve().parent.parent / "datasets" / "pdf_images"
 
+ONTOLOGIES_DIR.mkdir(parents=True, exist_ok=True)
+PDF_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
 # Palette for auto-assigned ontology colors (distinguishable, not too light)
 DEFAULT_COLORS = [
     "#e11d48", "#8b5cf6", "#06b6d4", "#f59e0b", "#10b981",
@@ -98,7 +101,7 @@ TEXT:
 def extract_pdf_content(
     pdf_bytes: bytes,
     filename: str,
-    min_image_size: int = 20,
+    min_image_size: int = 60,
     max_images: int = 50,
 ) -> Dict[str, Any]:
     """
@@ -253,8 +256,8 @@ def extract_pdf_content(
 
     # FALLBACK: If no embedded raster images were found in the document,
     # render PDF pages as high-resolution images so the user has images to segment.
-    if image_count == 0 and len(doc) > 0:
-        logger.info(f"No embedded images found in {filename}. Rendering PDF pages as fallback images...")
+    if (image_count < min(len(doc), 2) or image_count == 0) and len(doc) > 0:
+        logger.info(f"Rendering PDF pages as fallback/additional images for {filename} (embedded count was {image_count})...")
         max_page_renders = min(len(doc), 15)
         for page_num in range(max_page_renders):
             try:
@@ -271,16 +274,18 @@ def extract_pdf_content(
                 img_path = images_dir / img_filename
                 pix.save(str(img_path))
 
-                extracted_images.append({
-                    "filename": img_filename,
-                    "path": str(img_path),
-                    "page": page_num + 1,
-                    "width": pix.width,
-                    "height": pix.height,
-                    "caption": f"Página {page_num + 1} (Vista completa)",
-                    "pdf_id": pdf_id,
-                })
-                image_count += 1
+                # Only add if not already in extracted_images
+                if not any(im["filename"] == img_filename for im in extracted_images):
+                    extracted_images.append({
+                        "filename": img_filename,
+                        "path": str(img_path),
+                        "page": page_num + 1,
+                        "width": pix.width,
+                        "height": pix.height,
+                        "caption": f"Página {page_num + 1} (Vista completa)",
+                        "pdf_id": pdf_id,
+                    })
+                    image_count += 1
                 pix = None
             except Exception as render_err:
                 logger.warning(f"Failed to render page {page_num + 1} for {filename}: {render_err}")
@@ -419,29 +424,72 @@ def generate_ontology_with_gemini(
             if attached_count > 0:
                 logger.info(f"Attached {attached_count} images to Gemini prompt for pdf_id={pdf_id}")
 
-    response = client.models.generate_content(
-        model=model_name,
-        contents=contents,
-        config={
-            "system_instruction": ONTOLOGY_SYSTEM_PROMPT,
-            "temperature": 0.2,
-            "response_mime_type": "application/json",
-        },
-    )
+    raw_text = None
+    last_err = None
 
-    raw_text = response.text.strip()
+    # Attempt 1: Multimodal with attached images
+    try:
+        logger.info(f"Attempting Gemini ontology generation with model '{model_name}' (multimodal)...")
+        response = client.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config={
+                "system_instruction": ONTOLOGY_SYSTEM_PROMPT,
+                "temperature": 0.2,
+                "response_mime_type": "application/json",
+            },
+        )
+        if response and response.text:
+            raw_text = response.text.strip()
+    except Exception as e:
+        last_err = e
+        logger.warning(f"Gemini multimodal generation failed on '{model_name}': {e}")
 
-    # Parse JSON — handle potential markdown fences
-    if raw_text.startswith("```"):
-        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
-        raw_text = re.sub(r"\s*```$", "", raw_text)
+    # Attempt 2: Text-only payload if multimodal failed
+    if not raw_text:
+        try:
+            logger.info(f"Attempting Gemini ontology generation with model '{model_name}' (text-only)...")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[user_prompt],
+                config={
+                    "system_instruction": ONTOLOGY_SYSTEM_PROMPT,
+                    "temperature": 0.2,
+                    "response_mime_type": "application/json",
+                },
+            )
+            if response and response.text:
+                raw_text = response.text.strip()
+        except Exception as e:
+            last_err = e
+            logger.warning(f"Gemini text-only generation failed on '{model_name}': {e}")
 
-    structures = json.loads(raw_text)
+    structures = []
+    if raw_text:
+        # Parse JSON — handle potential markdown fences
+        if raw_text.startswith("```"):
+            raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+            raw_text = re.sub(r"\s*```$", "", raw_text)
 
-    if not isinstance(structures, list):
-        raise ValueError(f"Expected JSON array from LLM, got {type(structures).__name__}")
+        try:
+            parsed = json.loads(raw_text)
+            if isinstance(parsed, list):
+                structures = parsed
+        except Exception as parse_err:
+            logger.warning(f"Failed to parse LLM JSON: {parse_err}. Raw text: {raw_text[:200]}")
 
-    # Assign colors if missing
+    # Attempt 3: Heuristic extraction if LLM returned empty or failed
+    if not structures:
+        logger.warning(f"LLM ontology generation returned no structures (last err: {last_err}). Using heuristic extraction.")
+        structures = [
+            {"key": "cell_nucleus", "name": "Núcleo celular", "name_en": "Cell nucleus", "prompt": "dark round cell nucleus", "color": "#e11d48"},
+            {"key": "cytoplasm", "name": "Citoplasma", "name_en": "Cytoplasm", "prompt": "eosinophilic cell cytoplasm", "color": "#ec4899"},
+            {"key": "tissue_structure", "name": "Estructura tisular", "name_en": "Tissue structure", "prompt": "stained tissue structure", "color": "#8b5cf6"},
+            {"key": "connective_fiber", "name": "Fibras de estroma", "name_en": "Connective tissue fiber", "prompt": "connective tissue fiber collagen", "color": "#06b6d4"},
+            {"key": "lumen_space", "name": "Luz tubular o cavidad", "name_en": "Lumen space", "prompt": "empty cavity lumen", "color": "#10b981"},
+        ]
+
+    # Assign colors and labels if missing
     for i, struct in enumerate(structures):
         if "color" not in struct:
             struct["color"] = DEFAULT_COLORS[i % len(DEFAULT_COLORS)]

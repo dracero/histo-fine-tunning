@@ -36,7 +36,7 @@ Diseñada para analizar cortes histológicos y micrografías complejas con cient
   * **Multi-Prompt Automático (`/api/segment-auto`)**: Detección masiva paralela usando batería de conceptos histológicos (*"cell nucleus"*, *"circular lumen"*, *"elongated fiber"*, etc.).
   * **Aislamiento por hilo (`sam3_inference_context`)**: Ejecución thread-safe en precisión mixta `bfloat16` con `torch.inference_mode()` para prevenir discrepancias de tipo de dato (*dtype mismatches*).
 
-* **Cellpose & Cellpose-SAM (`cpsam`, `cpsam_v2`, `nuclei`, `cyto3`)**:
+* **Cellpose & Cellpose-SAM (`cpsam`, `cpsam_v2`, `nuclei`, `cyto3`, `tissuenet`)**:
   * Motor especializado en microscopía de fluorescencia y cortes densos teñidos con Hematoxilina & Eosina (H&E).
   * Estimación automática o manual del diámetro celular para optimizar la escala de detección.
   * Extracción de máscaras y polígonos celulares de alta densidad con separación de bordes contiguos.

@@ -495,3 +495,262 @@ Output ONLY a valid JSON list of objects:
 
     return final_classified
 
+
+def validate_uncertain_detections_with_gemini(
+    image: Image.Image,
+    uncertain_detections: List[Dict[str, Any]],
+    ontology_classes: List[Dict[str, Any]],
+    organ_context: str = "histología",
+    api_key: Optional[str] = None,
+    max_to_validate: int = 25,
+) -> List[Dict[str, Any]]:
+    """
+    Arbitrates and validates ambiguous/uncertain histological instances using Gemini 2.5 Flash Vision.
+
+    Selects ambiguous detections, passes contextual high-resolution crops along with the full slide context,
+    and returns adjudications conforming strictly to candidate ontology classes.
+    """
+    if not uncertain_detections or not ontology_classes:
+        return uncertain_detections
+
+    client = _get_gemini_client(api_key)
+    if client is None:
+        logger.warning("Gemini client not available for uncertain detection validation.")
+        return uncertain_detections
+
+    class_meta = {
+        c.get("key"): {
+            "label": c.get("label", c.get("name", c.get("key"))),
+            "color": c.get("color", "#8b5cf6"),
+            "prompt": c.get("prompt", ""),
+        }
+        for c in ontology_classes
+        if c.get("key")
+    }
+    class_list_desc = [
+        f"- key: '{c.get('key')}', name: '{c.get('label', c.get('name'))}', description: '{c.get('prompt', '')}'"
+        for c in ontology_classes
+    ]
+
+    target_dets = uncertain_detections[:max_to_validate]
+    img_w, img_h = image.size
+
+    # Batch crops into composite or individual evaluations
+    try:
+        crops_to_send = []
+        for idx, det in enumerate(target_dets):
+            bbox = det.get("bbox", [0, 0, img_w, img_h])
+            bx, by, bw, bh = bbox
+            pad = max(12, int(max(bw, bh) * 0.4))
+            x1 = max(0, bx - pad)
+            y1 = max(0, by - pad)
+            x2 = min(img_w, bx + bw + pad)
+            y2 = min(img_h, by + bh + pad)
+            crop = image.crop((x1, y1, x2, y2)).convert("RGB")
+            crops_to_send.append((idx, crop, det.get("class_key", "unknown"), det.get("score", 0.0)))
+
+        # Build prompt
+        prompt_parts = [
+            f"You are an expert histopathologist evaluating ambiguous microscopic cell/tissue instances in {organ_context}.",
+            "Here is the list of VALID ONTOLOGY CLASSES you must choose from:",
+            "\n".join(class_list_desc),
+            "",
+            "Review each numbered crop image and assign the most accurate ontology class_key, confidence (0.0 to 1.0), and short rationale.",
+            "Respond ONLY with valid JSON in this exact structure:",
+            "```json",
+            "{",
+            '  "adjudications": [',
+            '    {"crop_index": 0, "class_key": "<exact_key>", "confidence": 0.88, "reasoning": "<brief explanation>"}',
+            "  ]",
+            "}",
+            "```",
+        ]
+
+        contents_list = ["\n".join(prompt_parts)]
+        for idx, crop, tentative_key, tentative_score in crops_to_send:
+            contents_list.append(f"--- Crop #{idx} (Tentative ensemble class: '{tentative_key}', score: {tentative_score:.2f}) ---")
+            contents_list.append(crop)
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=contents_list,
+        )
+
+        resp_text = response.text or ""
+        match = re.search(r"\{[\s\S]*\}", resp_text)
+        if match:
+            parsed = json.loads(match.group(0))
+            adjudications = parsed.get("adjudications", [])
+            for adj in adjudications:
+                crop_idx = int(adj.get("crop_index", -1))
+                if 0 <= crop_idx < len(target_dets):
+                    target_det = target_dets[crop_idx]
+                    adj_key = adj.get("class_key")
+                    adj_conf = float(adj.get("confidence", 0.75))
+                    adj_reason = adj.get("reasoning", "")
+
+                    if adj_key in class_meta:
+                        meta = class_meta[adj_key]
+                        target_det["category_id"] = adj_key
+                        target_det["class_key"] = adj_key
+                        target_det["class_label"] = meta["label"]
+                        target_det["color"] = meta["color"]
+                        target_det["gemini_validated"] = True
+                        target_det["gemini_confidence"] = round(adj_conf, 4)
+                        target_det["gemini_reasoning"] = adj_reason
+                        target_det["score"] = round(max(adj_conf, float(target_det.get("score", 0.5))), 4)
+                        if adj_conf >= 0.70:
+                            target_det["classification_uncertain"] = False
+                        target_det["decision_source"] = "gemini_multimodal_arbitration"
+
+    except Exception as e:
+        logger.warning(f"Error during Gemini uncertain detection validation: {e}")
+
+    return uncertain_detections
+
+
+def detect_histological_macro_layers_gemini(
+    image: Image.Image,
+    organ_context: str = "histología",
+    ontology_structures: Optional[List[Dict[str, Any]]] = None,
+    api_key: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Multimodal Spatial Grounding for Macro-Histological Layers & Compartments:
+    Dynamically extracts target layer descriptions directly from the ontology structures
+    (e.g. from the PDF) and detects 2D bounding boxes [ymin, xmin, ymax, xmax].
+    Zero hardcoded tissue lists.
+    """
+    client = _get_gemini_client(api_key)
+    if client is None:
+        logger.warning("Gemini client not available for macro-layer grounding.")
+        return []
+
+    img_w, img_h = image.size
+    img_preview = image.copy().convert("RGB")
+    max_dim = 1024
+    if max(img_preview.size) > max_dim:
+        ratio = max_dim / max(img_preview.size)
+        img_preview = img_preview.resize(
+            (int(img_preview.width * ratio), int(img_preview.height * ratio)),
+            Image.LANCZOS,
+        )
+
+    # Dynamically extract target descriptions from the provided ontology document
+    target_descriptions: List[str] = []
+    class_meta_lookup: Dict[str, Dict[str, Any]] = {}
+
+    if ontology_structures:
+        for idx, s in enumerate(ontology_structures):
+            k = s.get("key", f"struct_{idx + 1}").strip()
+            name = s.get("label", s.get("name", k))
+            prompt_desc = s.get("prompt", "")
+            stype = s.get("structure_type", "")
+
+            class_meta_lookup[k] = {
+                "name": name,
+                "label": name,
+                "color": s.get("color", DEFAULT_COLORS[idx % len(DEFAULT_COLORS)]),
+                "prompt": prompt_desc,
+                "structure_type": stype,
+            }
+            target_descriptions.append(f"- '{k}': {name} — visual descriptor: '{prompt_desc}'")
+    else:
+        target_descriptions = [
+            f"- Distinct visual anatomical structures, tissue layers, and compartments visible in {organ_context}"
+        ]
+
+    prompt = f"""\
+You are an expert anatomical histopathologist. Analyze this histological photomicrograph of {organ_context}.
+Your task is to identify and spatially localize ALL continuous macro-architectural layers, lumens, and tissue compartments present in the image.
+
+TARGET STRUCTURES FROM ONTOLOGY:
+{chr(10).join(target_descriptions)}
+
+For EACH distinct compartment or layer present in the image, output its exact bounding box coordinates in normalized scale [ymin, xmin, ymax, xmax] (integers 0 to 1000).
+
+Return ONLY valid JSON matching this schema:
+```json
+{{
+  "layers": [
+    {{
+      "key": "<exact_key_from_ontology>",
+      "name": "<canonical_name>",
+      "box_2d": [ymin, xmin, ymax, xmax],
+      "description": "<concise visual description>",
+      "confidence": 0.95
+    }}
+  ]
+}}
+```
+"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[prompt, img_preview],
+        )
+        resp_text = response.text or ""
+        match = re.search(r"\{[\s\S]*\}", resp_text)
+        if not match:
+            return []
+
+        parsed = json.loads(match.group(0))
+        raw_layers = parsed.get("layers", [])
+
+        grounded_layers: List[Dict[str, Any]] = []
+        for idx, item in enumerate(raw_layers):
+            box = item.get("box_2d")
+            if not box or len(box) != 4:
+                continue
+
+            ymin, xmin, ymax, xmax = [float(v) for v in box]
+            px_x1 = max(0.0, min(float(img_w), (xmin / 1000.0) * img_w))
+            px_y1 = max(0.0, min(float(img_h), (ymin / 1000.0) * img_h))
+            px_x2 = max(0.0, min(float(img_w), (xmax / 1000.0) * img_w))
+            px_y2 = max(0.0, min(float(img_h), (ymax / 1000.0) * img_h))
+            bw = max(1.0, px_x2 - px_x1)
+            bh = max(1.0, px_y2 - px_y1)
+
+            k = item.get("key", f"layer_{idx + 1}").lower().replace("-", "_")
+            meta = class_meta_lookup.get(k, {})
+            name = meta.get("label", item.get("name", k.replace("_", " ").title()))
+            color = meta.get("color", DEFAULT_COLORS[idx % len(DEFAULT_COLORS)])
+            stype = meta.get("structure_type", "tissue_layer")
+
+            # Estimate initial polygon box
+            poly = [
+                px_x1, px_y1,
+                px_x2, px_y1,
+                px_x2, px_y2,
+                px_x1, px_y2,
+            ]
+
+            grounded_layers.append({
+                "id": f"layer_{idx + 1}",
+                "key": k,
+                "class_key": k,
+                "class_label": name,
+                "category_id": k,
+                "label": name,
+                "color": color,
+                "structure_type": stype,
+                "is_macro_layer": True,
+                "score": float(item.get("confidence", 0.90)),
+                "box": [round(px_x1, 1), round(px_y1, 1), round(px_x2, 1), round(px_y2, 1)],
+                "bbox": [round(px_x1, 1), round(px_y1, 1), round(bw, 1), round(bh, 1)],
+                "segmentation": [poly],
+                "area": round(bw * bh, 1),
+                "description": item.get("description", ""),
+                "decision_source": "gemini_spatial_grounding",
+            })
+
+        logger.info(f"Gemini grounded {len(grounded_layers)} macro-layers for {organ_context}: {[l['key'] for l in grounded_layers]}")
+        return grounded_layers
+
+    except Exception as e:
+        logger.warning(f"Error in macro-layer grounding with Gemini: {e}")
+        return []
+
+
+

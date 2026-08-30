@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 # Optimize CUDA allocator to avoid memory fragmentation
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+import gc
 import cv2
 import numpy as np
 from PIL import Image
@@ -20,15 +21,17 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-# Cache loaded Cellpose models
-_CELLPOSE_MODELS: Dict[str, Any] = {}
+# Single-slot active Cellpose model to guarantee zero VRAM duplication
+_ACTIVE_CELLPOSE_MODEL: Optional[Any] = None
+_ACTIVE_MODEL_KEY: Optional[str] = None
 _DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 AVAILABLE_CELLPOSE_MODELS = {
-    "cpsam": "Cellpose-SAM (ViT-L Segment Anything - Recomendado)",
-    "cpsam_v2": "Cellpose-SAM v2 (High-Res ViT-L)",
-    "cpdino": "Cellpose DINO (ViT-L Histología)",
-    "cpdino-vitb": "Cellpose DINO ViT-B (Ligero y Rápido)",
+    "cpsam": "Cellpose-SAM (ViT SAM Backbone - Recomendado)",
+    "cpsam_v2": "Cellpose-SAM v2 (High-Res ViT SAM)",
+    "cyto3": "Cellpose Cyto3 (Citoplasma y Células Completas)",
+    "nuclei": "Cellpose Nuclei (Núcleos Celulares Densos)",
+    "tissuenet": "Cellpose TissueNet (Cortes Histológicos)",
 }
 
 
@@ -43,19 +46,23 @@ def is_cellpose_available() -> bool:
 
 
 def offload_cellpose_to_cpu() -> None:
-    """Offload any cached Cellpose models from GPU to CPU to free VRAM for other models."""
-    for key, model in list(_CELLPOSE_MODELS.items()):
+    """Offload and destroy any cached Cellpose model on GPU to release 100% of VRAM."""
+    global _ACTIVE_CELLPOSE_MODEL, _ACTIVE_MODEL_KEY
+    if _ACTIVE_CELLPOSE_MODEL is not None:
         try:
-            if hasattr(model, "net") and hasattr(model.net, "to"):
-                model.net.to("cpu")
-                model.device = torch.device("cpu")
-                model.gpu = False
+            if hasattr(_ACTIVE_CELLPOSE_MODEL, "net") and hasattr(_ACTIVE_CELLPOSE_MODEL.net, "to"):
+                _ACTIVE_CELLPOSE_MODEL.net.to("cpu")
+                _ACTIVE_CELLPOSE_MODEL.device = torch.device("cpu")
+                _ACTIVE_CELLPOSE_MODEL.gpu = False
         except Exception as e:
-            logger.warning(f"Error offloading Cellpose model {key}: {e}")
-    _CELLPOSE_MODELS.clear()
+            logger.warning(f"Error offloading Cellpose model to CPU: {e}")
+        _ACTIVE_CELLPOSE_MODEL = None
+        _ACTIVE_MODEL_KEY = None
+
+    gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    logger.info("Offloaded Cellpose models from GPU to CPU; VRAM released.")
+    logger.info("Offloaded Cellpose model from GPU; VRAM released.")
 
 
 def get_cellpose_status() -> Dict[str, Any]:
@@ -84,32 +91,36 @@ def get_cellpose_status() -> Dict[str, Any]:
 
 def load_cellpose_model(model_type: str = "cpsam", device: Optional[str] = None) -> Optional[Any]:
     """
-    Load or retrieve cached Cellpose / Cellpose-SAM model.
-    Includes automatic VRAM cleanup, bfloat16 quantization, and graceful CPU fallback on OOM.
+    Load single active Cellpose / Cellpose-SAM model with strict VRAM management.
+    Never keeps multiple models on GPU simultaneously.
     """
+    global _ACTIVE_CELLPOSE_MODEL, _ACTIVE_MODEL_KEY
+
     if not is_cellpose_available():
         logger.error("Cellpose is not installed in current environment.")
         return None
 
     from cellpose import models
 
-    # Normalize model_type if legacy name was passed
+    # Normalize model_type if invalid/unsupported name was passed
     if model_type not in AVAILABLE_CELLPOSE_MODELS:
+        logger.warning(f"Model '{model_type}' not in available models. Defaulting to 'cpsam'.")
         model_type = "cpsam"
 
     target_device = device or _DEVICE
     use_gpu = (target_device == "cuda" and torch.cuda.is_available())
 
     cache_key = f"{model_type}_{target_device}"
-    if cache_key in _CELLPOSE_MODELS:
-        return _CELLPOSE_MODELS[cache_key]
+
+    # Return cached model if already active and matches requested type and device
+    if _ACTIVE_MODEL_KEY == cache_key and _ACTIVE_CELLPOSE_MODEL is not None:
+        return _ACTIVE_CELLPOSE_MODEL
+
+    # Release any existing active model before allocating new one
+    offload_cellpose_to_cpu()
 
     logger.info(f"Loading Cellpose model '{model_type}' on GPU={use_gpu} ({target_device})...")
     start_t = time.time()
-
-    # Step 1: Clean PyTorch CUDA cache before allocating new model weights
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
     try:
         model = models.CellposeModel(
@@ -118,25 +129,26 @@ def load_cellpose_model(model_type: str = "cpsam", device: Optional[str] = None)
             device=torch.device(target_device) if use_gpu else None,
             use_bfloat16=True if use_gpu else False,
         )
-        _CELLPOSE_MODELS[cache_key] = model
+        _ACTIVE_CELLPOSE_MODEL = model
+        _ACTIVE_MODEL_KEY = cache_key
         logger.info(f"Cellpose '{model_type}' loaded in {time.time() - start_t:.2f}s on {target_device}.")
         return model
 
-    except (torch.OutOfMemoryError, RuntimeError) as oom_err:
-        logger.warning(f"OOM loading Cellpose model '{model_type}' on {target_device}: {oom_err}")
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    except Exception as err:
+        logger.warning(f"Failed to load Cellpose model '{model_type}' on {target_device}: {err}. Cleaning VRAM and trying CPU...")
+        offload_cellpose_to_cpu()
 
-        # Step 2: Fallback to CPU with bfloat16=False (guarantees completion without crashing backend)
-        logger.info(f"Falling back to Cellpose '{model_type}' on CPU...")
+        # Fallback cleanly to CPU
+        logger.info("Loading Cellpose fallback on CPU...")
         try:
             model = models.CellposeModel(
                 gpu=False,
                 pretrained_model=model_type,
                 use_bfloat16=False,
             )
-            _CELLPOSE_MODELS[f"{model_type}_cpu"] = model
-            logger.info("Cellpose loaded on CPU fallback.")
+            _ACTIVE_CELLPOSE_MODEL = model
+            _ACTIVE_MODEL_KEY = f"{model_type}_cpu"
+            logger.info(f"Cellpose '{model_type}' loaded on CPU fallback.")
             return model
         except Exception as cpu_err:
             logger.error(f"CPU fallback also failed: {cpu_err}")

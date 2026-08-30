@@ -1,0 +1,491 @@
+{
+  "domain": "tc_torax_casos",
+  "source_pdf": "tc_torax_casos.pdf",
+  "pdf_id": "145ea8ea492e",
+  "structures": [
+    {
+      "key": "thorax",
+      "name": "Tórax",
+      "label": "Tórax",
+      "prompt": "chest cavity region",
+      "color": "#e11d48"
+    },
+    {
+      "key": "right_lung",
+      "name": "Pulmón derecho",
+      "label": "Pulmón derecho",
+      "prompt": "right lung parenchyma",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "pulmonary_apex",
+      "name": "Vértices pulmonares",
+      "label": "Vértices pulmonares",
+      "prompt": "upper lung dome region",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "pulmonary_hilum",
+      "name": "Hilio pulmonar",
+      "label": "Hilio pulmonar",
+      "prompt": "central lung root area",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "lung_lobe",
+      "name": "Lóbulo pulmonar",
+      "label": "Lóbulo pulmonar",
+      "prompt": "distinct lung segment",
+      "color": "#10b981"
+    },
+    {
+      "key": "central_lung_region",
+      "name": "Región central del pulmón",
+      "label": "Región central del pulmón",
+      "prompt": "central lung area",
+      "color": "#ec4899"
+    },
+    {
+      "key": "posterior_lung_portion",
+      "name": "Porción posterior del pulmón",
+      "label": "Porción posterior del pulmón",
+      "prompt": "posterior lung area",
+      "color": "#6366f1"
+    },
+    {
+      "key": "posterior_inferior_lung_zone",
+      "name": "Zona posterior/inferior del pulmón",
+      "label": "Zona posterior/inferior del pulmón",
+      "prompt": "lower back lung region",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "mid_inferior_lung_sector",
+      "name": "Sector medio-inferior del pulmón",
+      "label": "Sector medio-inferior del pulmón",
+      "prompt": "middle lower lung area",
+      "color": "#f97316"
+    },
+    {
+      "key": "upper_middle_lung_sector",
+      "name": "Sector superior-medio del pulmón",
+      "label": "Sector superior-medio del pulmón",
+      "prompt": "upper middle lung area",
+      "color": "#84cc16"
+    },
+    {
+      "key": "mid_lung_region",
+      "name": "Región media del pulmón",
+      "label": "Región media del pulmón",
+      "prompt": "middle lung area",
+      "color": "#a855f7"
+    },
+    {
+      "key": "inferior_lung_zone",
+      "name": "Zona inferior del pulmón",
+      "label": "Zona inferior del pulmón",
+      "prompt": "lower lung area",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "pulmonary_opacity",
+      "name": "Opacidad pulmonar",
+      "label": "Opacidad pulmonar",
+      "prompt": "abnormal dense lung area",
+      "color": "#ef4444"
+    },
+    {
+      "key": "irregular_opacity",
+      "name": "Opacidad irregular",
+      "label": "Opacidad irregular",
+      "prompt": "irregularly shaped dense area",
+      "color": "#22c55e"
+    },
+    {
+      "key": "ground_glass_opacity",
+      "name": "Opacidad en vidrio esmerilado",
+      "label": "Opacidad en vidrio esmerilado",
+      "prompt": "hazy ground glass lung opacity",
+      "color": "#eab308"
+    },
+    {
+      "key": "consolidation",
+      "name": "Consolidación",
+      "label": "Consolidación",
+      "prompt": "dense white lung consolidation",
+      "color": "#d946ef"
+    },
+    {
+      "key": "patchy_opacity",
+      "name": "Opacidad parcheada",
+      "label": "Opacidad parcheada",
+      "prompt": "scattered patchy lung opacity",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "nodular_opacity",
+      "name": "Opacidad nodular",
+      "label": "Opacidad nodular",
+      "prompt": "round nodular lung opacity",
+      "color": "#fb923c"
+    },
+    {
+      "key": "branched_opacity",
+      "name": "Opacidad ramificada",
+      "label": "Opacidad ramificada",
+      "prompt": "tree-like branched lung opacity",
+      "color": "#4ade80"
+    },
+    {
+      "key": "linear_striated_opacity",
+      "name": "Opacidad lineal/estriada",
+      "label": "Opacidad lineal/estriada",
+      "prompt": "thin linear lung opacity",
+      "color": "#facc15"
+    },
+    {
+      "key": "pulmonary_mass",
+      "name": "Masa pulmonar",
+      "label": "Masa pulmonar",
+      "prompt": "large dense lung mass",
+      "color": "#e11d48"
+    },
+    {
+      "key": "cavitated_component",
+      "name": "Componente cavitado",
+      "label": "Componente cavitado",
+      "prompt": "dark cavitated lung lesion",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "dilated_bronchus",
+      "name": "Bronquio dilatado",
+      "label": "Bronquio dilatado",
+      "prompt": "dark dilated airway lumen",
+      "color": "#06b6d4"
+    }
+  ],
+  "extracted_images": [
+    {
+      "filename": "145ea8ea492e_p1_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p1_img1.png",
+      "page": 1,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 1 — Malignant_case__461_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p2_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p2_img1.png",
+      "page": 2,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 2 — Malignant_case__462_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p3_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p3_img1.png",
+      "page": 3,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 3 — Malignant_case__463_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p4_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p4_img1.png",
+      "page": 4,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 4 — Malignant_case__464_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p5_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p5_img1.png",
+      "page": 5,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 5 — Malignant_case__465_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p6_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p6_img1.png",
+      "page": 6,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 6 — Malignant_case__466_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p7_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p7_img1.png",
+      "page": 7,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 7 — Malignant_case__467_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p8_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p8_img1.png",
+      "page": 8,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 8 — Malignant_case__468_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p9_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p9_img1.png",
+      "page": 9,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 9 — Malignant_case__469_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p10_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p10_img1.png",
+      "page": 10,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 10 — Malignant_case__470_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p11_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p11_img1.png",
+      "page": 11,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 11 — Malignant_case__471_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p12_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p12_img1.png",
+      "page": 12,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 12 — Malignant_case__472_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p13_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p13_img1.png",
+      "page": 13,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 13 — Malignant_case__473_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p14_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p14_img1.png",
+      "page": 14,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 14 — Malignant_case__474_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p15_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p15_img1.png",
+      "page": 15,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 15 — Malignant_case__475_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p16_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p16_img1.png",
+      "page": 16,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 16 — Malignant_case__476_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p17_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p17_img1.png",
+      "page": 17,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 17 — Malignant_case__477_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p18_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p18_img1.png",
+      "page": 18,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 18 — Malignant_case__478_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p19_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p19_img1.png",
+      "page": 19,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 19 — Malignant_case__479_.",
+      "pdf_id": "145ea8ea492e"
+    },
+    {
+      "filename": "145ea8ea492e_p20_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/145ea8ea492e/145ea8ea492e_p20_img1.png",
+      "page": 20,
+      "width": 512,
+      "height": 512,
+      "caption": "Imagen 20 — Malignant_case__480_.",
+      "pdf_id": "145ea8ea492e"
+    }
+  ],
+  "prompts": [
+    {
+      "key": "thorax",
+      "prompt": "chest cavity region",
+      "label": "Tórax",
+      "color": "#e11d48"
+    },
+    {
+      "key": "right_lung",
+      "prompt": "right lung parenchyma",
+      "label": "Pulmón derecho",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "pulmonary_apex",
+      "prompt": "upper lung dome region",
+      "label": "Vértices pulmonares",
+      "color": "#06b6d4"
+    },
+    {
+      "key": "pulmonary_hilum",
+      "prompt": "central lung root area",
+      "label": "Hilio pulmonar",
+      "color": "#f59e0b"
+    },
+    {
+      "key": "lung_lobe",
+      "prompt": "distinct lung segment",
+      "label": "Lóbulo pulmonar",
+      "color": "#10b981"
+    },
+    {
+      "key": "central_lung_region",
+      "prompt": "central lung area",
+      "label": "Región central del pulmón",
+      "color": "#ec4899"
+    },
+    {
+      "key": "posterior_lung_portion",
+      "prompt": "posterior lung area",
+      "label": "Porción posterior del pulmón",
+      "color": "#6366f1"
+    },
+    {
+      "key": "posterior_inferior_lung_zone",
+      "prompt": "lower back lung region",
+      "label": "Zona posterior/inferior del pulmón",
+      "color": "#14b8a6"
+    },
+    {
+      "key": "mid_inferior_lung_sector",
+      "prompt": "middle lower lung area",
+      "label": "Sector medio-inferior del pulmón",
+      "color": "#f97316"
+    },
+    {
+      "key": "upper_middle_lung_sector",
+      "prompt": "upper middle lung area",
+      "label": "Sector superior-medio del pulmón",
+      "color": "#84cc16"
+    },
+    {
+      "key": "mid_lung_region",
+      "prompt": "middle lung area",
+      "label": "Región media del pulmón",
+      "color": "#a855f7"
+    },
+    {
+      "key": "inferior_lung_zone",
+      "prompt": "lower lung area",
+      "label": "Zona inferior del pulmón",
+      "color": "#0ea5e9"
+    },
+    {
+      "key": "pulmonary_opacity",
+      "prompt": "abnormal dense lung area",
+      "label": "Opacidad pulmonar",
+      "color": "#ef4444"
+    },
+    {
+      "key": "irregular_opacity",
+      "prompt": "irregularly shaped dense area",
+      "label": "Opacidad irregular",
+      "color": "#22c55e"
+    },
+    {
+      "key": "ground_glass_opacity",
+      "prompt": "hazy ground glass lung opacity",
+      "label": "Opacidad en vidrio esmerilado",
+      "color": "#eab308"
+    },
+    {
+      "key": "consolidation",
+      "prompt": "dense white lung consolidation",
+      "label": "Consolidación",
+      "color": "#d946ef"
+    },
+    {
+      "key": "patchy_opacity",
+      "prompt": "scattered patchy lung opacity",
+      "label": "Opacidad parcheada",
+      "color": "#38bdf8"
+    },
+    {
+      "key": "nodular_opacity",
+      "prompt": "round nodular lung opacity",
+      "label": "Opacidad nodular",
+      "color": "#fb923c"
+    },
+    {
+      "key": "branched_opacity",
+      "prompt": "tree-like branched lung opacity",
+      "label": "Opacidad ramificada",
+      "color": "#4ade80"
+    },
+    {
+      "key": "linear_striated_opacity",
+      "prompt": "thin linear lung opacity",
+      "label": "Opacidad lineal/estriada",
+      "color": "#facc15"
+    },
+    {
+      "key": "pulmonary_mass",
+      "prompt": "large dense lung mass",
+      "label": "Masa pulmonar",
+      "color": "#e11d48"
+    },
+    {
+      "key": "cavitated_component",
+      "prompt": "dark cavitated lung lesion",
+      "label": "Componente cavitado",
+      "color": "#8b5cf6"
+    },
+    {
+      "key": "dilated_bronchus",
+      "prompt": "dark dilated airway lumen",
+      "label": "Bronquio dilatado",
+      "color": "#06b6d4"
+    }
+  ],
+  "is_histology": true
+}

@@ -387,15 +387,16 @@ def _compute_detection_area(det: Dict[str, Any]) -> float:
 def extract_crops_from_detections(
     image: Image.Image,
     detections: List[Dict[str, Any]],
-    margin_ratio: float = 0.35,
+    margin_ratio: float = 0.85,
     min_size: int = 64,
 ) -> List[Image.Image]:
     """
-    Extract PIL crops for a list of detections with adaptive contextual padding.
+    Extract PIL crops for a list of detections with Multi-Scale Contextual Padding.
 
-    Smaller detections receive proportionally larger context margins so that
-    Virchow/CONCH always see enough surrounding tissue to discriminate cell
-    types by position (basal vs luminal) and neighbourhood.
+    Scientific rationale: In healthy histology (testis, arteries), isolated tight cell crops
+    look identical across cell types (dark hematoxylin-stained nuclei). Expanding the context
+    (85%-250% padding) allows foundation models (CONCH, Virchow 2, UNI, DINO) to observe the
+    architectural stratification (basement membrane, muscle layer, lumen border, stroma).
     """
     img_w, img_h = image.size
     crops = []
@@ -409,14 +410,13 @@ def extract_crops_from_detections(
         else:
             x, y, w, h = 0, 0, img_w, img_h
 
-        # Adaptive margin: smaller cells get proportionally more context
-        # so that Virchow sees enough tissue around them (trained on 224×224 tiles)
+        # Multi-scale adaptive margin: small nuclei get proportionally more context
         cell_dim = max(float(w), float(h), 1.0)
-        adaptive_ratio = margin_ratio * max(1.0, 80.0 / cell_dim)
-        adaptive_ratio = min(adaptive_ratio, 1.5)  # cap at 150% expansion
+        adaptive_ratio = margin_ratio * max(1.0, 100.0 / cell_dim)
+        adaptive_ratio = min(adaptive_ratio, 2.5)  # up to 250% context expansion
 
-        pad_x = max(4, int(w * adaptive_ratio))
-        pad_y = max(4, int(h * adaptive_ratio))
+        pad_x = max(10, int(w * adaptive_ratio))
+        pad_y = max(10, int(h * adaptive_ratio))
 
         x1 = max(0, int(x - pad_x))
         y1 = max(0, int(y - pad_y))
@@ -458,65 +458,33 @@ NON_CELLULAR_INDICATORS = (
 )
 
 
-def is_cellular_class(class_item: Union[Dict[str, Any], str]) -> bool:
-    """
-    Dynamically determine if a candidate structure represents a cell or nucleus instance
-    versus a macro-compartment, cavity, tissue layer, or whole organ.
-    Works universally across any tissue, organism, or pathology domain.
-    """
-    if isinstance(class_item, dict):
-        if "is_cellular" in class_item:
-            return bool(class_item["is_cellular"])
-        if class_item.get("structure_type") in ("cell", "nucleus", "cellular"):
-            return True
-        if class_item.get("structure_type") in ("tissue_layer", "lumen_cavity", "macro_organ", "tissue", "cavity"):
-            return False
-
-        key = str(class_item.get("key", "")).lower().strip().replace("-", "_")
-        label = str(class_item.get("label", class_item.get("name", ""))).lower().strip()
-        prompt = str(class_item.get("prompt", "")).lower().strip()
-        parent = str(class_item.get("parent", "") or "").lower().strip()
-    else:
-        key = str(class_item).lower().strip().replace("-", "_")
-        label = key
-        prompt = key
-        parent = ""
-
-    combined = f"{key} {label} {prompt}"
-    key_label = f"{key} {label}"
-    if any(term in key_label for term in NON_CELLULAR_INDICATORS):
+def is_cellular_class(class_item: Dict[str, Any]) -> bool:
+    """Determine if a candidate ontology structure represents a cellular / nuclear instance."""
+    stype = str(class_item.get("structure_type", "") or "").lower().strip()
+    if stype in ("cell", "nucleus", "cellular_subtype", "cell_population"):
+        return True
+    if stype in ("tissue_layer", "lumen_cavity", "macro_organ", "anatomical_compartment"):
         return False
 
-    has_non_cellular = any(term in combined for term in NON_CELLULAR_INDICATORS)
-    has_cellular = any(term in combined for term in CELLULAR_INDICATORS)
+    key_lower = str(class_item.get("key", "")).lower()
+    name_lower = str(class_item.get("name", class_item.get("label", ""))).lower()
+    combined = f"{key_lower} {name_lower}"
 
-    if has_cellular and not has_non_cellular:
+    if any(ind in combined for ind in CELLULAR_INDICATORS):
         return True
-    if has_non_cellular and not has_cellular:
+    if any(ind in combined for ind in NON_CELLULAR_INDICATORS):
         return False
-
-    # Constituent entities with parent tissues/compartments are granular structures/cells
-    if parent and parent not in ("none", "null", ""):
-        return True
-
-    # Default to True so user-defined custom annotations are preserved
     return True
 
 
 def filter_cellular_candidate_classes(classes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Filter candidate classes to retain only cellular entities for cell-level classification.
-    Zero hardcoded tissue lists: relies purely on ontology metadata and universal morphological semantics.
-    """
+    """Filter ontology classes to strictly retain cellular instances for cell-level classification."""
     filtered = [c for c in classes if is_cellular_class(c)]
     return filtered if filtered else classes
 
 
 def enrich_histology_prompt(raw_key: str, raw_name: str, existing_prompt: Optional[str] = None) -> str:
-    """
-    Dynamically compose vision-language prompts using the active ontology and user metadata.
-    Zero hardcoded tables: uses the domain visual descriptions extracted by the multimodal LLM or provided by the user.
-    """
+    """Dynamically compose vision-language prompts using the active ontology and metadata."""
     name = (raw_name or raw_key or "structure").strip()
     prompt = (existing_prompt or "").strip()
 
@@ -536,8 +504,9 @@ def encode_candidate_classes_conch(
     candidate_classes: List[Dict[str, Any]],
 ) -> Tuple[torch.Tensor, List[str], List[str], List[str]]:
     """
-    Encode candidate classes using prompt ensembling across multiple pathology templates.
-    Averages text embeddings across templates for each class to produce robust zero-shot class centroids.
+    Encode candidate classes using 14-Template Clinical Pathology Prompt Ensembling.
+    Aggregates diverse diagnostic, cytological, and anatomical descriptions per class
+    to maximize zero-shot vision-language alignment.
     """
     class_keys = [c.get("key") for c in candidate_classes]
     class_labels = [c.get("label", c.get("name", c.get("key"))) for c in candidate_classes]
@@ -547,14 +516,27 @@ def encode_candidate_classes_conch(
     for c in candidate_classes:
         name = str(c.get("label") or c.get("name") or c.get("key") or "cell").strip()
         prompt = str(c.get("prompt") or name).strip()
+        parent = str(c.get("parent") or "").strip()
+        parent_phrase = f"located within {parent}" if parent and parent not in ("none", "null") else ""
 
+        # 14 Clinical and Morphological Prompt Templates for Zero-Shot Pathology
         templates = [
-            f"a high-magnification photomicrograph of {name}, {prompt}",
-            f"a histological tissue section showing {name}, {prompt}",
-            f"a microscopic view of {name}, {prompt}, hematoxylin and eosin stain",
-            f"histopathology image of {name}: {prompt}",
+            f"An H&E stained histopathology photomicrograph showing {name}, {prompt}.",
+            f"High-magnification microscopic view of {name} characterized by {prompt}.",
+            f"A histological tissue section displaying normal {name} {parent_phrase}, {prompt}.",
+            f"Microscopic appearance of {name} with characteristic chromatin and nuclear pattern: {prompt}.",
+            f"Pathologist diagnostic examination showing intact {name}, {prompt}, hematoxylin and eosin stain.",
+            f"A high-power photomicrograph of {name} {parent_phrase} displaying {prompt}.",
+            f"Cytological architecture of {name} exhibiting {prompt} in healthy tissue.",
+            f"Cross-sectional microscopic field showing {name} identified by {prompt}.",
+            f"Normal histopathological section demonstrating {name}, {prompt}.",
+            f"A digital pathology microscopic tile of {name} {parent_phrase}, {prompt}.",
+            f"High-resolution optical microscopy showing {name}, {prompt}.",
+            f"Histological slide displaying {name} with distinct {prompt}.",
             enrich_histology_prompt(c.get("key", ""), name, c.get("prompt")),
+            f"Intact histological specimen showing {name} in normal anatomical context: {prompt}.",
         ]
+
         # Deduplicate non-empty templates
         templates = list(dict.fromkeys([t.strip() for t in templates if t.strip()]))
 
@@ -577,23 +559,12 @@ def classify_detections_with_conch(
     image: Image.Image,
     detections: List[Dict[str, Any]],
     candidate_classes: List[Dict[str, str]],
-    temperature: float = 0.08,
+    temperature: float = 0.06,
     is_histology: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Perform High-Precision Zero-Shot Pathology Classification on a list of detections using CONCH
-    with multi-template prompt ensembling and calibrated confidence margins.
-
-    Args:
-        image: Original full PIL image.
-        detections: List of detection dicts (each containing 'id', 'bbox', 'polygon', etc.)
-        candidate_classes: List of dicts with 'key', 'prompt', 'label', 'color'
-        temperature: Softmax scaling temperature (default calibrated to 0.08).
-        is_histology: If False, skip CONCH as it is reserved for histology domains.
-
-    Returns:
-        List of classified detections with updated class_key, class_label, color,
-        conch_confidence, conch_margin, and class_scores.
+    with 14-template prompt ensembling, stain de-biasing, and calibrated cosine similarity.
     """
     if not detections or not candidate_classes:
         return detections
@@ -611,22 +582,39 @@ def classify_detections_with_conch(
         if not success:
             raise RuntimeError("CONCH model could not be initialized.")
 
-    # 1. Encode text prompts with multi-template ensemble
+    # 1. Encode text prompts with 14-template clinical ensemble
     text_embeddings, class_keys, class_labels, class_colors = encode_candidate_classes_conch(
         conch=conch,
         candidate_classes=candidate_classes,
     )
 
-    # 2. Extract contextual crops for all detections
-    crops = extract_crops_from_detections(image, detections)
+    # 2. Extract multi-scale contextual crops for all detections
+    crops = extract_crops_from_detections(image, detections, margin_ratio=0.85)
 
     # Encode image crops
-    image_embeddings = conch.encode_image_crops(crops, batch_size=16)  # (N_detections, 512)
+    image_embeddings = conch.encode_image_crops(crops, batch_size=16).float()  # (N_detections, 512)
+    text_embeddings = text_embeddings.to(image_embeddings.device).float()
 
-    # 3. Compute cosine similarity matrix: (N_detections, N_classes) in float32
-    image_embeddings = image_embeddings.float()
-    text_embeddings = text_embeddings.float()
-    similarity_matrix = torch.matmul(image_embeddings, text_embeddings.T).float()
+    # 3. Stain De-biasing & Centering in Embedding Space (removes global H&E pink/purple bias)
+    if len(detections) >= 2:
+        mean_slide_embedding = torch.mean(image_embeddings, dim=0, keepdim=True)
+        image_embeddings_centered = F.normalize(image_embeddings - 0.5 * mean_slide_embedding, dim=-1)
+    else:
+        image_embeddings_centered = image_embeddings
+
+    # Compute calibrated similarity matrix: (N_detections, N_classes)
+    similarity_matrix = torch.matmul(image_embeddings_centered, text_embeddings.T).float()
+
+    # Spatial Layer Prior Modulation (if detection is inside a grounded macro-layer)
+    for i, det in enumerate(detections):
+        c_layer = det.get("containing_layer")
+        if c_layer:
+            for k_idx, c_obj in enumerate(candidate_classes):
+                p_k = str(c_obj.get("parent", "") or "").strip()
+                if p_k == c_layer:
+                    similarity_matrix[i, k_idx] += 0.12  # Boost likelihood of layer-resident cell
+                elif p_k and p_k not in ("none", "null", ""):
+                    similarity_matrix[i, k_idx] -= 0.15  # Penalize cross-layer incongruence
 
     # Softmax probabilities with calibrated temperature
     probs = F.softmax(similarity_matrix / temperature, dim=-1).float().cpu().numpy()
@@ -873,11 +861,11 @@ def discriminate_and_cluster_with_pathology_models(
     # Combine Virchow (1280d), UNI (1024d) and CONCH (512d) into a joint feature embedding space (up to 2816d)
     feat_tensors = []
     if virchow_features is not None:
-        feat_tensors.append(virchow_features.float())
+        feat_tensors.append(virchow_features.float().cpu())
     if uni_features is not None:
-        feat_tensors.append(uni_features.float())
+        feat_tensors.append(uni_features.float().cpu())
     if conch_features is not None:
-        feat_tensors.append(conch_features.float())
+        feat_tensors.append(conch_features.float().cpu())
 
     if feat_tensors and num_dets >= 2:
         joint_features = torch.cat(feat_tensors, dim=-1).float()
@@ -1302,11 +1290,263 @@ def classify_with_virchow_prototypes(
 classify_with_morphological_ensemble = classify_with_virchow_prototypes
 
 
+def classify_with_ontology_ensemble(
+    image: Image.Image,
+    detections: List[Dict[str, Any]],
+    ontology_classes: List[Dict[str, Any]],
+    weights: Optional[Dict[str, float]] = None,
+    confidence_threshold: float = 0.50,
+    uncertainty_threshold: float = 0.30,
+    temperature: float = 0.08,
+    is_histology: bool = True,
+) -> Tuple[List[Dict[str, Any]], List[int]]:
+    """
+    Maximum Precision Pathology Classification Ensemble fusing 4 foundation models:
+    - CONCH (512-dim Vision-Language): Zero-shot text-image semantic alignment
+    - Virchow 2 (1280-dim ViT-Huge): High-resolution cytological morphology
+    - UNI (1024-dim ViT-Large): Dense tissue context representations
+    - Lunit DINO (384-dim ViT-Small/8): Self-supervised representation from 33M H&E patches
+
+    Returns:
+        Tuple of (classified_detections, uncertain_indices)
+    """
+    if not detections:
+        return [], []
+
+    if not is_histology:
+        return detections, []
+
+    if weights is None:
+        weights = {"conch": 0.35, "virchow": 0.30, "uni": 0.20, "dino": 0.15}
+
+    # Normalize weights so they sum to 1.0
+    total_w = sum(weights.values())
+    w_conch = weights.get("conch", 0.35) / total_w
+    w_virchow = weights.get("virchow", 0.30) / total_w
+    w_uni = weights.get("uni", 0.20) / total_w
+    w_dino = weights.get("dino", 0.15) / total_w
+
+    # 1. Resolve and filter ontology candidate classes
+    filtered_classes = filter_cellular_candidate_classes(ontology_classes or [])
+    if not filtered_classes:
+        filtered_classes = ontology_classes or []
+
+    if not filtered_classes:
+        # Fallback to general grouping if no ontology classes
+        return discriminate_and_cluster_with_pathology_models(
+            image=image,
+            detections=detections,
+            candidate_classes=None,
+            temperature=temperature,
+            is_histology=is_histology,
+        ), []
+
+    class_keys = [c.get("key") for c in filtered_classes]
+    class_labels = [c.get("label", c.get("name", c.get("key"))) for c in filtered_classes]
+    class_colors = [c.get("color", "#8b5cf6") for c in filtered_classes]
+    num_classes = len(class_keys)
+
+    # 2. Extract crops with contextual margins
+    # 2. Extract crops with multi-scale contextual margins
+    crops = extract_crops_from_detections(image, detections, margin_ratio=0.85)
+    num_dets = len(detections)
+
+    # 3. Model 1: CONCH Zero-Shot probabilities with stain centering and prompt ensembling
+    conch_probs = np.zeros((num_dets, num_classes), dtype=np.float32)
+    conch = ConchModelWrapper.get_instance()
+    conch_ok = conch.load() if not conch.is_loaded else True
+    if conch_ok:
+        try:
+            text_embeddings, _, _, _ = encode_candidate_classes_conch(
+                conch=conch, candidate_classes=filtered_classes
+            )
+            conch_img_embeddings = conch.encode_image_crops(crops, batch_size=16).float()
+            text_embeddings = text_embeddings.to(conch_img_embeddings.device).float()
+
+            if num_dets >= 2:
+                mean_slide_emb = torch.mean(conch_img_embeddings, dim=0, keepdim=True)
+                conch_img_embeddings_centered = F.normalize(conch_img_embeddings - 0.5 * mean_slide_emb, dim=-1)
+            else:
+                conch_img_embeddings_centered = conch_img_embeddings
+
+            sim_matrix = torch.matmul(conch_img_embeddings_centered, text_embeddings.T).float()
+
+            # Spatial Layer Prior Modulation
+            for i, det in enumerate(detections):
+                c_layer = det.get("containing_layer")
+                if c_layer:
+                    for k_idx, c_obj in enumerate(filtered_classes):
+                        p_k = str(c_obj.get("parent", "") or "").strip()
+                        if p_k == c_layer:
+                            sim_matrix[i, k_idx] += 0.15
+                        elif p_k and p_k not in ("none", "null", ""):
+                            sim_matrix[i, k_idx] -= 0.20
+
+            conch_probs = F.softmax(sim_matrix / temperature, dim=-1).cpu().numpy()
+        except Exception as e:
+            logger.warning(f"CONCH zero-shot computation failed in ensemble: {e}")
+            conch_probs = np.ones((num_dets, num_classes), dtype=np.float32) / num_classes
+
+    # 4. Model 2: Virchow 2 (1280d) features
+    virchow_feats_norm = None
+    virchow = VirchowModelWrapper.get_instance()
+    virchow_ok = virchow.load() if not virchow.is_loaded else True
+    if virchow_ok:
+        try:
+            virchow_feats = virchow.encode_crops(crops, batch_size=16).float()
+            virchow_feats_norm = F.normalize(virchow_feats, dim=-1)
+        except Exception as e:
+            logger.warning(f"Virchow 2 feature extraction failed in ensemble: {e}")
+
+    # 5. Model 3: UNI (1024d) features
+    uni_feats_norm = None
+    uni = UniModelWrapper.get_instance()
+    uni_ok = uni.load() if not uni.is_loaded else True
+    if uni_ok:
+        try:
+            uni_feats = uni.encode_crops(crops, batch_size=16).float()
+            uni_feats_norm = F.normalize(uni_feats, dim=-1)
+        except Exception as e:
+            logger.warning(f"UNI feature extraction failed in ensemble: {e}")
+
+    # 6. Model 4: Lunit DINO ViT-S/8 (384d) features
+    dino_feats_norm = None
+    try:
+        try:
+            from backend.lunit_dino_model import LunitDinoModelWrapper
+        except ImportError:
+            from lunit_dino_model import LunitDinoModelWrapper
+        dino = LunitDinoModelWrapper.get_instance()
+        dino_ok = dino.load() if not dino.is_loaded else True
+        if dino_ok:
+            dino_feats = dino.encode_crops(crops, batch_size=32).float()
+            dino_feats_norm = F.normalize(dino_feats, dim=-1)
+    except Exception as e:
+        logger.warning(f"Lunit DINO feature extraction failed in ensemble: {e}")
+
+    # 7. Compute Exemplar / Pseudo-Prototype Affinities for Virchow, UNI, and DINO
+    # Use CONCH highest-confidence detections (>0.75) as pseudo-exemplars to build morphology prototypes
+    virchow_probs = np.copy(conch_probs)
+    uni_probs = np.copy(conch_probs)
+    dino_probs = np.copy(conch_probs)
+
+    # If we have morphological features, build prototypes from confident pseudo-labels
+    for model_feats, model_probs_target in [
+        (virchow_feats_norm, virchow_probs),
+        (uni_feats_norm, uni_probs),
+        (dino_feats_norm, dino_probs),
+    ]:
+        if model_feats is not None and num_dets > 1:
+            try:
+                prototypes = []
+                valid_classes = []
+                dev = model_feats.device
+                for c_idx in range(num_classes):
+                    c_conf = conch_probs[:, c_idx]
+                    high_conf_indices = np.where(c_conf >= 0.55)[0]
+                    if len(high_conf_indices) >= 1:
+                        weights_p = torch.tensor(c_conf[high_conf_indices], dtype=torch.float32, device=dev).unsqueeze(1)
+                        weighted_proto = torch.sum(model_feats[high_conf_indices] * weights_p, dim=0, keepdim=True)
+                        prototypes.append(F.normalize(weighted_proto, dim=-1))
+                        valid_classes.append(c_idx)
+
+                if prototypes and len(prototypes) >= 2:
+                    proto_tensor = torch.cat(prototypes, dim=0).to(dev)  # (N_valid, D)
+                    sims = torch.matmul(model_feats, proto_tensor.T)  # (N_dets, N_valid)
+                    proto_softmax = F.softmax(sims / 0.15, dim=-1).cpu().numpy()
+                    for idx_v, c_idx in enumerate(valid_classes):
+                        model_probs_target[:, c_idx] = proto_softmax[:, idx_v]
+            except Exception as proto_err:
+                logger.debug(f"Prototype affinity computation note: {proto_err}")
+
+    # 8. Fused Ensemble Weighted Probability Matrix
+    fused_probs = (
+        w_conch * conch_probs
+        + w_virchow * virchow_probs
+        + w_uni * uni_probs
+        + w_dino * dino_probs
+    )
+
+    # 9. Classify Detections, Calculate Uncertainty, and Identify Ambiguous Items
+    classified_detections: List[Dict[str, Any]] = []
+    uncertain_indices: List[int] = []
+
+    for i, det in enumerate(detections):
+        det_copy = dict(det)
+        det_fused = fused_probs[i]
+        sorted_indices = np.argsort(det_fused)[::-1]
+        best_idx = int(sorted_indices[0])
+        second_idx = int(sorted_indices[1]) if num_classes > 1 else best_idx
+
+        best_score = float(det_fused[best_idx])
+        second_score = float(det_fused[second_idx]) if num_classes > 1 else 0.0
+        margin = float(best_score - second_score)
+
+        # Cross-model variance/uncertainty for the winning class
+        model_scores = [
+            float(conch_probs[i, best_idx]),
+            float(virchow_probs[i, best_idx]),
+            float(uni_probs[i, best_idx]),
+            float(dino_probs[i, best_idx]),
+        ]
+        model_std = float(np.std(model_scores))
+
+        # Ambiguity condition: low overall confidence OR low margin between top 2 OR high disagreement
+        is_uncertain = (
+            best_score < confidence_threshold
+            or (num_classes > 1 and margin < uncertainty_threshold)
+            or model_std > 0.35
+        )
+
+        det_copy["category_id"] = class_keys[best_idx]
+        det_copy["class_key"] = class_keys[best_idx]
+        det_copy["class_label"] = class_labels[best_idx]
+        det_copy["color"] = class_colors[best_idx]
+        det_copy["score"] = round(best_score, 4)
+        det_copy["confidence"] = round(best_score, 4)
+        det_copy["ensemble_margin"] = round(margin, 4)
+        det_copy["ensemble_uncertainty"] = round(model_std, 4)
+        det_copy["classification_uncertain"] = is_uncertain
+        det_copy["decision_source"] = "quad_foundation_ensemble"
+
+        det_copy["model_contributions"] = {
+            "conch": round(float(conch_probs[i, best_idx]), 4),
+            "virchow": round(float(virchow_probs[i, best_idx]), 4),
+            "uni": round(float(uni_probs[i, best_idx]), 4),
+            "lunit_dino": round(float(dino_probs[i, best_idx]), 4),
+        }
+        det_copy["class_scores"] = {
+            class_keys[k]: round(float(det_fused[k]), 4)
+            for k in range(num_classes)
+        }
+
+        if is_uncertain:
+            uncertain_indices.append(i)
+
+        classified_detections.append(det_copy)
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return classified_detections, uncertain_indices
+
+
 def get_pathology_models_status() -> Dict[str, Any]:
-    """Get status of CONCH, UNI, and Virchow foundation models."""
+    """Get status of CONCH, UNI, Virchow, and Lunit DINO foundation models."""
     conch = ConchModelWrapper.get_instance()
     uni = UniModelWrapper.get_instance()
     virchow = VirchowModelWrapper.get_instance()
+
+    dino_loaded = False
+    try:
+        try:
+            from backend.lunit_dino_model import LunitDinoModelWrapper
+        except ImportError:
+            from lunit_dino_model import LunitDinoModelWrapper
+        dino = LunitDinoModelWrapper.get_instance()
+        dino_loaded = dino.is_loaded
+    except Exception:
+        dino_loaded = False
 
     return {
         "device": str(DEVICE),
@@ -1329,11 +1569,17 @@ def get_pathology_models_status() -> Dict[str, Any]:
             "is_loaded": virchow.is_loaded,
             "architecture": "ViT-Huge-SwiGLU-patch14-224",
         },
+        "lunit_dino": {
+            "name": "Lunit DINO (1aurent/vit_small_patch8_224.lunit_dino)",
+            "embedding_dim": 384,
+            "is_loaded": dino_loaded,
+            "architecture": "ViT-Small-patch8-224 (33M H&E patches)",
+        },
     }
 
 
 def preload_all_pathology_models() -> Dict[str, Any]:
-    """Preload all foundation models (CONCH, UNI, Virchow 2) onto GPU/CPU."""
+    """Preload all foundation models (CONCH, UNI, Virchow 2, Lunit DINO) onto GPU/CPU."""
     conch = ConchModelWrapper.get_instance()
     uni = UniModelWrapper.get_instance()
     virchow = VirchowModelWrapper.get_instance()
@@ -1342,10 +1588,23 @@ def preload_all_pathology_models() -> Dict[str, Any]:
     u_ok = uni.load() if not uni.is_loaded else True
     v_ok = virchow.load() if not virchow.is_loaded else True
 
+    d_ok = False
+    try:
+        try:
+            from backend.lunit_dino_model import LunitDinoModelWrapper
+        except ImportError:
+            from lunit_dino_model import LunitDinoModelWrapper
+        dino = LunitDinoModelWrapper.get_instance()
+        d_ok = dino.load() if not dino.is_loaded else True
+    except Exception as e:
+        logger.warning(f"Lunit DINO preload error: {e}")
+
     return {
-        "status": "ready" if (c_ok and u_ok and v_ok) else "partial",
+        "status": "ready" if (c_ok and u_ok and v_ok and d_ok) else "partial",
         "conch_loaded": c_ok,
         "uni_loaded": u_ok,
         "virchow_loaded": v_ok,
+        "lunit_dino_loaded": d_ok,
         "device": str(DEVICE),
     }
+

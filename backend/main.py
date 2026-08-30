@@ -95,13 +95,14 @@ from pdf_ontology import (
     PDF_IMAGES_DIR,
 )
 
-# Import Pathology Foundation Models (CONCH & UNI)
+# Import Pathology Foundation Models (CONCH, Virchow 2, UNI, Lunit DINO)
 from pathology_models import (
     get_pathology_models_status,
     preload_all_pathology_models,
     classify_detections_with_conch,
     classify_with_virchow_prototypes,
     classify_with_morphological_ensemble,
+    classify_with_ontology_ensemble,
     extract_detection_embeddings_uni,
     extract_detection_embeddings_virchow,
     discriminate_and_cluster_with_pathology_models,
@@ -132,6 +133,10 @@ from histology_graph import (
     build_histology_graph,
 )
 
+# Import Automated Histology Labeling Pipeline
+from histology_autolabel import HistologyAutoLabeler
+from lunit_dino_model import LunitDinoModelWrapper
+
 # Global variables for model and processor
 processor = None
 sam3_semantic_predictor = None
@@ -147,8 +152,10 @@ def prepare_engine_vram(target_engine: str) -> None:
     if not torch.cuda.is_available():
         return
 
-    if target_engine in ("cellpose", "cpsam"):
-        # 1. Offload SAM 3 to CPU to free VRAM for Cellpose
+    import gc
+
+    if target_engine in ("cellpose", "cpsam", "autolabel"):
+        # 1. Offload SAM 3 to CPU to free VRAM for Cellpose / Foundation models
         if processor is not None and hasattr(processor, "model"):
             try:
                 if str(processor.device) != "cpu":
@@ -164,11 +171,33 @@ def prepare_engine_vram(target_engine: str) -> None:
             except Exception as e:
                 logger.warning(f"Could not offload SAM 3 predictor to CPU: {e}")
 
+        # 2. Offload Virchow, UNI, Lunit DINO to CPU to ensure 100% VRAM is available for Cellpose
+        try:
+            from pathology_models import VirchowModelWrapper, UniModelWrapper
+            virchow = VirchowModelWrapper.get_instance()
+            if virchow.is_loaded and virchow.model is not None and virchow.device.type == "cuda":
+                virchow.model.to("cpu")
+                virchow.device = torch.device("cpu")
+            uni = UniModelWrapper.get_instance()
+            if uni.is_loaded and uni.model is not None and uni.device.type == "cuda":
+                uni.model.to("cpu")
+                uni.device = torch.device("cpu")
+            from lunit_dino_model import LunitDinoModelWrapper
+            dino = LunitDinoModelWrapper.get_instance()
+            if dino.is_loaded and dino.model is not None and dino.device.type == "cuda":
+                dino.offload_to_cpu()
+        except Exception as off_err:
+            logger.debug(f"Pathology models offload note: {off_err}")
+
+        gc.collect()
         torch.cuda.empty_cache()
-        logger.info("Temporarily swapped SAM 3 to CPU to give 100% GPU VRAM to Cellpose-SAM.")
+        logger.info(f"Swapped SAM 3 & Foundation models to CPU. 100% GPU VRAM dedicated to {target_engine}.")
     else:
         # 2. Offload Cellpose and restore SAM 3 to GPU
         offload_cellpose_to_cpu()
+        gc.collect()
+        torch.cuda.empty_cache()
+
         if processor is not None and hasattr(processor, "model"):
             try:
                 if str(processor.device) == "cpu":
@@ -186,6 +215,8 @@ def prepare_engine_vram(target_engine: str) -> None:
 
         torch.cuda.empty_cache()
         logger.info("Restored SAM 3 to GPU for fast zero-shot segmentation.")
+
+
 
 
 @contextmanager
@@ -1550,10 +1581,10 @@ async def classify_virchow_prototypes_endpoint(
             if ont_doc:
                 is_histo = is_histology_ontology(ont_doc)
 
-        classified = classify_with_virchow_prototypes(
+        classified, uncertain_idxs = classify_with_ontology_ensemble(
             image=pil_image,
             detections=detections_list,
-            candidate_classes=candidate_classes,
+            ontology_classes=candidate_classes,
             temperature=temperature,
             is_histology=is_histo,
         )
@@ -1563,11 +1594,70 @@ async def classify_virchow_prototypes_endpoint(
             "is_histology": is_histo,
             "total_classified": len(classified),
             "detections": classified,
+            "uncertain_indices": uncertain_idxs,
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in Virchow prototype classification: {e}", exc_info=True)
+        logger.error(f"Error in Quad-Foundation prototype classification (Virchow+UNI+CONCH+DINO): {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/classify-dino")
+async def classify_dino_endpoint(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    classes: Optional[str] = Form(None),
+    temperature: float = Form(0.08),
+    ontology_name: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Dedicated classification using Lunit DINO (ViT-Small/8) self-supervised histopathology features
+    fused with zero-shot prototype alignment.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+
+        candidate_classes = []
+        if classes and classes.strip():
+            try:
+                candidate_classes = json.loads(classes)
+            except Exception as parse_err:
+                candidate_classes = []
+
+        is_histo = True
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc:
+                is_histo = is_histology_ontology(ont_doc)
+
+        # High weight on DINO (60% DINO, 40% CONCH semantic anchor)
+        classified, uncertain_idxs = classify_with_ontology_ensemble(
+            image=pil_image,
+            detections=detections_list,
+            ontology_classes=candidate_classes,
+            weights={"conch": 0.40, "virchow": 0.0, "uni": 0.0, "dino": 0.60},
+            temperature=temperature,
+            is_histology=is_histo,
+        )
+
+        return {
+            "success": True,
+            "is_histology": is_histo,
+            "model_used": "Lunit DINO ViT-S/8 + CONCH Anchor",
+            "total_classified": len(classified),
+            "detections": classified,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in DINO classification: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1835,7 +1925,138 @@ async def export_roboflow_dataset(payload: Dict[str, Any] = Body(default={})) ->
         raise HTTPException(status_code=500, detail=result.get("error", "Export failed"))
 
 
+# ======================== Automated Semantic Labeling Pipeline ========================
+
+@app.get("/api/autolabel-status")
+def autolabel_status_endpoint() -> Dict[str, Any]:
+    """Check status of all models and ontologies required for the autolabel pipeline."""
+    return {
+        "status": "ready",
+        "cellpose": get_cellpose_status(),
+        "pathology_models": get_pathology_models_status(),
+        "ontologies": list_ontologies(),
+        "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")),
+        "pipeline": "HistologyAutoLabeler (Cellpose-SAM + CONCH + Virchow 2 + UNI + Lunit DINO + Gemini)",
+    }
+
+
+@app.post("/api/autolabel")
+async def autolabel_endpoint(
+    image: UploadFile = File(...),
+    ontology_name: Optional[str] = Form(None),
+    raw_ontology: Optional[str] = Form(None),
+    cellpose_model: str = Form("cpsam"),
+    cell_diameter: Optional[float] = Form(None),
+    confidence_threshold: float = Form(0.50),
+    uncertainty_threshold: float = Form(0.30),
+    use_gemini_validation: bool = Form(True),
+    min_area: int = Form(15),
+) -> Dict[str, Any]:
+    """
+    Automated High-Precision Histology Labeling for single image.
+    Fuses Cellpose instance segmentation with Quad-Foundation Model ensemble (Virchow2 + UNI + CONCH + Lunit DINO).
+    """
+    prepare_engine_vram("autolabel")
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        filename = image.filename or "histology_image.png"
+
+        parsed_raw_ontology = None
+        if raw_ontology and raw_ontology.strip():
+            try:
+                parsed_raw_ontology = json.loads(raw_ontology)
+            except Exception as e:
+                logger.warning(f"Failed to parse raw_ontology: {e}")
+
+        labeler = HistologyAutoLabeler(default_cellpose_model=cellpose_model)
+        result = labeler.autolabel_single_image(
+            image=pil_image,
+            image_filename=filename,
+            ontology_name=ontology_name,
+            raw_ontology=parsed_raw_ontology,
+            cellpose_model=cellpose_model,
+            cell_diameter=cell_diameter,
+            confidence_threshold=confidence_threshold,
+            uncertainty_threshold=uncertainty_threshold,
+            use_gemini_validation=use_gemini_validation,
+            min_area=min_area,
+        )
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Autolabel error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/autolabel-batch")
+async def autolabel_batch_endpoint(
+    images: List[UploadFile] = File(...),
+    ontology_name: Optional[str] = Form(None),
+    raw_ontology: Optional[str] = Form(None),
+    cellpose_model: str = Form("cpsam"),
+    cell_diameter: Optional[float] = Form(None),
+    confidence_threshold: float = Form(0.50),
+    use_gemini_validation: bool = Form(True),
+    auto_upload_roboflow: bool = Form(False),
+) -> Dict[str, Any]:
+    """
+    Batch Automated Histology Labeling for multiple images with optional Roboflow export.
+    """
+    prepare_engine_vram("autolabel")
+    try:
+        loaded_images = []
+        image_bytes_dict = {}
+
+        for img_file in images:
+            if img_file and img_file.filename:
+                content = await img_file.read()
+                if len(content) > 0:
+                    pil_img = Image.open(io.BytesIO(content)).convert("RGB")
+                    loaded_images.append((img_file.filename, pil_img))
+                    image_bytes_dict[img_file.filename] = content
+
+        if not loaded_images:
+            raise HTTPException(status_code=400, detail="No se recibieron imágenes válidas.")
+
+        parsed_raw_ontology = None
+        if raw_ontology and raw_ontology.strip():
+            try:
+                parsed_raw_ontology = json.loads(raw_ontology)
+            except Exception as e:
+                logger.warning(f"Failed to parse raw_ontology: {e}")
+
+        labeler = HistologyAutoLabeler(default_cellpose_model=cellpose_model)
+        batch_result = labeler.autolabel_batch(
+            images=loaded_images,
+            ontology_name=ontology_name,
+            raw_ontology=parsed_raw_ontology,
+            cellpose_model=cellpose_model,
+            cell_diameter=cell_diameter,
+            confidence_threshold=confidence_threshold,
+            use_gemini_validation=use_gemini_validation,
+        )
+
+        # Upload to Roboflow if requested
+        if auto_upload_roboflow:
+            rf_res = labeler.export_to_roboflow(
+                labeled_results=batch_result,
+                image_files=image_bytes_dict,
+            )
+            batch_result["roboflow_upload"] = rf_res
+
+        return batch_result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Autolabel batch error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
+
     import uvicorn
     from pathlib import Path
     backend_dir = str(Path(__file__).resolve().parent)

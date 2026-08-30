@@ -1,0 +1,92 @@
+TC de Tórax — Serie de Casos
+Compilación de 20 cortes axiales de tomografía computada de tórax.
+Aviso importante: Las descripciones incluidas a continuación son observaciones visuales generales (ubicación y aspecto de
+las opacidades) y NO constituyen un diagnóstico médico. La interpretación de estudios de imagen debe ser realizada por un
+médico radiólogo con acceso a la historia clínica completa del paciente. Ante cualquier duda, consultar con un profesional de
+la salud.
+Imagen 1 — Malignant_case__461_.jpg
+Corte axial de TC de tórax a nivel de vértices pulmonares. Se observa una pequeña
+opacidad/densidad irregular en el pulmón derecho, cerca de la región central.
+
+
+Imagen 2 — Malignant_case__462_.jpg
+Corte a nivel algo más caudal. Opacidad de aspecto en 'vidrio esmerilado' en la región central del
+pulmón derecho, próxima al hilio.
+
+
+Imagen 3 — Malignant_case__463_.jpg
+Leve opacidad parcheada en la porción posterior del pulmón derecho, de tamaño pequeño.
+
+
+Imagen 4 — Malignant_case__464_.jpg
+Opacidad parcheada mínima en la zona posterior/inferior del pulmón derecho.
+
+
+Imagen 5 — Malignant_case__465_.jpg
+Área de opacidad en vidrio esmerilado/consolidación algo más extensa en el pulmón derecho, sector
+medio-inferior.
+
+
+Imagen 6 — Malignant_case__466_.jpg
+Opacidad parcheada de distribución más amplia en el pulmón derecho, con patrón irregular fino.
+
+
+Imagen 7 — Malignant_case__467_.jpg
+Opacidad más densa e irregular en la zona posterior-inferior del pulmón derecho.
+
+
+Imagen 8 — Malignant_case__468_.jpg
+Consolidación/opacidad de mayor densidad en el sector posterior del pulmón derecho.
+
+
+Imagen 9 — Malignant_case__469_.jpg
+Opacidad irregular extensa en el pulmón derecho; se aprecia una pequeña zona más oscura (posible
+componente cavitado o bronquio dilatado) en su interior.
+
+
+Imagen 10 — Malignant_case__470_.jpg
+Opacidad de patrón ramificado/nodular en la región posterior-inferior del pulmón derecho.
+
+
+Imagen 11 — Malignant_case__471_.jpg
+Masa/opacidad densa y extensa que ocupa gran parte del sector superior-medio del pulmón derecho.
+
+
+Imagen 12 — Malignant_case__472_.jpg
+Opacidad densa e irregular, de patrón ramificado, que compromete una porción amplia del pulmón
+derecho.
+
+
+Imagen 13 — Malignant_case__473_.jpg
+Opacidad irregular extensa en el sector medio-inferior del pulmón derecho.
+
+
+Imagen 14 — Malignant_case__474_.jpg
+Compromiso muy extenso del pulmón derecho, con opacidad densa e irregular que ocupa la mayor
+parte del lóbulo.
+
+
+Imagen 15 — Malignant_case__475_.jpg
+Opacidad densa, de patrón ramificado e irregular, que ocupa una porción considerable del pulmón
+derecho.
+
+
+Imagen 16 — Malignant_case__476_.jpg
+Opacidad nodular/irregular en la región posterior-inferior del pulmón derecho, algo menos extensa que
+en cortes previos.
+
+
+Imagen 17 — Malignant_case__477_.jpg
+Opacidad densa y ramificada en la región media del pulmón derecho.
+
+
+Imagen 18 — Malignant_case__478_.jpg
+Opacidad ramificada de extensión moderada en el sector posterior-inferior del pulmón derecho.
+
+
+Imagen 19 — Malignant_case__479_.jpg
+Opacidad parcheada de extensión moderada en la zona inferior del pulmón derecho.
+
+
+Imagen 20 — Malignant_case__480_.jpg
+Opacidad parcheada, de patrón lineal/estriado, en la zona inferior del pulmón derecho.

@@ -820,7 +820,7 @@ Return ONLY valid JSON.
 # LangGraph Workflow Construction
 # ---------------------------------------------------------------------------
 
-def build_histology_graph():
+def build_histology_graph() -> Any:
     """Constructs and compiles the multi-agent LangGraph workflow."""
     if StateGraph is None:
         raise ImportError("langgraph package is required to build Histology Graph.")

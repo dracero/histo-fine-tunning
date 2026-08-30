@@ -25,15 +25,13 @@ def _get_aux_device() -> torch.device:
     env_dev = os.getenv("PATHOLOGY_DEVICE", "").lower().strip()
     if env_dev == "cuda" and torch.cuda.is_available():
         return torch.device("cuda")
-    if env_dev == "cpu":
-        return torch.device("cpu")
     if torch.cuda.is_available():
         try:
             total_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
             if total_mem_gb >= 5.5:
                 return torch.device("cuda")
-        except Exception:
-            pass
+        except (RuntimeError, AssertionError) as cuda_err:
+            logger.debug(f"Could not query CUDA device properties: {cuda_err}")
         return torch.device("cuda")
     return torch.device("cpu")
 

@@ -7,8 +7,7 @@ import base64
 import json
 import logging
 import warnings
-from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Generator
 
 # Ensure backend and root are in sys.path for direct imports
 _backend_dir = str(Path(__file__).resolve().parent)
@@ -220,7 +219,7 @@ def prepare_engine_vram(target_engine: str) -> None:
 
 
 @contextmanager
-def sam3_inference_context():
+def sam3_inference_context() -> Generator[None, None, None]:
     """Thread-safe context manager ensuring inference_mode and correct autocast dtype for SAM 3."""
     autocast_dtype = (
         torch.bfloat16

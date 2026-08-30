@@ -1,130 +1,227 @@
+#!/usr/bin/env python3
 """
-Segmentación de estructuras histológicas de testículo con SAM 3 (Meta).
+Segmentación Semántica Zero-Shot con SAM 3 (Segment Anything Model 3) usando Ultralytics.
 
-Requisitos previos:
-  - Haber corrido 00_instalar_sam3.sh
-  - Tener acceso aprobado al modelo en https://huggingface.co/facebook/sam3
-  - Estar autenticado con `huggingface-cli login`
+Permite segmentar cualquier imagen seleccionando elementos/conceptos en lenguaje natural
+sin necesidad de entrenamiento (open-vocabulary zero-shot).
 
-SAM3 NO reconoce automáticamente clases médicas específicas (no sabe qué es
-una "espermatogonia B" per se) -- funciona con PROMPTS DE TEXTO genéricos que
-describen la forma/apariencia visual. Hay que probar varias frases por
-estructura y quedarte con la que mejor funcione en tus imágenes.
+Uso interactivo:
+    python segmenter.py
 
-Uso:
-    python sam3_histologia_testiculo.py --image mi_imagen.png --prompt "cell nucleus"
+Uso con argumentos CLI:
+    python segmenter.py --image mi_imagen.jpg --elements "person, glasses, cell, nucleus" --conf 0.25
 """
 
-import argparse
 import os
-import numpy as np
-import torch
-from PIL import Image
+import sys
+import argparse
+import shutil
+from typing import List, Optional
+import cv2
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
+import numpy as np
 
-from sam3.model_builder import build_sam3_image_model
-from sam3.model.sam3_image_processor import Sam3Processor
-
-
-# ------------------------------------------------------------------
-# Prompts sugeridos por tipo de estructura (ver README para ajustarlos)
-# ------------------------------------------------------------------
-PROMPTS_SUGERIDOS = {
-    "nucleos_celulas": "cell nucleus",
-    "tubulo_completo": "circular tissue structure",
-    "arteria_pared": "concentric ring structure",
-    "lumen_vaso": "empty circular lumen",
-    "eritrocitos": "red blood cells",
-}
+try:
+    from ultralytics.models.sam import SAM3SemanticPredictor
+    from ultralytics.utils.plotting import Annotator, colors
+except ImportError:
+    print("❌ Error: 'ultralytics' no está instalado. Instalalo ejecutando: uv pip install ultralytics")
+    sys.exit(1)
 
 
-def cargar_modelo() -> Sam3Processor:
-    print("Cargando SAM3 (esto puede tardar la primera vez)...")
-    model = build_sam3_image_model()
-    processor = Sam3Processor(model)
-    return processor
+def obtener_modelo_sam3(model_path: str = "sam3.pt") -> str:
+    """Verifica la existencia de los pesos de SAM 3 o los descarga desde Hugging Face."""
+    if os.path.exists(model_path):
+        return model_path
+
+    # Verificar si está en la caché de Hugging Face
+    hf_cache_pattern = os.path.expanduser("~/.cache/huggingface/hub/models--facebook--sam3/snapshots")
+    if os.path.exists(hf_cache_pattern):
+        for root, _, files in os.walk(hf_cache_pattern):
+            if "sam3.pt" in files:
+                found_path = os.path.join(root, "sam3.pt")
+                try:
+                    os.symlink(found_path, model_path)
+                    print(f"🔗 Enlazado checkpoint desde caché: {found_path} -> {model_path}")
+                    return model_path
+                except Exception:
+                    return found_path
+
+    print(f"⚠️ No se encontró '{model_path}'. Descargando desde Hugging Face (facebook/sam3)...")
+    try:
+        from huggingface_hub import hf_hub_download
+        from getpass import getpass
+
+        hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+        if not hf_token:
+            hf_token = getpass("Pegá tu token de Hugging Face (con acceso a facebook/sam3): ")
+
+        downloaded_path = hf_hub_download(repo_id="facebook/sam3", filename="sam3.pt", token=hf_token)
+        shutil.copy(downloaded_path, model_path)
+        print(f"✅ Pesos descargados exitosamente en: {model_path}")
+        return model_path
+    except Exception as e:
+        print(f"❌ Error al descargar pesos de SAM 3: {e}")
+        sys.exit(1)
 
 
-def segmentar_con_texto(processor: Sam3Processor, ruta_imagen: str, prompt_texto: str, umbral_score: float = 0.3) -> tuple[Image.Image, list, list, list]:
-    """Segmenta todas las instancias que coincidan con el prompt de texto."""
-    image = Image.open(ruta_imagen).convert("RGB")
-    inference_state = processor.set_image(image)
+def segmentar_imagen(
+    image_path: str,
+    elements: List[str],
+    model_path: str = "sam3.pt",
+    conf: float = 0.25,
+    outdir: str = "resultados_sam3",
+    show_plot: bool = False,
+) -> tuple[np.ndarray, list]:
+    """
+    Ejecuta la segmentación semántica zero-shot sobre la imagen para los elementos especificados.
+    """
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"No se encontró la imagen en la ruta: '{image_path}'")
 
-    output = processor.set_text_prompt(state=inference_state, prompt=prompt_texto)
+    model_file = obtener_modelo_sam3(model_path)
+    os.makedirs(outdir, exist_ok=True)
 
-    masks = output["masks"]     # tensor/array de máscaras binarias
-    boxes = output["boxes"]     # bounding boxes [x1,y1,x2,y2]
-    scores = output["scores"]   # confianza por instancia
+    print(f"\n🚀 Inicializando SAM3SemanticPredictor con modelo: {model_file}...")
+    overrides = {
+        "conf": conf,
+        "task": "segment",
+        "mode": "predict",
+        "model": model_file,
+        "quantize": 16,  # FP16 para inferencia optimizada en GPU
+        "save": False,
+    }
+    predictor = SAM3SemanticPredictor(overrides=overrides)
 
-    # Filtrar por score mínimo
-    keep = [i for i, s in enumerate(scores) if s >= umbral_score]
-    masks = [masks[i] for i in keep]
-    boxes = [boxes[i] for i in keep]
-    scores = [scores[i] for i in keep]
+    print(f"🖼️ Cargando imagen: {image_path}")
+    predictor.set_image(image_path)
 
-    print(f"  Prompt: '{prompt_texto}' -> {len(masks)} instancias (score >= {umbral_score})")
-    return image, masks, boxes, scores
+    print(f"🔍 Segmentando elementos: {elements}")
+    results = predictor(text=elements)
 
+    im_bgr = cv2.imread(image_path)
+    if im_bgr is None:
+        raise ValueError(f"No se pudo leer la imagen con OpenCV: {image_path}")
 
-def visualizar_resultado(image: Image.Image, masks: list, boxes: list, scores: list, prompt_texto: str, ruta_salida: str) -> None:
-    fig, ax = plt.subplots(1, 1, figsize=(12, 12))
-    ax.imshow(image)
+    annotator = Annotator(im_bgr.copy(), pil=False, line_width=2)
+    total_instancias = 0
+    detections_summary = []
 
-    rng = np.random.default_rng(42)
-    for mask, box, score in zip(masks, boxes, scores):
-        color = rng.random(3)
-        mask_np = np.array(mask) if not isinstance(mask, np.ndarray) else mask
-        colored_mask = np.zeros((*mask_np.shape, 4))
-        colored_mask[mask_np > 0] = (*color, 0.45)
-        ax.imshow(colored_mask)
+    for r in results:
+        masks = r.masks
+        boxes = getattr(r, "boxes", None)
+        names = getattr(r, "names", elements)
 
-        x1, y1, x2, y2 = box
-        rect = patches.Rectangle(
-            (x1, y1), x2 - x1, y2 - y1,
-            linewidth=1.5, edgecolor=color, facecolor="none"
-        )
-        ax.add_patch(rect)
-        ax.text(x1, y1 - 4, f"{score:.2f}", color=color, fontsize=8, weight="bold")
+        if masks is None or len(masks) == 0:
+            continue
 
-    ax.set_title(f"Prompt: \"{prompt_texto}\"  |  {len(masks)} instancias detectadas")
-    ax.axis("off")
-    plt.tight_layout()
-    plt.savefig(ruta_salida, dpi=150, bbox_inches="tight")
-    plt.close()
-    print(f"  Guardado: {ruta_salida}")
+        mask_data = masks.data.cpu().numpy()
+        num_masks = len(mask_data)
+        total_instancias += num_masks
+
+        # Extraer información de clases y cajas
+        cls_indices = boxes.cls.cpu().numpy().astype(int) if boxes is not None and hasattr(boxes, "cls") and boxes.cls is not None else [0] * num_masks
+        confs = boxes.conf.cpu().numpy() if boxes is not None and hasattr(boxes, "conf") and boxes.conf is not None else [conf] * num_masks
+        xyxy = boxes.xyxy.cpu().numpy() if boxes is not None and hasattr(boxes, "xyxy") and boxes.xyxy is not None else None
+
+        for idx, (m, cls_idx, score) in enumerate(zip(mask_data, cls_indices, confs)):
+            cls_name = names[cls_idx] if (isinstance(names, list) and cls_idx < len(names)) else (names.get(cls_idx, str(cls_idx)) if isinstance(names, dict) else str(cls_idx))
+            color_box = colors(cls_idx, True)
+
+            # Dibujar máscara
+            annotator.masks(np.expand_dims(m, 0), [color_box])
+
+            # Dibujar bounding box y etiqueta con el concepto
+            if xyxy is not None and idx < len(xyxy):
+                box = xyxy[idx]
+                label = f"{cls_name} {score:.2f}"
+                annotator.box_label(box, label, color=color_box)
+
+            detections_summary.append({
+                "concept": cls_name,
+                "confidence": float(score),
+                "box": xyxy[idx].tolist() if xyxy is not None and idx < len(xyxy) else None
+            })
+
+    im_result = annotator.result()
+
+    # Guardar imagen anotada
+    nombre_base = os.path.splitext(os.path.basename(image_path))[0]
+    out_filename = f"{nombre_base}_segmentado_sam3.png"
+    out_filepath = os.path.join(outdir, out_filename)
+    cv2.imwrite(out_filepath, im_result)
+
+    print(f"\n✅ Segmentación completada:")
+    print(f"   • Instancias totales detectadas: {total_instancias}")
+    print(f"   • Imagen guardada en: {out_filepath}")
+
+    if show_plot:
+        im_rgb = cv2.cvtColor(im_result, cv2.COLOR_BGR2RGB)
+        plt.figure(figsize=(12, 10))
+        plt.imshow(im_rgb)
+        plt.axis("off")
+        plt.title(f"SAM 3 Segmentación | Conceptos: {', '.join(elements)} ({total_instancias} detectados)")
+        plt.tight_layout()
+        plt.show()
+
+    return im_result, detections_summary
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--image", required=True, help="Ruta a la imagen de histología")
-    parser.add_argument(
-        "--prompt", default=None,
-        help="Prompt de texto (frase corta en inglés). Si se omite, prueba todos los sugeridos."
+    parser = argparse.ArgumentParser(
+        description="Segmentación semántica zero-shot con SAM 3 (Ultralytics) por selección de imagen y conceptos."
     )
-    parser.add_argument("--umbral", type=float, default=0.3, help="Score mínimo de confianza")
-    parser.add_argument("--outdir", default="resultados_sam3", help="Carpeta de salida")
+    parser.add_argument("--image", type=str, default=None, help="Ruta de la imagen a segmentar")
+    parser.add_argument(
+        "--elements", "--prompt", "--text",
+        dest="elements",
+        type=str,
+        default=None,
+        help="Elementos a segmentar separados por comas (ej: 'persona, anteojos' o 'cell, nucleus, lumen')"
+    )
+    parser.add_argument("--conf", type=float, default=0.25, help="Umbral mínimo de confianza (por defecto: 0.25)")
+    parser.add_argument("--model", type=str, default="sam3.pt", help="Ruta al modelo SAM 3 (por defecto: sam3.pt)")
+    parser.add_argument("--outdir", type=str, default="resultados_sam3", help="Directorio para guardar los resultados")
+    parser.add_argument("--show", action="store_true", help="Mostrar ventana con la imagen resultante")
+
     args = parser.parse_args()
 
-    os.makedirs(args.outdir, exist_ok=True)
-    processor = cargar_modelo()
+    # Modo interactivo si no se pasaron argumentos
+    image_path = args.image
+    if not image_path:
+        print("=" * 65)
+        print("🎯 SAM 3 — Segmentación Semántica Zero-Shot Interactiva")
+        print("=" * 65)
+        while not image_path:
+            inp = input("👉 Ingrese la ruta de la imagen a segmentar: ").strip().strip("'\"")
+            if os.path.exists(inp):
+                image_path = inp
+            else:
+                print(f"❌ El archivo '{inp}' no existe. Intente nuevamente.")
 
-    nombre_base = os.path.splitext(os.path.basename(args.image))[0]
+    elements_str = args.elements
+    if not elements_str:
+        print("\n📝 Indique qué elementos de la imagen desea segmentar.")
+        print("   (Puede ingresar uno o varios conceptos separados por comas)")
+        print("   Ejemplo dominio general: person, glasses, backpack, dog, car")
+        print("   Ejemplo histología/médico: cell nucleus, circular lumen, red blood cell, membrane")
+        while not elements_str:
+            elements_str = input("👉 Elementos a segmentar: ").strip()
 
-    prompts_a_probar = (
-        {"custom": args.prompt} if args.prompt else PROMPTS_SUGERIDOS
+    # Parsear lista de elementos
+    elements = [e.strip() for e in elements_str.split(",") if e.strip()]
+    if not elements:
+        print("❌ No se especificaron elementos válidos.")
+        sys.exit(1)
+
+    segmentar_imagen(
+        image_path=image_path,
+        elements=elements,
+        model_path=args.model,
+        conf=args.conf,
+        outdir=args.outdir,
+        show_plot=args.show or ("--image" not in sys.argv),
     )
-
-    for nombre_clase, texto_prompt in prompts_a_probar.items():
-        image, masks, boxes, scores = segmentar_con_texto(
-            processor, args.image, texto_prompt, args.umbral
-        )
-        if len(masks) == 0:
-            print(f"  (sin resultados para '{texto_prompt}', probá otra frase)")
-            continue
-
-        ruta_salida = os.path.join(args.outdir, f"{nombre_base}_{nombre_clase}.png")
-        visualizar_resultado(image, masks, boxes, scores, texto_prompt, ruta_salida)
 
 
 if __name__ == "__main__":

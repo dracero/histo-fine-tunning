@@ -21,8 +21,28 @@
 					<div class="glowing-orb"></div>
 					<h1>SAM 3 <span class="gradient-text">Annotator</span></h1>
 					<span class="badge">Multi-Image + Roboflow</span>
+					<div class="model-status-pills" id="model-status-pills">
+						<span class="model-pill active" id="sam3-pill" title="Meta AI Segment Anything Model 3.1">
+							<span class="dot green"></span> SAM 3.1
+						</span>
+						<span class="model-pill active" id="cellpose-pill" title="Cellpose 3 / Cellpose-SAM Histology & Cellular Model">
+							<span class="dot green" id="cellpose-dot"></span> Cellpose-SAM (Histología)
+						</span>
+						<span class="model-pill" id="conch-pill" title="MahmoodLab CONCH Vision-Language (512d)">
+							<span class="dot" id="conch-dot"></span> CONCH (512d)
+						</span>
+						<span class="model-pill" id="uni-pill" title="MahmoodLab UNI ViT-Large (1024d)">
+							<span class="dot" id="uni-dot"></span> UNI (1024d)
+						</span>
+						<span class="model-pill" id="virchow-pill" title="Paige AI Virchow2 ViT-Huge (1280d)">
+							<span class="dot" id="virchow-dot"></span> Virchow2 (1280d)
+						</span>
+						<span class="model-pill active" id="ont-pill" style="border-color: rgba(6,182,212,0.4); background: rgba(6,182,212,0.1); cursor: pointer;" title="Ontología activa. Click para ver ontología e imágenes del PDF.">
+							<span class="dot green"></span> 🧬 <strong id="ont-pill-name" style="color: var(--accent-cyan); font-weight: 700;">Cargando...</strong>
+						</span>
+					</div>
 				</div>
-				<p class="subtitle">Segmentación automática → edición de clases → entrenamiento en Roboflow. Pensado para imágenes de histología con cientos de células.</p>
+				<p class="subtitle">Segmentación multi-prompt con SAM 3.1 + clasificación histológica zero-shot con CONCH + ontologías automáticas de PDFs y exportación a Roboflow.</p>
 			</header>
 
 			<main class="app-main">
@@ -31,20 +51,39 @@
 					<!-- Tab Buttons -->
 					<div class="tab-bar">
 						<button class="tab-btn active" data-tab="images-tab">🖼️ Imágenes</button>
+						<button class="tab-btn" data-tab="pdf-tab">📄 PDFs & Ontología</button>
 						<button class="tab-btn" data-tab="classes-tab">🏷️ Clases</button>
 						<button class="tab-btn" data-tab="export-tab">🚀 Exportar</button>
 					</div>
 
 					<!-- ==================== IMAGES TAB ==================== -->
 					<div class="tab-content active" id="images-tab">
-						<div class="upload-zone" id="drop-zone">
-							<input type="file" id="file-input" accept="image/*" multiple class="file-hidden" />
+						<label for="file-input" class="upload-zone" id="drop-zone" style="cursor: pointer;">
+							<input type="file" id="file-input" accept="image/*,.pdf,application/pdf" multiple class="file-hidden" />
 							<div class="upload-content" id="upload-content">
 								<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
 								</svg>
-								<p class="upload-text">Arrastra imágenes o <span class="text-link">seleccionalas</span></p>
-								<p class="upload-hint">PNG, JPG, JPEG, TIFF — Múltiples archivos</p>
+								<p class="upload-text">Arrastra imágenes o un <span class="text-link">PDF</span></p>
+								<p class="upload-hint">PNG, JPG, JPEG, TIFF o PDF científico</p>
+							</div>
+						</label>
+
+						<!-- PDF Extracted Images Import Bar -->
+						<div id="pdf-images-import-bar" style="margin-top: 0.6rem; padding: 0.6rem 0.75rem; background: rgba(6,182,212,0.05); border: 1px dashed rgba(6,182,212,0.3); border-radius: 8px;">
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+								<span style="font-size: 0.75rem; font-weight: 600; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.3rem;">
+									📄 Cargar de PDF / Ontología
+								</span>
+								<span id="pdf-import-count-badge" class="badge" style="font-size: 0.65rem;">0 disponibles</span>
+							</div>
+							<div style="display: flex; gap: 0.4rem; align-items: center;">
+								<select id="pdf-source-select" class="form-input" style="flex: 1; font-size: 0.72rem; padding: 0.3rem 0.5rem; background: var(--bg-tertiary);">
+									<option value="">Seleccionar PDF / Ontología...</option>
+								</select>
+								<button type="button" id="import-pdf-imgs-btn" class="btn-small btn-primary-action" style="font-size: 0.72rem; padding: 0.3rem 0.6rem; white-space: nowrap;">
+									📥 Cargar al Visor
+								</button>
 							</div>
 						</div>
 
@@ -53,20 +92,90 @@
 
 						<!-- Segmentation controls -->
 						<div class="parameters-area">
-							<div class="form-group">
-								<label for="custom-prompt-input">Patrón visual adicional:</label>
-								<div class="input-with-btn">
-									<input type="text" id="custom-prompt-input" placeholder="Ej: elongated dark nucleus" class="form-input" />
-									<button type="button" id="re-segment-btn" class="btn-small">Re-segmentar</button>
+							<!-- Model Engine Selector (SAM 3 vs Cellpose) -->
+							<div class="form-group" style="margin-bottom: 0.2rem;">
+								<label style="font-weight: 600; font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+									<span>🧠 Motor de Segmentación:</span>
+									<span id="active-engine-badge" class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">SAM 3.1</span>
+								</label>
+								<div class="engine-selector-bar" style="display: flex; gap: 0.35rem; background: var(--bg-tertiary); padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+									<button type="button" class="engine-btn active" id="btn-engine-sam3" data-engine="sam3" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; background: var(--primary); color: #fff; transition: all 0.15s;">
+										⚡ SAM 3.1
+									</button>
+									<button type="button" class="engine-btn" id="btn-engine-cellpose" data-engine="cellpose" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; background: transparent; color: var(--text-muted); transition: all 0.15s;">
+										🔬 Cellpose-SAM
+									</button>
 								</div>
+							</div>
+
+							<!-- Cellpose Specific Parameters Box -->
+							<div id="cellpose-params-box" style="display: none; background: rgba(6,182,212,0.06); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; padding: 0.55rem; margin-top: 0.35rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+									<span style="font-size: 0.72rem; font-weight: 600; color: var(--accent-cyan);">🔬 Modelo Histológico:</span>
+									<span style="font-size: 0.62rem; color: #10b981; font-weight: 600;">GPU Activa</span>
+								</div>
+								<select id="cellpose-submodel-select" class="form-input" style="font-size: 0.72rem; padding: 0.25rem 0.45rem; background: var(--bg-main); width: 100%; margin-bottom: 0.35rem;">
+									<option value="cpsam">Cellpose-SAM (ViT SAM - Recomendado)</option>
+									<option value="cpsam_v2">Cellpose-SAM v2 (High-Res ViT SAM)</option>
+									<option value="nuclei">Cellpose Nuclei (Núcleos Celulares Densos)</option>
+									<option value="cyto3">Cellpose Cyto3 (Citoplasma y Células Completas)</option>
+									<option value="tissuenet">Cellpose TissueNet (Cortes Histológicos)</option>
+								</select>
+								<div style="display: flex; gap: 0.4rem; align-items: center;">
+									<label for="cellpose-diameter-input" style="font-size: 0.68rem; color: var(--text-muted); white-space: nowrap;">Diámetro célula (px):</label>
+									<input type="number" id="cellpose-diameter-input" placeholder="Auto" min="1" max="500" class="form-input-sm" style="width: 70px; font-size: 0.72rem; padding: 0.2rem 0.35rem; background: var(--bg-main);" />
+									<span style="font-size: 0.65rem; color: var(--text-muted);">(Vacío = Auto)</span>
+								</div>
+							</div>
+
+							<!-- Prompt Input -->
+							<div class="form-group" style="margin-top: 0.5rem;">
+								<label for="custom-prompt-input" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+									<span id="prompt-input-label" style="font-weight: 600; font-size: 0.78rem;">🎯 Elementos a segmentar:</span>
+									<span id="prompt-input-badge" class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">Open-Vocabulary</span>
+								</label>
+								<div class="input-with-btn" style="flex-direction: column; gap: 0.4rem;">
+									<input type="text" id="custom-prompt-input" placeholder="Ej: cell nucleus, lumen o person, glasses, tie" class="form-input" style="width: 100%; font-size: 0.8rem;" />
+									<div style="display: flex; gap: 0.4rem; width: 100%;">
+										<button type="button" id="re-segment-btn" class="btn-action btn-primary-action" style="flex: 2; margin: 0; padding: 0.45rem 0.6rem; font-size: 0.78rem;">
+											⚡ Segmentar Elementos
+										</button>
+										<button type="button" id="auto-segment-btn" class="btn-small btn-outline" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.72rem;" title="Descubrimiento automático con ontología">
+											🪄 Auto
+										</button>
+									</div>
+								</div>
+								<!-- Prompt suggestion tags -->
+								<div class="prompt-tags" id="prompt-tags-container" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem;">
+									<span class="prompt-chip" data-concept="large primary spermatocyte with voluminous nucleus">🔬 Espermatocito I</span>
+									<span class="prompt-chip" data-concept="secondary spermatocyte with spherical nucleus">🔬 Espermatocito II</span>
+									<span class="prompt-chip" data-concept="mature spermatozoon with elongated head in lumen">🩸 Espermatozoide</span>
+									<span class="prompt-chip" data-concept="dome-shaped basal spermatogonia">⭕ Espermatogonia</span>
+									<span class="prompt-chip" data-concept="round or elongating spermatid">🧬 Espermátide</span>
+									<span class="prompt-chip" data-concept="cell nucleus">🔬 Núcleos</span>
+									<span class="prompt-chip" data-concept="empty circular lumen">⭕ Lumen</span>
+								</div>
+							</div>
+
+							<!-- Dedicated Cellular Classes & Ontology Quick Bar -->
+							<div style="margin-top: 0.45rem; padding: 0.5rem 0.65rem; background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; display: flex; flex-direction: column; gap: 0.35rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center;">
+									<span style="font-size: 0.74rem; font-weight: 700; color: var(--accent-cyan);">🧬 Células del PDF / Ontología:</span>
+									<button type="button" class="load-ontology-cells-btn btn-small" style="font-size: 0.7rem; padding: 0.25rem 0.55rem; background: var(--accent-cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer;">
+										📥 Cargar Células
+									</button>
+								</div>
+								<p style="font-size: 0.66rem; color: var(--text-muted); margin: 0;">
+									Carga espermatocitos, espermatozoides, espermatogonias y espermátides para clasificar con CONCH.
+								</p>
 							</div>
 
 							<div class="form-group">
 								<div class="slider-header">
 									<label for="threshold-slider">Umbral de confianza</label>
-									<span id="threshold-val" class="slider-val">0.05</span>
+									<span id="threshold-val" class="slider-val">0.25</span>
 								</div>
-								<input type="range" id="threshold-slider" min="0.01" max="0.95" step="0.01" value="0.05" class="form-range" />
+								<input type="range" id="threshold-slider" min="0.01" max="0.95" step="0.01" value="0.25" class="form-range" />
 							</div>
 						</div>
 
@@ -91,9 +200,20 @@
 								<button type="button" id="merge-classes-btn" class="btn-small btn-outline" disabled>Fusionar</button>
 							</div>
 							<div style="display: flex; gap: 0.35rem;">
-								<input type="text" id="new-class-input" placeholder="Añadir clase (ej: Limón)" style="flex: 1; font-size: 0.78rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main);" />
+								<input type="text" id="new-class-input" placeholder="Añadir clase (ej: Espermatocito)" style="flex: 1; font-size: 0.78rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main);" />
 								<button type="button" id="add-class-btn" class="btn-small btn-green" style="white-space: nowrap;">➕ Clase</button>
 							</div>
+							<div style="display: flex; gap: 0.35rem; margin-top: 0.2rem;">
+								<button type="button" id="load-ontology-cells-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.72rem; padding: 0.35rem 0.5rem; color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);" title="Cargar todas las subpoblaciones celulares de la ontología">
+									🧬 Cargar Células de la Ontología (PDF)
+								</button>
+							</div>
+							<button type="button" id="classify-conch-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(13,148,136,0.35);" title="Ensamble cuádruple de patología: Virchow 2 (1280d) + UNI (1024d) + CONCH (512d) + Lunit DINO (384d)">
+								🧬 Auto-Clasificar (Virchow + UNI + CONCH + DINO)
+							</button>
+							<button type="button" id="langgraph-classify-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(124,58,237,0.25);" title="Pipeline Multi-Agente con LangGraph, Detección de Etiquetas/Leyendas, CONCH, Virchow2 y DINO">
+								🤖 LangGraph Multi-Agente (Leyendas + CONCH/Virchow/DINO)
+							</button>
 						</div>
 						<div id="classes-list" class="classes-list">
 							<p class="empty-hint">Segmenta una imagen para ver las clases detectadas.</p>
@@ -107,84 +227,163 @@
 
 							<div class="export-stats" id="export-stats">
 								<div class="stat-item">
-									<span class="stat-value" id="stat-images">0</span>
-									<span class="stat-label">Imágenes</span>
+									<span class="stat-val" id="stat-total-imgs">0</span>
+									<span class="stat-lbl">Imágenes</span>
 								</div>
 								<div class="stat-item">
-									<span class="stat-value" id="stat-annotations">0</span>
-									<span class="stat-label">Anotaciones</span>
+									<span class="stat-val" id="stat-annotated-imgs">0</span>
+									<span class="stat-lbl">Anotadas</span>
 								</div>
 								<div class="stat-item">
-									<span class="stat-value" id="stat-classes">0</span>
-									<span class="stat-label">Clases</span>
+									<span class="stat-val" id="stat-total-dets">0</span>
+									<span class="stat-lbl">Instancias</span>
+								</div>
+								<div class="stat-item">
+									<span class="stat-val" id="stat-total-classes">0</span>
+									<span class="stat-lbl">Clases</span>
 								</div>
 							</div>
 
-							<button type="button" id="export-coco-btn" class="btn-action btn-primary-action">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-								Descargar COCO JSON
+							<button type="button" id="export-coco-btn" class="btn-action btn-outline">
+								💾 Descargar COCO JSON
 							</button>
 
 							<div class="divider"></div>
 
-							<h3 class="section-title-sm">Roboflow</h3>
-							<div class="roboflow-status" id="roboflow-status">
-								<span class="status-dot idle"></span>
-								<span>Verificando conexión...</span>
+							<h3 class="section-title-sm">Roboflow Pipeline</h3>
+							<div class="roboflow-status" id="rf-status">
+								<span class="status-dot" id="rf-dot"></span>
+								<span id="rf-status-text">Verificando conexión...</span>
 							</div>
 
-							<div class="roboflow-options-panel" style="margin-bottom: 0.75rem;">
-								<div style="margin-bottom: 0.5rem;">
-									<label for="roboflow-version-select" style="font-size: 0.75rem; font-weight: 500; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">Versión del Dataset:</label>
-									<select id="roboflow-version-select" class="select-input" style="width: 100%; font-size: 0.8rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px;">
-										<option value="new">⚡ UNIFICAR TODAS LAS IMÁGENES (Nueva Versión Unificada)</option>
-									</select>
+							<div class="form-group" style="margin-top: 0.75rem;">
+								<label for="rf-project-name">Proyecto Roboflow:</label>
+								<input type="text" id="rf-project-name" placeholder="nombre-del-proyecto" class="form-input" />
+							</div>
+
+							<button type="button" id="rf-upload-btn" class="btn-action btn-primary-action" style="margin-top: 0.5rem;">
+								☁️ Subir Dataset a Roboflow
+							</button>
+
+							<button type="button" id="rf-train-btn" class="btn-action btn-green" style="margin-top: 0.25rem;">
+								⚡ Entrenar Modelo en Roboflow
+							</button>
+
+							<div id="rf-log-area" class="rf-log" style="display: none;">
+								<div id="rf-log-content"></div>
+							</div>
+						</div>
+					</div>
+
+					<!-- ==================== PDF ONTOLOGY TAB ==================== -->
+					<div class="tab-content" id="pdf-tab">
+						<div class="pdf-section">
+							<h3 class="section-title-sm">Subir PDF Académico</h3>
+							<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">Subí un PDF de histología o microscopía. Se extrae el texto, se generan las ontologías con IA y podés gestionar y segmentar todas sus imágenes.</p>
+
+							<div class="upload-zone" id="pdf-drop-zone" style="min-height: 100px; padding: 1.25rem; border: 2px dashed rgba(6,182,212,0.4); background: rgba(6,182,212,0.03); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; cursor: pointer; transition: all 0.2s ease;">
+								<div class="upload-content" id="pdf-upload-content" style="display: flex; flex-direction: column; align-items: center; width: 100%; pointer-events: none;">
+									<svg xmlns="http://www.w3.org/2000/svg" class="upload-icon" style="width: 32px; height: 32px; color: var(--accent-cyan);" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+									</svg>
+									<p class="upload-text" style="font-size: 0.82rem; font-weight: 600; margin-bottom: 0.25rem;">Arrastrá un PDF acá o hacé click para elegirlo</p>
+									<p class="upload-subtext" style="font-size: 0.72rem; color: var(--text-muted);">Soporta documentos científicos y papers histológicos (.pdf)</p>
+								</div>
+							</div>
+							<input type="file" id="pdf-file-input" accept=".pdf,application/pdf" style="display: none;" />
+
+							<!-- PDF extraction results summary -->
+							<div id="pdf-results" style="display: none;">
+								<div class="pdf-info-card" style="background: var(--bg-tertiary); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; border: 1px solid var(--border-color);">
+									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+										<span id="pdf-filename" style="font-weight: 600; font-size: 0.8rem; color: var(--accent-cyan);"></span>
+										<span id="pdf-pages-badge" class="badge" style="font-size: 0.65rem;"></span>
+									</div>
+									<div style="display: flex; gap: 1rem; font-size: 0.72rem; color: var(--text-muted);">
+										<span>📄 <strong id="pdf-text-len"></strong> caracteres</span>
+										<span>🖼️ <strong id="pdf-img-count">0</strong> imágenes</span>
+									</div>
 								</div>
 
-								<div style="margin-bottom: 0.5rem;">
-									<label for="roboflow-model-select" style="font-size: 0.75rem; font-weight: 500; color: var(--text-muted); display: block; margin-bottom: 0.2rem;">Formato Dataset (Local PC):</label>
-									<select id="roboflow-model-select" class="select-input" style="width: 100%; font-size: 0.8rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-main); border-radius: 6px;">
-										<option value="yolov8-obb">YOLOv8-OBB (Oriented Bounding Boxes)</option>
-										<option value="yolov8">YOLOv8 PyTorch / Ultralytics</option>
-										<option value="yolov11">YOLOv11 PyTorch</option>
-										<option value="yolov9">YOLOv9 PyTorch</option>
-										<option value="yolov7">YOLOv7 PyTorch</option>
-										<option value="yolov5">YOLOv5 PyTorch</option>
-										<option value="coco">COCO JSON Format</option>
-										<option value="coco-segmentation">COCO Instance Segmentation</option>
-										<option value="pascal_voc">Pascal VOC XML</option>
-										<option value="yolact">YOLACT Segmentation</option>
-										<option value="tfrecord">TensorFlow TFRecord</option>
-										<option value="coreml">Apple CoreML</option>
-									</select>
+								<!-- Text preview accordion -->
+								<details style="margin-top: 0.5rem;">
+									<summary style="font-size: 0.75rem; cursor: pointer; color: var(--text-muted); user-select: none;">Ver texto extraído</summary>
+									<div id="pdf-text-preview" style="max-height: 140px; overflow-y: auto; font-size: 0.7rem; color: var(--text-muted); background: var(--bg-main); padding: 0.5rem; border-radius: 6px; margin-top: 0.35rem; white-space: pre-wrap; word-break: break-word;"></div>
+								</details>
+
+								<!-- Generate ontology trigger -->
+								<div style="margin-top: 0.75rem;">
+									<div class="form-group" style="margin-bottom: 0.5rem;">
+										<label for="domain-name-input" style="font-size: 0.72rem;">Nombre del dominio (opcional):</label>
+										<input type="text" id="domain-name-input" placeholder="Ej: histologia_testiculo" class="form-input" style="font-size: 0.78rem;" />
+									</div>
+									<button type="button" id="generate-ontology-btn" class="btn-action btn-primary-action">
+										🧬 Generar Ontología con IA
+									</button>
+									<div id="ontology-generating" style="display: none; text-align: center; padding: 0.75rem; justify-content: center; align-items: center; gap: 0.5rem;">
+										<span class="spinner-small"></span>
+										<span style="font-size: 0.75rem; color: var(--text-muted);">Generando ontología con Gemini...</span>
+									</div>
 								</div>
 							</div>
 
-							<button type="button" id="upload-roboflow-btn" class="btn-action btn-roboflow" disabled>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-								1. Subir Lote a Roboflow
-							</button>
+							<!-- ONTOLOGY & PDF IMAGES SECTION (Visible together) -->
+							<div id="ontology-workbench" style="display: none; margin-top: 1rem;">
+								<!-- Top Action Bar for PDF Images Actions -->
+								<div class="batch-action-card" style="background: linear-gradient(135deg, rgba(139,92,246,0.15), rgba(6,182,212,0.15)); border: 1px solid var(--accent-cyan); border-radius: 10px; padding: 0.75rem; margin-bottom: 1rem;">
+									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+										<span style="font-size: 0.8rem; font-weight: 700; color: #fff;">🚀 Acciones con Imágenes Extraídas</span>
+										<span id="batch-img-badge" class="badge">0 imágenes</span>
+									</div>
+									<p style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.6rem;">Carga las imágenes extraídas a la sección Imágenes para anotarlas en el visor o ejecutá la segmentación en lote con SAM 3 + CONCH.</p>
+									<div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+										<button type="button" id="import-all-pdf-to-gallery-btn" class="btn-action btn-primary-action" style="margin: 0; flex: 1; font-size: 0.75rem; padding: 0.45rem 0.6rem;">
+											📥 Cargar en Sección Imágenes
+										</button>
+										<button type="button" id="batch-segment-pdf-btn" class="btn-action btn-green" style="margin: 0; flex: 1; font-size: 0.75rem; padding: 0.45rem 0.6rem;">
+											⚡ Segmentar en Lote (SAM 3)
+										</button>
+									</div>
+								</div>
 
-							<button type="button" id="unify-versions-btn" class="btn-action" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #fff;" disabled>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-								⚡ Unificar Versiones
-							</button>
+								<!-- 1. Ontology structures editor -->
+								<div id="ontology-editor" class="panel-box" style="margin-bottom: 1rem;">
+									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+										<h3 class="section-title-sm" style="margin: 0;">🧬 Ontología del Dominio</h3>
+										<div style="display: flex; gap: 0.35rem;">
+											<button type="button" id="save-ontology-btn" class="btn-small btn-green" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">💾 Guardar</button>
+											<button type="button" id="apply-ontology-btn" class="btn-small btn-primary-action" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">🎯 Activar</button>
+										</div>
+									</div>
+									<div id="ontology-structures-list" style="max-height: 280px; overflow-y: auto;"></div>
+								</div>
 
-							<button type="button" id="train-roboflow-btn" class="btn-action btn-train" disabled>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-								2. Exportar / Descargar Dataset
-							</button>
+								<!-- 2. PDF Extracted Images CRUD Gallery -->
+								<div id="pdf-images-crud-section" class="panel-box">
+									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+										<div>
+											<h3 class="section-title-sm" style="margin: 0;">🖼️ Imágenes del PDF</h3>
+											<span style="font-size: 0.65rem; color: var(--text-muted);">Edita captions, elimina gráficos no deseados o agrega imágenes.</span>
+										</div>
+										<div>
+											<input type="file" id="pdf-add-image-input" accept="image/*" class="file-hidden" />
+											<button type="button" id="pdf-add-image-btn" class="btn-small btn-outline" style="font-size: 0.7rem; padding: 0.25rem 0.55rem;">
+												➕ Agregar
+											</button>
+										</div>
+									</div>
+									
+									<div id="pdf-images-crud-grid" class="pdf-crud-grid">
+										<p class="empty-hint" style="font-size: 0.72rem;">No hay imágenes extraídas disponibles.</p>
+									</div>
+								</div>
+							</div>
 
-							<div class="divider"></div>
-
-							<button type="button" id="full-pipeline-btn" class="btn-action btn-primary-action" disabled>
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-								🚀 Subir, Unificar y Exportar para PC
-							</button>
-
-							<div class="progress-area" id="progress-area" style="display:none;">
-								<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-								<span class="progress-text" id="progress-text">Subiendo...</span>
+							<!-- Saved ontologies list -->
+							<div class="divider" style="margin: 0.75rem 0;"></div>
+							<h3 class="section-title-sm">Ontologías guardadas</h3>
+							<div id="saved-ontologies-list">
+								<p class="empty-hint" style="font-size: 0.72rem;">No hay ontologías guardadas aún.</p>
 							</div>
 						</div>
 					</div>
@@ -194,7 +393,22 @@
 				<section class="viewer-panel panel-card">
 					<div class="viewer-header">
 						<h2 class="section-title">Visor de Anotaciones</h2>
-						<div class="viewer-controls" id="viewer-controls" style="display: none;">
+						<div class="viewer-controls" id="viewer-controls" style="display: none; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+							<!-- Engine Select in Visor -->
+							<select id="viewer-engine-select" class="form-input-sm" style="font-size: 0.72rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); font-weight: 600; color: var(--accent-cyan);" title="Seleccionar modelo de segmentación">
+								<option value="sam3">⚡ SAM 3.1 (Texto/Open-Vocab)</option>
+								<option value="cellpose">🔬 Cellpose-SAM (Histología)</option>
+							</select>
+
+							<!-- Quick Search / Text Prompt Input -->
+							<div class="viewer-prompt-box" style="display: flex; gap: 0.3rem; align-items: center; background: rgba(255,255,255,0.04); padding: 0.2rem 0.4rem; border-radius: 8px; border: 1px solid var(--border-color);">
+								<span id="viewer-prompt-label" style="font-size: 0.72rem; color: var(--accent-cyan); font-weight: 600;">🔍 Prompt:</span>
+								<input type="text" id="viewer-prompt-input" placeholder="ej: cell nucleus, lumen, person..." class="form-input-sm" style="width: 200px; font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg-tertiary);" title="Escribe lo que quieras buscar/segmentar y presiona Enter o Segmentar" />
+								<button type="button" id="viewer-segment-btn" class="btn-small btn-primary-action" style="font-size: 0.72rem; padding: 0.25rem 0.55rem;" title="Segmentar elemento">
+									⚡ Segmentar
+								</button>
+							</div>
+							<span class="separator">|</span>
 							<button type="button" id="toggle-click-mode" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
 								👆 Modo Click (SAM 3)
 							</button>
@@ -203,6 +417,24 @@
 							</button>
 							<button type="button" id="finish-polygon-btn" class="btn-small btn-green" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; display: none;">
 								✓ Finalizar Polígono
+							</button>
+							<button type="button" class="load-ontology-cells-btn btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);" title="Cargar todas las subpoblaciones celulares del PDF">
+								🧬 Células PDF
+							</button>
+							<button type="button" id="toggle-conch-classify-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;" title="Clasificar detecciones con CONCH zero-shot (512d)">
+								🔬 CONCH
+							</button>
+							<button type="button" id="classify-dino-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #f59e0b; border-color: rgba(245,158,11,0.4);" title="Clasificar usando Lunit DINO (ViT-Small/8 preentrenado en 33M parches H&E)">
+								🦕 DINO Lunit
+							</button>
+							<button type="button" id="extract-virchow-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Ensamble Cuádruple: Virchow 2 (1280d) + UNI (1024d) + CONCH (512d) + Lunit DINO (384d)">
+								🧬 Ensamble (Virchow + UNI + CONCH + DINO)
+							</button>
+							<button type="button" id="gemini-multimodal-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(168,85,247,0.35);" title="Fusión Multimodal: Virchow 2 + UNI + CONCH + DINO + Arbitraje Gemini HD">
+								✨ Gemini + Ensamble (DINO/Virchow/CONCH)
+							</button>
+							<button type="button" id="toggle-langgraph-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.35);" title="Pipeline Multi-Agente: LangGraph + Gemini OCR/Etiquetas + CONCH + Virchow2 + DINO">
+								🤖 LangGraph Multi-Agente
 							</button>
 							<span class="separator">|</span>
 							<label class="toggle-container">
@@ -253,6 +485,7 @@
 			<div class="tooltip-category" id="tooltip-category">-</div>
 			<div class="tooltip-score">Confianza: <span id="tooltip-score-val">0.00</span></div>
 			<div class="tooltip-coords">Box: <span id="tooltip-coords-val">0, 0</span></div>
+			<div id="tooltip-reason-val" style="display: none; font-size: 0.72rem; color: #cbd5e1; margin-top: 4px; padding-top: 4px; border-top: 1px dashed rgba(255,255,255,0.2); max-width: 260px; line-height: 1.3;"></div>
 			<div class="tooltip-hint">Click = seleccionar · Shift+Click = multi-select</div>
 		</div>
 
@@ -291,6 +524,50 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- PDF Image Preview Modal (Lightbox) -->
+		<div id="image-preview-modal" class="modal-backdrop" style="display: none;">
+			<div class="modal-card modal-card-lg">
+				<div class="modal-header">
+					<h3 id="modal-img-title">🖼️ Vista Previa de Imagen</h3>
+					<button type="button" id="close-img-modal-btn" class="btn-small btn-outline" style="padding: 0.2rem 0.5rem;">✕</button>
+				</div>
+				<div class="modal-body" style="text-align: center;">
+					<div class="modal-img-container">
+						<img id="modal-img-preview" src="" alt="Vista previa" style="max-height: 55vh; max-width: 100%; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); object-fit: contain;" />
+					</div>
+					<div style="margin-top: 1rem; text-align: left;">
+						<div id="modal-img-meta" style="font-size: 0.75rem; color: var(--accent-cyan); margin-bottom: 0.35rem;"></div>
+						<div class="form-group">
+							<label for="modal-img-caption-input" style="font-size: 0.75rem;">Pie de foto / Caption:</label>
+							<textarea id="modal-img-caption-input" rows="2" class="form-input" style="width: 100%; font-size: 0.8rem;"></textarea>
+						</div>
+						<div style="display: flex; justify-content: space-between; margin-top: 0.75rem; gap: 0.5rem;">
+							<button type="button" id="modal-save-caption-btn" class="btn-small btn-green">💾 Guardar Cambios</button>
+							<button type="button" id="modal-use-single-img-btn" class="btn-small btn-primary-action">🎯 Segmentar esta imagen</button>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Batch Segmentation Progress Modal -->
+		<div id="batch-progress-modal" class="modal-backdrop" style="display: none;">
+			<div class="modal-card">
+				<div class="modal-header">
+					<h3>🚀 Segmentación en Lote (SAM 3 + CONCH)</h3>
+				</div>
+				<div class="modal-body" style="text-align: center; padding: 1.5rem;">
+					<div class="spinner-small" style="width: 32px; height: 32px; margin: 0 auto 1rem; border-width: 3px;"></div>
+					<h4 id="batch-step-title" style="font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-main);">Procesando imágenes...</h4>
+					<p id="batch-step-desc" style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem;">Ejecutando inferencia de SAM 3 y clasificación histológica zero-shot con CONCH...</p>
+					<div class="progress-bar" style="height: 10px; margin-bottom: 0.5rem; background: rgba(255,255,255,0.1); border-radius: 9999px; overflow: hidden;">
+						<div class="progress-fill" id="batch-progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent-cyan)); transition: width 0.3s;"></div>
+					</div>
+					<span id="batch-progress-text" style="font-size: 0.75rem; color: var(--accent-cyan); font-weight: 600;">0 / 0 procesadas (0%)</span>
+				</div>
+			</div>
+		</div>
 	</body>
 </html>
 
@@ -299,6 +576,8 @@
 		--bg-dark: #070913;
 		--bg-panel: rgba(15, 23, 42, 0.45);
 		--bg-sidebar: rgba(15, 23, 42, 0.65);
+		--bg-tertiary: rgba(30, 41, 59, 0.5);
+		--bg-main: rgba(15, 23, 42, 0.8);
 		--border-color: rgba(255, 255, 255, 0.08);
 		--border-active: rgba(139, 92, 246, 0.5);
 		--text-main: #f8fafc;
@@ -312,6 +591,62 @@
 		--font-family: 'Inter', sans-serif;
 		--font-title: 'Outfit', sans-serif;
 	}
+
+	/* Model Status Pills */
+	.model-status-pills { display: flex; gap: 0.35rem; margin-left: 0.5rem; flex-wrap: wrap; }
+	.model-pill { display: flex; align-items: center; gap: 0.35rem; font-size: 0.65rem; padding: 0.15rem 0.45rem; border-radius: 9999px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); color: var(--text-muted); font-family: var(--font-family); }
+	.model-pill.active { border-color: rgba(6,182,212,0.4); color: var(--text-main); background: rgba(6,182,212,0.08); }
+	.model-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: #64748b; }
+	.model-pill .dot.green { background: #10b981; box-shadow: 0 0 6px #10b981; }
+	.model-pill .dot.purple { background: #a855f7; box-shadow: 0 0 6px #a855f7; }
+
+	/* Prompt Suggestion Chips */
+	.prompt-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: 0.68rem;
+		padding: 0.2rem 0.5rem;
+		border-radius: 9999px;
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid var(--border-color);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: all 0.15s ease;
+		user-select: none;
+	}
+	.prompt-chip:hover {
+		background: rgba(139, 92, 246, 0.15);
+		border-color: var(--primary);
+		color: var(--text-main);
+		transform: translateY(-1px);
+	}
+	.prompt-chip.active {
+		background: rgba(6, 182, 212, 0.2);
+		border-color: var(--accent-cyan);
+		color: #fff;
+		font-weight: 600;
+	}
+
+	/* Panel Box */
+	.panel-box { background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem; }
+
+	/* PDF Images CRUD Grid */
+	.pdf-crud-grid { display: flex; flex-direction: column; gap: 0.5rem; max-height: 380px; overflow-y: auto; margin-top: 0.5rem; }
+	.pdf-img-card { display: flex; gap: 0.6rem; padding: 0.5rem; background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 8px; transition: all 0.15s; }
+	.pdf-img-card:hover { border-color: rgba(6,182,212,0.3); background: rgba(6,182,212,0.02); }
+	.pdf-img-thumb-wrapper { position: relative; width: 70px; height: 70px; flex-shrink: 0; border-radius: 6px; overflow: hidden; cursor: pointer; }
+	.pdf-img-thumb { width: 100%; height: 100%; object-fit: cover; }
+	.pdf-img-zoom-hint { position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; font-size: 1rem; color: #fff; }
+	.pdf-img-thumb-wrapper:hover .pdf-img-zoom-hint { opacity: 1; }
+	.pdf-img-details { flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+	.pdf-img-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+	.pdf-img-badge { font-size: 0.62rem; color: var(--accent-cyan); background: rgba(6,182,212,0.1); padding: 0.1rem 0.35rem; border-radius: 4px; }
+	.pdf-img-caption-input { font-size: 0.72rem; padding: 0.2rem 0.4rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-main); width: 100%; font-family: var(--font-family); }
+	.pdf-img-caption-input:focus { border-color: var(--accent-cyan); }
+	.pdf-img-actions { display: flex; justify-content: flex-end; gap: 0.3rem; margin-top: 0.3rem; }
+
+	.modal-card-lg { max-width: 800px; width: 95%; }
 
 	* { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -357,7 +692,7 @@
 	.upload-zone { border: 2px dashed rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 1.5rem 1rem; text-align: center; cursor: pointer; position: relative; transition: all 0.2s; background: rgba(255, 255, 255, 0.01); min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 	.upload-zone:hover { border-color: var(--primary); background: rgba(139, 92, 246, 0.03); }
 	.upload-zone.dragover { border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.05); }
-	.file-hidden { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+	.file-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
 	.upload-icon { width: 32px; height: 32px; color: var(--text-muted); margin-bottom: 0.5rem; }
 	.upload-text { font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.3rem; font-weight: 500; }
 	.text-link { color: var(--primary-hover); text-decoration: underline; }
@@ -549,6 +884,7 @@
 
 	// Hidden categories
 	let hiddenCategories = new Set();
+	let _ontologiesLoaded = false;
 
 	// ======================= DOM =======================
 	const dropZone = document.getElementById("drop-zone");
@@ -582,6 +918,7 @@
 	const tooltipCategory = document.getElementById("tooltip-category");
 	const tooltipScore = document.getElementById("tooltip-score-val");
 	const tooltipCoords = document.getElementById("tooltip-coords-val");
+	const tooltipReason = document.getElementById("tooltip-reason-val");
 
 	const contextMenu = document.getElementById("context-menu");
 	const ctxHeader = document.getElementById("ctx-header");
@@ -596,22 +933,32 @@
 	const finishPolygonBtn = document.getElementById("finish-polygon-btn");
 
 	const exportCocoBtn = document.getElementById("export-coco-btn");
-	const uploadRoboflowBtn = document.getElementById("upload-roboflow-btn");
+	const uploadRoboflowBtn = document.getElementById("rf-upload-btn") || document.getElementById("upload-roboflow-btn");
 	const unifyVersionsBtn = document.getElementById("unify-versions-btn");
-	const trainRoboflowBtn = document.getElementById("train-roboflow-btn");
+	const trainRoboflowBtn = document.getElementById("rf-train-btn") || document.getElementById("train-roboflow-btn");
 	const fullPipelineBtn = document.getElementById("full-pipeline-btn");
-	const roboflowStatus = document.getElementById("roboflow-status");
-	const progressArea = document.getElementById("progress-area");
+	const roboflowStatus = document.getElementById("rf-status") || document.getElementById("roboflow-status");
+	const progressArea = document.getElementById("rf-log-area") || document.getElementById("progress-area");
 	const progressFill = document.getElementById("progress-fill");
-	const progressTextEl = document.getElementById("progress-text");
+	const progressTextEl = document.getElementById("rf-log-content") || document.getElementById("progress-text");
 
 	// ======================= TABS =======================
+	function switchTab(tabId) {
+		if (!tabId) return;
+		document.querySelectorAll(".tab-btn").forEach(btn => {
+			btn.classList.toggle("active", btn.dataset.tab === tabId);
+		});
+		document.querySelectorAll(".tab-content").forEach(c => {
+			c.classList.toggle("active", c.id === tabId);
+		});
+		if (tabId === "pdf-tab") {
+			loadSavedOntologies(true);
+		}
+	}
+
 	document.querySelectorAll(".tab-btn").forEach(btn => {
 		btn.addEventListener("click", () => {
-			document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-			document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-			btn.classList.add("active");
-			document.getElementById(btn.dataset.tab).classList.add("active");
+			switchTab(btn.dataset.tab);
 		});
 	});
 
@@ -626,17 +973,24 @@
 	dropZone.addEventListener("drop", (e) => {
 		if (e.dataTransfer.files.length > 0) handleFiles(Array.from(e.dataTransfer.files));
 	});
-	dropZone.addEventListener("click", (e) => { fileInput.click(); });
 	fileInput.addEventListener("change", () => {
 		if (fileInput.files.length > 0) handleFiles(Array.from(fileInput.files));
 	});
 
-	async function handleFiles(files) {
-		const imageFiles = files.filter(f => f.type.startsWith("image/"));
-		if (imageFiles.length === 0) { alert("Selecciona archivos de imagen."); return; }
+	async function handleFiles(files, autoSegment = false) {
+		const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
+		if (pdfFiles.length > 0) {
+			switchTab("pdf-tab");
+			handlePdfUpload(pdfFiles[0]);
+			return;
+		}
 
+		const imageFiles = files.filter(f => f.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(f.name));
+		if (imageFiles.length === 0) { alert("Selecciona archivos de imagen o un PDF."); return; }
+
+		const addedKeys = [];
 		for (const file of imageFiles) {
-			const key = file.name + "_" + Date.now();
+			const key = file.name + "_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
 			const dataUrl = await readFileAsDataUrl(file);
 			const dims = await getImageDimensions(dataUrl);
 
@@ -644,39 +998,50 @@
 				file: file,
 				filename: file.name,
 				dataUrl: dataUrl,
-				width: dims.width,
-				height: dims.height,
+				width: dims.width || 800,
+				height: dims.height || 600,
 				groups: [],
 				annotated: false,
 			});
+			addedKeys.push(key);
 		}
 
 		renderGallery();
+		if (addedKeys.length > 0) {
+			selectImage(addedKeys[0]);
+		}
 
-		// Auto-segment new images
-		for (const file of imageFiles) {
-			const key = [...imageStore.keys()].find(k => imageStore.get(k).file === file);
-			if (key) {
+		if (autoSegment) {
+			for (const key of addedKeys) {
 				selectImage(key);
-				await runAutoSegmentation(key);
+				await runSam3Segmentation(key);
 			}
 		}
 
-		fileInput.value = "";
+		if (fileInput) fileInput.value = "";
 	}
 
 	function readFileAsDataUrl(file) {
 		return new Promise((resolve) => {
 			const reader = new FileReader();
 			reader.onload = (e) => resolve(e.target.result);
+			reader.onerror = (err) => {
+				console.warn("FileReader error, returning empty dataUrl:", err);
+				resolve("");
+			};
 			reader.readAsDataURL(file);
 		});
 	}
 
 	function getImageDimensions(dataUrl) {
 		return new Promise((resolve) => {
+			if (!dataUrl) return resolve({ width: 800, height: 600 });
 			const img = new Image();
-			img.onload = () => resolve({ width: img.width, height: img.height });
+			img.onload = () => resolve({ width: img.naturalWidth || img.width || 800, height: img.naturalHeight || img.height || 600 });
+			img.onerror = () => {
+				console.warn("Could not decode image dimensions, fallback to 800x600");
+				resolve({ width: 800, height: 600 });
+			};
 			img.src = dataUrl;
 		});
 	}
@@ -763,84 +1128,341 @@
 		return count;
 	}
 
-	// ======================= SEGMENTATION =======================
+	// ======================= SEGMENTATION ENGINES (SAM 3 & CELLPOSE-SAM) =======================
+	let currentEngine = "sam3"; // "sam3" or "cellpose"
+	let currentCellposeModel = "cpsam";
+
+	const btnEngineSam3 = document.getElementById("btn-engine-sam3");
+	const btnEngineCellpose = document.getElementById("btn-engine-cellpose");
+	const viewerEngineSelect = document.getElementById("viewer-engine-select");
+	const cellposeParamsBox = document.getElementById("cellpose-params-box");
+	const cellposeSubmodelSelect = document.getElementById("cellpose-submodel-select");
+	const cellposeDiameterInput = document.getElementById("cellpose-diameter-input");
+	const activeEngineBadge = document.getElementById("active-engine-badge");
+	const promptInputLabel = document.getElementById("prompt-input-label");
+	const promptInputBadge = document.getElementById("prompt-input-badge");
+	const viewerPromptLabel = document.getElementById("viewer-prompt-label");
+
+	function setSegmentationEngine(engine) {
+		currentEngine = engine;
+		if (engine === "cellpose") {
+			if (btnEngineCellpose) {
+				btnEngineCellpose.classList.add("active");
+				btnEngineCellpose.style.background = "var(--accent-cyan)";
+				btnEngineCellpose.style.color = "#000";
+			}
+			if (btnEngineSam3) {
+				btnEngineSam3.classList.remove("active");
+				btnEngineSam3.style.background = "transparent";
+				btnEngineSam3.style.color = "var(--text-muted)";
+			}
+			if (viewerEngineSelect) viewerEngineSelect.value = "cellpose";
+			if (cellposeParamsBox) cellposeParamsBox.style.display = "block";
+			if (activeEngineBadge) {
+				activeEngineBadge.textContent = "Cellpose-SAM";
+				activeEngineBadge.style.color = "var(--accent-cyan)";
+				activeEngineBadge.style.borderColor = "rgba(6,182,212,0.4)";
+			}
+			if (promptInputLabel) promptInputLabel.textContent = "🎯 Concepto / Célula:";
+			if (promptInputBadge) promptInputBadge.textContent = "Histología & Células";
+			if (viewerPromptLabel) viewerPromptLabel.textContent = "🔬 Cellpose:";
+		} else {
+			if (btnEngineSam3) {
+				btnEngineSam3.classList.add("active");
+				btnEngineSam3.style.background = "var(--primary)";
+				btnEngineSam3.style.color = "#fff";
+			}
+			if (btnEngineCellpose) {
+				btnEngineCellpose.classList.remove("active");
+				btnEngineCellpose.style.background = "transparent";
+				btnEngineCellpose.style.color = "var(--text-muted)";
+			}
+			if (viewerEngineSelect) viewerEngineSelect.value = "sam3";
+			if (cellposeParamsBox) cellposeParamsBox.style.display = "none";
+			if (activeEngineBadge) {
+				activeEngineBadge.textContent = "SAM 3.1";
+				activeEngineBadge.style.color = "var(--primary)";
+				activeEngineBadge.style.borderColor = "rgba(139,92,246,0.4)";
+			}
+			if (promptInputLabel) promptInputLabel.textContent = "🎯 Elementos a segmentar:";
+			if (promptInputBadge) promptInputBadge.textContent = "Open-Vocabulary";
+			if (viewerPromptLabel) viewerPromptLabel.textContent = "🔍 SAM 3:";
+		}
+	}
+
+	btnEngineSam3?.addEventListener("click", () => setSegmentationEngine("sam3"));
+	btnEngineCellpose?.addEventListener("click", () => setSegmentationEngine("cellpose"));
+	viewerEngineSelect?.addEventListener("change", (e) => setSegmentationEngine(e.target.value));
+	cellposeSubmodelSelect?.addEventListener("change", (e) => { currentCellposeModel = e.target.value; });
+
+	// ======================= SEGMENTATION PROMPT LISTENERS =======================
 	const customPromptInput = document.getElementById("custom-prompt-input");
+	const viewerPromptInput = document.getElementById("viewer-prompt-input");
 	const reSegmentBtn = document.getElementById("re-segment-btn");
+	const viewerSegmentBtn = document.getElementById("viewer-segment-btn");
+	const autoSegmentBtn = document.getElementById("auto-segment-btn");
 
-	reSegmentBtn.addEventListener("click", () => {
-		if (activeImageKey) runAutoSegmentation(activeImageKey);
-	});
-	customPromptInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter" && activeImageKey) runAutoSegmentation(activeImageKey);
+	// Sync prompt inputs between sidebar and viewer header
+	if (customPromptInput && viewerPromptInput) {
+		customPromptInput.addEventListener("input", () => {
+			viewerPromptInput.value = customPromptInput.value;
+		});
+		viewerPromptInput.addEventListener("input", () => {
+			customPromptInput.value = viewerPromptInput.value;
+		});
+	}
+
+	// Setup Prompt Chips Click Listeners
+	document.querySelectorAll(".prompt-chip").forEach(chip => {
+		chip.addEventListener("click", () => {
+			const concept = chip.getAttribute("data-concept");
+			if (!concept) return;
+			const currentVal = customPromptInput.value.trim();
+			if (!currentVal) {
+				customPromptInput.value = concept;
+				if (viewerPromptInput) viewerPromptInput.value = concept;
+				chip.classList.add("active");
+			} else {
+				const items = currentVal.split(",").map(s => s.trim()).filter(Boolean);
+				if (items.includes(concept)) {
+					const filtered = items.filter(x => x !== concept);
+					customPromptInput.value = filtered.join(", ");
+					if (viewerPromptInput) viewerPromptInput.value = filtered.join(", ");
+					chip.classList.remove("active");
+				} else {
+					items.push(concept);
+					customPromptInput.value = items.join(", ");
+					if (viewerPromptInput) viewerPromptInput.value = items.join(", ");
+					chip.classList.add("active");
+				}
+			}
+			if (activeImageKey) {
+				runSam3Segmentation(activeImageKey);
+			}
+		});
 	});
 
-	async function runAutoSegmentation(key) {
-		const data = imageStore.get(key);
-		if (!data) return;
+	reSegmentBtn?.addEventListener("click", () => {
+		runSam3Segmentation();
+	});
+	viewerSegmentBtn?.addEventListener("click", () => {
+		runSam3Segmentation(activeImageKey);
+	});
+	autoSegmentBtn?.addEventListener("click", () => {
+		runAutoSegmentation();
+	});
+	customPromptInput?.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") runSam3Segmentation();
+	});
+	viewerPromptInput?.addEventListener("keydown", (e) => {
+		if (e.key === "Enter") runSam3Segmentation();
+	});
+
+	async function runSam3Segmentation(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("No hay imágenes cargadas para segmentar.");
+			return;
+		}
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `Segmentando ${data.filename}...`;
+		const engineName = currentEngine === "cellpose" ? `Cellpose (${currentCellposeModel})` : "SAM 3.1";
+		let totalProcessed = 0;
+		let totalDetectionsAll = 0;
 
-		const formData = new FormData();
-		formData.append("image", data.file);
-		formData.append("umbral", "0.01");
-		if (customPromptInput.value.trim()) {
-			formData.append("custom_prompt", customPromptInput.value.trim());
+		for (let i = 0; i < keysToProcess.length; i++) {
+			const key = keysToProcess[i];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			statusText.textContent = `[${i + 1}/${keysToProcess.length}] Segmentando ${data.filename} con ${engineName}...`;
+
+			const elementsText = customPromptInput.value.trim() || (currentEngine === "cellpose" ? "cell" : "cell nucleus");
+			const formData = new FormData();
+			formData.append("image", data.file);
+			formData.append("elements", elementsText);
+			formData.append("prompt", elementsText);
+			formData.append("umbral", thresholdSlider.value);
+			formData.append("model_engine", currentEngine);
+			formData.append("cellpose_model", currentCellposeModel);
+
+			const diamVal = cellposeDiameterInput ? parseFloat(cellposeDiameterInput.value) : null;
+			if (diamVal && diamVal > 0) {
+				formData.append("cell_diameter", diamVal.toString());
+			}
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			try {
+				const response = await fetch(`${API_URL}/segment`, {
+					method: "POST",
+					body: formData
+				});
+
+				if (!response.ok) {
+					const err = await response.json();
+					console.warn(`Error en segmentación de ${data.filename}:`, err);
+					continue;
+				}
+
+				const result = await response.json();
+				data.groups = result.groups || [];
+				data.width = result.width || data.width;
+				data.height = result.height || data.height;
+				data.annotated = true;
+
+				for (const group of data.groups) {
+					if (!classRegistry.find(c => c.key === group.key)) {
+						classRegistry.push({
+							id: classIdCounter++,
+							name: group.label,
+							color: group.color,
+							key: group.key,
+						});
+					}
+				}
+
+				const detCount = result.total_detections || (result.detections ? result.detections.length : 0);
+				totalDetectionsAll += detCount;
+				totalProcessed++;
+
+				renderGallery();
+				updateExportStats();
+
+				if (key === activeImageKey) {
+					viewerControls.style.display = "flex";
+					selectedDetections.clear();
+					updateSelectionToolbar();
+					renderOverlay();
+					updateClassesList();
+				}
+			} catch (error) {
+				console.error(`Error en ${data.filename}:`, error);
+			}
 		}
 
-		try {
-			const response = await fetch(`${API_URL}/segment-auto`, {
-				method: "POST",
-				body: formData
-			});
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
 
-			if (!response.ok) {
-				const err = await response.json();
-				throw new Error(err.detail || "Error del servidor.");
-			}
-
-			const result = await response.json();
-			data.groups = result.groups || [];
-			data.width = result.width || data.width;
-			data.height = result.height || data.height;
-			data.annotated = true;
-
-			// Register classes from this segmentation
-			for (const group of data.groups) {
-				if (!classRegistry.find(c => c.key === group.key)) {
-					classRegistry.push({
-						id: classIdCounter++,
-						name: group.label,
-						color: group.color,
-						key: group.key,
-					});
-				}
-			}
-
-			if (key === activeImageKey) {
-				viewerControls.style.display = "flex";
-				selectedDetections.clear();
-				updateSelectionToolbar();
-				renderOverlay();
-				updateClassesList();
-			}
-
-			renderGallery();
-			updateExportStats();
-
-			statusText.textContent = `✓ ${data.filename}: ${result.total_detections} detecciones`;
-			setTimeout(() => {
-				statusRunning.style.display = "none";
-				statusIdle.style.display = "none";
-			}, 2500);
-
-		} catch (error) {
-			console.error(error);
-			alert(`Error: ${error.message}`);
+		statusText.textContent = `✓ [${engineName}] Lote: ${totalProcessed} imágenes procesadas (${totalDetectionsAll} instancias).`;
+		setTimeout(() => {
 			statusRunning.style.display = "none";
 			statusIdle.style.display = "flex";
+		}, 3500);
+	}
+
+	async function runAutoSegmentation(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("No hay imágenes cargadas para auto-segmentar.");
+			return;
 		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		const engineName = currentEngine === "cellpose" ? `Cellpose (${currentCellposeModel})` : "SAM 3.1";
+		let totalProcessed = 0;
+		let totalDetectionsAll = 0;
+
+		for (let i = 0; i < keysToProcess.length; i++) {
+			const key = keysToProcess[i];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			statusText.textContent = `[${i + 1}/${keysToProcess.length}] Auto-segmentando ${data.filename} con ${engineName}...`;
+
+			const formData = new FormData();
+			formData.append("image", data.file);
+			formData.append("umbral", thresholdSlider.value);
+			formData.append("model_engine", currentEngine);
+			formData.append("cellpose_model", currentCellposeModel);
+
+			const diamVal = cellposeDiameterInput ? parseFloat(cellposeDiameterInput.value) : null;
+			if (diamVal && diamVal > 0) {
+				formData.append("cell_diameter", diamVal.toString());
+			}
+
+			if (customPromptInput.value.trim()) {
+				formData.append("custom_prompt", customPromptInput.value.trim());
+			}
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			try {
+				const response = await fetch(`${API_URL}/segment-auto`, {
+					method: "POST",
+					body: formData
+				});
+
+				if (!response.ok) {
+					const err = await response.json();
+					console.warn(`Error en auto-segmentación de ${data.filename}:`, err);
+					continue;
+				}
+
+				const result = await response.json();
+				data.groups = result.groups || [];
+				data.width = result.width || data.width;
+				data.height = result.height || data.height;
+				data.annotated = true;
+
+				for (const group of data.groups) {
+					if (!classRegistry.find(c => c.key === group.key)) {
+						classRegistry.push({
+							id: classIdCounter++,
+							name: group.label,
+							color: group.color,
+							key: group.key,
+						});
+					}
+				}
+
+				const detCount = result.total_detections || (result.detections ? result.detections.length : 0);
+				totalDetectionsAll += detCount;
+				totalProcessed++;
+
+				renderGallery();
+				updateExportStats();
+
+				if (key === activeImageKey) {
+					viewerControls.style.display = "flex";
+					selectedDetections.clear();
+					updateSelectionToolbar();
+					renderOverlay();
+					updateClassesList();
+				}
+			} catch (error) {
+				console.error(`Error en ${data.filename}:`, error);
+			}
+		}
+
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
+
+		statusText.textContent = `✓ [${engineName}] Lote: ${totalProcessed} imágenes auto-segmentadas (${totalDetectionsAll} instancias).`;
+		setTimeout(() => {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}, 3500);
 	}
 
 	// ======================= THRESHOLD =======================
@@ -977,10 +1599,33 @@
 		el.addEventListener("mouseenter", () => {
 			tooltipCategory.textContent = label;
 			tooltipCategory.style.color = color;
-			tooltipScore.textContent = `${(det.score * 100).toFixed(1)}%`;
+			let scoreText = `${(det.score * 100).toFixed(0)}%`;
+			if (det.conch_confidence) {
+				scoreText += ` · 🔬 CONCH: ${(det.conch_confidence * 100).toFixed(0)}%`;
+			}
+			if (det.virchow_similarity || det.morphological_ensemble_similarity) {
+				const vScore = det.virchow_similarity || det.morphological_ensemble_similarity;
+				scoreText += ` · 🧬 Virchow2: ${(vScore * 100).toFixed(0)}%`;
+			}
+			if (det.model_contributions && det.model_contributions.lunit_dino) {
+				scoreText += ` · 🦠 DINO: ${(det.model_contributions.lunit_dino * 100).toFixed(0)}%`;
+			}
+			if (det.gemini_confidence !== undefined && det.multimodal_fused) {
+				scoreText += ` · ✨ Gemini HD: ${(det.gemini_confidence * 100).toFixed(0)}%`;
+			}
+			tooltipScore.textContent = scoreText;
 			if (det.box) {
 				const [x1, y1, x2, y2] = det.box;
 				tooltipCoords.textContent = `${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}`;
+			}
+			if (tooltipReason) {
+				const reasoningText = det.gemini_reasoning || det.agent_reasoning;
+				if (reasoningText) {
+					tooltipReason.textContent = `💡 ${reasoningText}`;
+					tooltipReason.style.display = "block";
+				} else {
+					tooltipReason.style.display = "none";
+				}
 			}
 			tooltip.style.display = "block";
 		});
@@ -1583,12 +2228,14 @@
 	// ======================= EXPORT =======================
 	function updateExportStats() {
 		const threshold = parseFloat(thresholdSlider.value);
-		let totalImages = 0, totalAnnotations = 0;
+		let totalImages = imageStore.size;
+		let annotatedImages = 0;
+		let totalAnnotations = 0;
 		const classSet = new Set();
 
 		imageStore.forEach(data => {
 			if (!data.annotated) return;
-			totalImages++;
+			annotatedImages++;
 			data.groups.forEach(group => {
 				group.detections.forEach(det => {
 					if (det.score >= threshold && !det._deleted) {
@@ -1599,15 +2246,21 @@
 			});
 		});
 
-		document.getElementById("stat-images").textContent = totalImages;
-		document.getElementById("stat-annotations").textContent = totalAnnotations;
-		document.getElementById("stat-classes").textContent = classSet.size;
+		const totalImgsEl = document.getElementById("stat-total-imgs");
+		const annotatedImgsEl = document.getElementById("stat-annotated-imgs");
+		const totalDetsEl = document.getElementById("stat-total-dets");
+		const totalClassesEl = document.getElementById("stat-total-classes");
+
+		if (totalImgsEl) totalImgsEl.textContent = totalImages;
+		if (annotatedImgsEl) annotatedImgsEl.textContent = annotatedImages;
+		if (totalDetsEl) totalDetsEl.textContent = totalAnnotations;
+		if (totalClassesEl) totalClassesEl.textContent = classSet.size;
 
 		// Enable/disable buttons
-		const hasData = totalImages > 0 && totalAnnotations > 0;
-		exportCocoBtn.disabled = !hasData;
-		uploadRoboflowBtn.disabled = !hasData || !roboflowConnected;
-		trainRoboflowBtn.disabled = !roboflowConnected;
+		const hasData = annotatedImages > 0 && totalAnnotations > 0;
+		if (exportCocoBtn) exportCocoBtn.disabled = !hasData;
+		if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = !hasData || !roboflowConnected;
+		if (trainRoboflowBtn) trainRoboflowBtn.disabled = !roboflowConnected;
 		if (fullPipelineBtn) fullPipelineBtn.disabled = !hasData || !roboflowConnected;
 	}
 
@@ -1624,8 +2277,21 @@
 			let annId = 1;
 
 			data.groups.forEach(group => {
-				const cls = classRegistry.find(c => c.key === group.key);
-				if (!cls) return;
+				let cls = classRegistry.find(c => c.key === group.key);
+				if (!cls) {
+					const newId = classRegistry.length + 1;
+					cls = {
+						id: newId,
+						key: group.key,
+						name: group.label || group.key,
+						color: group.color || "#8b5cf6",
+					};
+					classRegistry.push(cls);
+				}
+
+				if (!cls.id) {
+					cls.id = classRegistry.indexOf(cls) + 1;
+				}
 
 				let hasAnnotations = false;
 				group.detections.forEach(det => {
@@ -1667,7 +2333,7 @@
 	}
 
 	// Download COCO JSON
-	exportCocoBtn.addEventListener("click", async () => {
+	exportCocoBtn?.addEventListener("click", async () => {
 		const payload = buildExportPayload();
 		if (payload.length === 0) { alert("No hay anotaciones para exportar."); return; }
 
@@ -1694,14 +2360,14 @@
 	});
 
 	// Upload to Roboflow
-	uploadRoboflowBtn.addEventListener("click", async () => {
+	uploadRoboflowBtn?.addEventListener("click", async () => {
 		const payload = buildExportPayload();
 		if (payload.length === 0) { alert("No hay anotaciones para subir."); return; }
 
-		uploadRoboflowBtn.disabled = true;
-		progressArea.style.display = "block";
-		progressFill.style.width = "10%";
-		progressTextEl.textContent = "Preparando dataset...";
+		if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = true;
+		if (progressArea) progressArea.style.display = "block";
+		if (progressFill) progressFill.style.width = "10%";
+		if (progressTextEl) progressTextEl.textContent = "Preparando dataset...";
 
 		try {
 			const formData = new FormData();
@@ -1719,15 +2385,15 @@
 					}
 				});
 
-			progressFill.style.width = "30%";
-			progressTextEl.textContent = `Subiendo ${fileCount} imágenes a Roboflow...`;
+			if (progressFill) progressFill.style.width = "30%";
+			if (progressTextEl) progressTextEl.textContent = `Subiendo ${fileCount} imágenes a Roboflow...`;
 
 			const response = await fetch(`${API_URL}/upload-roboflow`, {
 				method: "POST",
 				body: formData,
 			});
 
-			progressFill.style.width = "90%";
+			if (progressFill) progressFill.style.width = "90%";
 
 			if (!response.ok) {
 				const err = await response.json();
@@ -1735,18 +2401,18 @@
 			}
 
 			const result = await response.json();
-			progressFill.style.width = "100%";
-			progressTextEl.textContent = `✓ Subidas ${result.images_uploaded} imágenes con ${result.annotations_uploaded} anotaciones`;
+			if (progressFill) progressFill.style.width = "100%";
+			if (progressTextEl) progressTextEl.textContent = `✓ Subidas ${result.images_uploaded} imágenes con ${result.annotations_uploaded} anotaciones`;
 
-			trainRoboflowBtn.disabled = false;
+			if (trainRoboflowBtn) trainRoboflowBtn.disabled = false;
 
-			setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+			setTimeout(() => { if (progressArea) progressArea.style.display = "none"; }, 5000);
 
 		} catch (e) {
 			alert(`Error: ${e.message}`);
-			progressTextEl.textContent = `Error: ${e.message}`;
+			if (progressTextEl) progressTextEl.textContent = `Error: ${e.message}`;
 		} finally {
-			uploadRoboflowBtn.disabled = false;
+			if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = false;
 		}
 	});
 
@@ -1757,9 +2423,9 @@
 			if (!confirm(`¿Unificar todas las imágenes en una nueva versión snapshot en Roboflow (${selectedModel})?`)) return;
 
 			unifyVersionsBtn.disabled = true;
-			progressArea.style.display = "block";
-			progressFill.style.width = "50%";
-			progressTextEl.textContent = "Unificando imágenes y congelando nueva versión en Roboflow...";
+			if (progressArea) progressArea.style.display = "block";
+			if (progressFill) progressFill.style.width = "50%";
+			if (progressTextEl) progressTextEl.textContent = "Unificando imágenes y congelando nueva versión en Roboflow...";
 
 			try {
 				const response = await fetch(`${API_URL}/export-roboflow-dataset`, {
@@ -1774,16 +2440,16 @@
 				}
 
 				const result = await response.json();
-				progressFill.style.width = "100%";
-				progressTextEl.textContent = `✓ Versión unificada v${result.version} creada con éxito`;
+				if (progressFill) progressFill.style.width = "100%";
+				if (progressTextEl) progressTextEl.textContent = `✓ Versión unificada v${result.version} creada con éxito`;
 
 				showSnippetModal(result);
-				setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+				setTimeout(() => { if (progressArea) progressArea.style.display = "none"; }, 5000);
 				checkRoboflow();
 
 			} catch (e) {
 				alert(`Error: ${e.message}`);
-				progressTextEl.textContent = `Error: ${e.message}`;
+				if (progressTextEl) progressTextEl.textContent = `Error: ${e.message}`;
 			} finally {
 				unifyVersionsBtn.disabled = false;
 			}
@@ -1791,16 +2457,16 @@
 	}
 
 	// Export dataset for local GPU training
-	trainRoboflowBtn.addEventListener("click", async () => {
+	trainRoboflowBtn?.addEventListener("click", async () => {
 		const selectedModel = document.getElementById("roboflow-model-select")?.value || "yolov8";
 		const selectedVersion = document.getElementById("roboflow-version-select")?.value || "new";
 
 		if (!confirm(`¿Generar versión y descargar dataset (${selectedModel}) para entrenar en tu PC?`)) return;
 
-		trainRoboflowBtn.disabled = true;
-		progressArea.style.display = "block";
-		progressFill.style.width = "40%";
-		progressTextEl.textContent = "Generando versión y descargando dataset en tu PC...";
+		if (trainRoboflowBtn) trainRoboflowBtn.disabled = true;
+		if (progressArea) progressArea.style.display = "block";
+		if (progressFill) progressFill.style.width = "40%";
+		if (progressTextEl) progressTextEl.textContent = "Generando versión y descargando dataset en tu PC...";
 
 		try {
 			const response = await fetch(`${API_URL}/export-roboflow-dataset`, {
@@ -1815,17 +2481,17 @@
 			}
 
 			const result = await response.json();
-			progressFill.style.width = "100%";
-			progressTextEl.textContent = `✓ Dataset v${result.version} listo en ${result.export_dir}`;
+			if (progressFill) progressFill.style.width = "100%";
+			if (progressTextEl) progressTextEl.textContent = `✓ Dataset v${result.version} listo en ${result.export_dir}`;
 
 			showSnippetModal(result);
-			setTimeout(() => { progressArea.style.display = "none"; }, 5000);
+			setTimeout(() => { if (progressArea) progressArea.style.display = "none"; }, 5000);
 
 		} catch (e) {
 			alert(`Error: ${e.message}`);
-			progressTextEl.textContent = `Error: ${e.message}`;
+			if (progressTextEl) progressTextEl.textContent = `Error: ${e.message}`;
 		} finally {
-			trainRoboflowBtn.disabled = false;
+			if (trainRoboflowBtn) trainRoboflowBtn.disabled = false;
 		}
 	});
 
@@ -1841,12 +2507,12 @@
 			if (!confirm(`¿Subir ${payload.length} imágenes a Roboflow, unificar versión y generar código de descarga (${selectedModel})?`)) return;
 
 			fullPipelineBtn.disabled = true;
-			uploadRoboflowBtn.disabled = true;
-			trainRoboflowBtn.disabled = true;
+			if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = true;
+			if (trainRoboflowBtn) trainRoboflowBtn.disabled = true;
 
-			progressArea.style.display = "block";
-			progressFill.style.width = "15%";
-			progressTextEl.textContent = `[1/3] Empaquetando dataset de ${payload.length} imágenes...`;
+			if (progressArea) progressArea.style.display = "block";
+			if (progressFill) progressFill.style.width = "15%";
+			if (progressTextEl) progressTextEl.textContent = `[1/3] Empaquetando dataset de ${payload.length} imágenes...`;
 
 			try {
 				// Step 1: Upload dataset
@@ -1955,55 +2621,35 @@
 			const response = await fetch(`${API_URL}/roboflow-status`);
 			const data = await response.json();
 
+			const rfStatusTextEl = document.getElementById("rf-status-text");
+			const rfDotEl = document.getElementById("rf-dot");
+			const rfProjectInput = document.getElementById("rf-project-name");
+
 			if (data.connected) {
 				roboflowConnected = true;
-				roboflowStatus.innerHTML = `
-					<span class="status-dot connected"></span>
-					<span>Conectado: <strong>${data.workspace}</strong> / ${data.project?.name || data.project?.id || ""}</span>
-				`;
-				uploadRoboflowBtn.disabled = false;
-				if (unifyVersionsBtn) unifyVersionsBtn.disabled = false;
-				trainRoboflowBtn.disabled = false;
-
-				// Fetch versions and supported model architectures
-				try {
-					const modelsResp = await fetch(`${API_URL}/roboflow-models`);
-					if (modelsResp.ok) {
-						const modelsData = await modelsResp.json();
-						const versionSelect = document.getElementById("roboflow-version-select");
-						const modelSelect = document.getElementById("roboflow-model-select");
-
-						if (versionSelect && modelsData.versions && modelsData.versions.length > 0) {
-							const nextVer = modelsData.versions.length + 1;
-							let html = `<option value="new">⚡ UNIFICAR TODAS LAS IMÁGENES (Nueva Versión v${nextVer})</option>`;
-							modelsData.versions.forEach(v => {
-								html += `<option value="${v.version}">${v.name} (Existente)</option>`;
-							});
-							versionSelect.innerHTML = html;
-						}
-
-						if (modelSelect && modelsData.supported_models && modelsData.supported_models.length > 0) {
-							let mHtml = "";
-							modelsData.supported_models.forEach(m => {
-								mHtml += `<option value="${m.id}">${m.name}</option>`;
-							});
-							modelSelect.innerHTML = mHtml;
-						}
-					}
-				} catch (me) {
-					console.warn("No se pudieron consultar modelos/versiones de Roboflow:", me);
+				if (rfDotEl) rfDotEl.className = "status-dot green";
+				if (rfStatusTextEl) {
+					rfStatusTextEl.innerHTML = `Conectado: <strong>${data.workspace}</strong> / ${data.project?.name || data.project?.id || ""}`;
 				}
+				if (rfProjectInput && (data.project?.name || data.project?.id)) {
+					rfProjectInput.value = data.project.name || data.project.id;
+				}
+				if (uploadRoboflowBtn) uploadRoboflowBtn.disabled = false;
+				if (unifyVersionsBtn) unifyVersionsBtn.disabled = false;
+				if (trainRoboflowBtn) trainRoboflowBtn.disabled = false;
 			} else {
-				roboflowStatus.innerHTML = `
-					<span class="status-dot error"></span>
-					<span>Error: ${data.error || "No conectado"}</span>
-				`;
+				if (rfDotEl) rfDotEl.className = "status-dot red";
+				if (rfStatusTextEl) {
+					rfStatusTextEl.textContent = `Error: ${data.error || "No conectado"}`;
+				}
 			}
 		} catch (e) {
-			roboflowStatus.innerHTML = `
-				<span class="status-dot error"></span>
-				<span>Backend no disponible</span>
-			`;
+			const rfStatusTextEl = document.getElementById("rf-status-text");
+			const rfDotEl = document.getElementById("rf-dot");
+			if (rfDotEl) rfDotEl.className = "status-dot red";
+			if (rfStatusTextEl) {
+				rfStatusTextEl.textContent = "Backend no disponible";
+			}
 		}
 		updateExportStats();
 	}
@@ -2029,4 +2675,2174 @@
 		const b = parseInt(hex.substring(4, 6), 16);
 		return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 	}
+
+	// ======================= PATHOLOGY MODELS & PDF ONTOLOGY WORKBENCH =======================
+
+	window._activeOntologyName = null;
+	let _currentPdfData = null; // stores { pdf_id, filename, images, ... }
+	let _activeModalImg = null; // stores image currently shown in preview modal
+
+	const pdfDropZone = document.getElementById("pdf-drop-zone");
+	const pdfFileInput = document.getElementById("pdf-file-input");
+	const pdfResults = document.getElementById("pdf-results");
+	const generateOntologyBtn = document.getElementById("generate-ontology-btn");
+	const ontologyGenerating = document.getElementById("ontology-generating");
+	const ontologyEditor = document.getElementById("ontology-editor");
+	const ontologyWorkbench = document.getElementById("ontology-workbench");
+	const savedOntologiesList = document.getElementById("saved-ontologies-list");
+	const pdfImagesCrudGrid = document.getElementById("pdf-images-crud-grid");
+	const pdfAddImageBtn = document.getElementById("pdf-add-image-btn");
+	const pdfAddImageInput = document.getElementById("pdf-add-image-input");
+	const batchSegmentPdfBtn = document.getElementById("batch-segment-pdf-btn");
+	const importAllPdfToGalleryBtn = document.getElementById("import-all-pdf-to-gallery-btn");
+
+	// PDF Import bar in Images tab
+	const pdfSourceSelect = document.getElementById("pdf-source-select");
+	const importPdfImgsBtn = document.getElementById("import-pdf-imgs-btn");
+	const pdfImportCountBadge = document.getElementById("pdf-import-count-badge");
+
+	// Modals
+	const imagePreviewModal = document.getElementById("image-preview-modal");
+	const closeImgModalBtn = document.getElementById("close-img-modal-btn");
+	const modalImgPreview = document.getElementById("modal-img-preview");
+	const modalImgTitle = document.getElementById("modal-img-title");
+	const modalImgMeta = document.getElementById("modal-img-meta");
+	const modalImgCaptionInput = document.getElementById("modal-img-caption-input");
+	const modalSaveCaptionBtn = document.getElementById("modal-save-caption-btn");
+	const modalUseSingleImgBtn = document.getElementById("modal-use-single-img-btn");
+
+	const batchProgressModal = document.getElementById("batch-progress-modal");
+	const batchProgressFill = document.getElementById("batch-progress-fill");
+	const batchProgressText = document.getElementById("batch-progress-text");
+	const batchStepTitle = document.getElementById("batch-step-title");
+
+	// CONCH buttons
+	const classifyConchBtn = document.getElementById("classify-conch-btn");
+	const toggleConchClassifyBtn = document.getElementById("toggle-conch-classify-btn");
+	const langgraphClassifyBtn = document.getElementById("langgraph-classify-btn");
+	const toggleLanggraphBtn = document.getElementById("toggle-langgraph-btn");
+
+	// --- 1. Pathology Foundation Models Status ---
+	async function initPathologyModelsStatus() {
+		try {
+			const res = await fetch(`${API_URL}/pathology-models-status`);
+			if (!res.ok) return;
+			const data = await res.json();
+
+			const conchPill = document.getElementById("conch-pill");
+			const conchDot = document.getElementById("conch-dot");
+			const uniPill = document.getElementById("uni-pill");
+			const uniDot = document.getElementById("uni-dot");
+			const virchowPill = document.getElementById("virchow-pill");
+			const virchowDot = document.getElementById("virchow-dot");
+
+			if (data.conch) {
+				conchPill.classList.add("active");
+				conchDot.className = "dot " + (data.conch.is_loaded ? "purple" : "blue");
+				conchPill.title = `CONCH: ${data.conch.architecture} (${data.conch.embedding_dim}d) - ${data.conch.is_loaded ? "🟢 Cargado en VRAM" : "⚪ En reposo (Click para precargar)"}`;
+			}
+			if (data.uni) {
+				uniPill.classList.add("active");
+				uniDot.className = "dot " + (data.uni.is_loaded ? "green" : "blue");
+				uniPill.title = `UNI: ${data.uni.architecture} (${data.uni.embedding_dim}d) - ${data.uni.is_loaded ? "🟢 Cargado en VRAM" : "⚪ En reposo (Click para precargar)"}`;
+			}
+			if (data.virchow) {
+				virchowPill.classList.add("active");
+				virchowDot.className = "dot " + (data.virchow.is_loaded ? "green" : "blue");
+				virchowPill.title = `Virchow: ${data.virchow.architecture} (${data.virchow.embedding_dim}d) - ${data.virchow.is_loaded ? "🟢 Cargado en VRAM" : "⚪ En reposo (Click para precargar)"}`;
+			}
+		} catch (e) {
+			console.warn("Pathology models status check skipped:", e);
+		}
+	}
+	setTimeout(initPathologyModelsStatus, 1500);
+
+	// Preload foundation models on click
+	[document.getElementById("conch-pill"), document.getElementById("uni-pill"), document.getElementById("virchow-pill")].forEach(p => {
+		p?.addEventListener("click", async () => {
+			try {
+				p.style.opacity = "0.6";
+				const res = await fetch(`${API_URL}/pathology-models-preload`, { method: "POST" });
+				if (res.ok) {
+					await initPathologyModelsStatus();
+				}
+			} catch (_) {} finally {
+				p.style.opacity = "1.0";
+			}
+		});
+	});
+
+	// --- 2. Zero-Shot Classification with CONCH (Batch-Aware) ---
+	async function runConchClassification(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("No hay imágenes cargadas para clasificar.");
+			return;
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		let totalProcessed = 0;
+		let totalClassifiedDets = 0;
+
+		for (let idx = 0; idx < keysToProcess.length; idx++) {
+			const key = keysToProcess[idx];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			// Auto-segment if this image doesn't have detections yet
+			if (!data.groups || data.groups.length === 0) {
+				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] Auto-segmentando ${data.filename}...`;
+				await runAutoSegmentation(key);
+			}
+
+			let allDets = [];
+			(data.groups || []).forEach((g) => {
+				if (g.detections) {
+					g.detections.forEach((d) => {
+						allDets.push({
+							...d,
+							id: d.id,
+							bbox: d.bbox,
+							box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+							segmentation: d.segmentation || [],
+							score: d.score !== undefined ? d.score : 0.95,
+							class_key: g.key,
+							label: g.label,
+							color: g.color,
+						});
+					});
+				}
+			});
+
+			if (allDets.length === 0) continue;
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			if (candidateClasses.length === 0) {
+				candidateClasses = data.groups.map(g => ({
+					key: g.key,
+					name: g.label,
+					label: g.label,
+					prompt: g.label,
+					color: g.color,
+				}));
+			}
+
+			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🔬 CONCH: Clasificando ${allDets.length} instancias en ${data.filename}...`;
+
+			try {
+				let imageFile = data.file;
+				if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+					const arr = data.dataUrl.split(",");
+					const mime = arr[0].match(/:(.*?);/)[1];
+					const bstr = atob(arr[1]);
+					let n = bstr.length;
+					const u8arr = new Uint8Array(n);
+					while (n--) u8arr[n] = bstr.charCodeAt(n);
+					imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+				}
+
+				const formData = new FormData();
+				formData.append("image", imageFile);
+				formData.append("detections", JSON.stringify(allDets));
+				formData.append("classes", JSON.stringify(candidateClasses));
+				formData.append("temperature", "0.05");
+				if (window._activeOntologyName) {
+					formData.append("ontology_name", window._activeOntologyName);
+				}
+
+				const res = await fetch(`${API_URL}/classify-detections-conch`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (!res.ok) {
+					console.warn(`Error CONCH en ${data.filename}: ${res.status}`);
+					continue;
+				}
+
+				const result = await res.json();
+				const classified = result.detections || [];
+				if (classified.length > 0) {
+					const groupsMap = new Map();
+					for (let i = 0; i < classified.length; i++) {
+						const det = classified[i];
+						const origDet = allDets[i] || {};
+
+						det.segmentation = det.segmentation || origDet.segmentation || [];
+						det.box = det.box || origDet.box;
+						det.bbox = det.bbox || origDet.bbox;
+						det.score = det.conch_confidence !== undefined ? det.conch_confidence : (origDet.score || 0.95);
+
+						const groupKey = det.class_key || det.category_id || "clase_1";
+						if (!groupsMap.has(groupKey)) {
+							groupsMap.set(groupKey, {
+								key: groupKey,
+								label: det.class_label || groupKey,
+								color: det.color || getClassColor(groupKey),
+								detections: [],
+							});
+						}
+						groupsMap.get(groupKey).detections.push(det);
+
+						if (!classRegistry.find(c => c.key === groupKey)) {
+							classRegistry.push({
+								id: classIdCounter++,
+								name: det.class_label || groupKey,
+								color: det.color || "#8b5cf6",
+								key: groupKey,
+								prompt: det.class_label || groupKey,
+							});
+						}
+					}
+					data.groups = Array.from(groupsMap.values());
+					totalClassifiedDets += classified.length;
+					totalProcessed++;
+					renderGallery();
+					updateExportStats();
+				}
+			} catch (err) {
+				console.error(`Error en CONCH ${data.filename}:`, err);
+			}
+		}
+
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
+
+		statusText.textContent = `✅ CONCH Lote: ${totalProcessed} imágenes clasificadas (${totalClassifiedDets} instancias).`;
+		setTimeout(() => {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}, 3500);
+	}
+
+	classifyConchBtn?.addEventListener("click", () => runConchClassification());
+	toggleConchClassifyBtn?.addEventListener("click", () => runConchClassification());
+
+	// --- 2b. Dedicated Lunit DINO (ViT-Small/8) Feature Classifier (Batch-Aware) ---
+	const classifyDinoBtn = document.getElementById("classify-dino-btn");
+
+	async function runDinoClassification(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("No hay imágenes cargadas para clasificar con DINO.");
+			return;
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		let totalProcessed = 0;
+		let totalClassifiedDets = 0;
+
+		for (let idx = 0; idx < keysToProcess.length; idx++) {
+			const key = keysToProcess[idx];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			if (!data.groups || data.groups.length === 0) {
+				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] Auto-segmentando ${data.filename}...`;
+				await runAutoSegmentation(key);
+			}
+
+			let allDets = [];
+			(data.groups || []).forEach((g) => {
+				if (g.detections) {
+					g.detections.forEach((d) => {
+						allDets.push({
+							...d,
+							id: d.id,
+							class_key: d.class_key || g.key,
+							class_label: d.class_label || g.label,
+							category_id: d.category_id || g.key,
+							color: d.color || g.color,
+							bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+							box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+							score: d.score !== undefined ? d.score : 0.95,
+						});
+					});
+				}
+			});
+
+			if (allDets.length === 0) continue;
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			if (candidateClasses.length === 0) {
+				candidateClasses = data.groups.map(g => ({
+					key: g.key,
+					name: g.label,
+					label: g.label,
+					prompt: g.label,
+					color: g.color,
+				}));
+			}
+
+			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🦕 DINO (Lunit ViT-S/8): Clasificando ${allDets.length} células en ${data.filename}...`;
+
+			try {
+				let imageFile = data.file;
+				if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+					const arr = data.dataUrl.split(",");
+					const mime = arr[0].match(/:(.*?);/)[1];
+					const bstr = atob(arr[1]);
+					let n = bstr.length;
+					const u8arr = new Uint8Array(n);
+					while (n--) u8arr[n] = bstr.charCodeAt(n);
+					imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+				}
+
+				const formData = new FormData();
+				formData.append("image", imageFile);
+				formData.append("detections", JSON.stringify(allDets));
+				formData.append("classes", JSON.stringify(candidateClasses));
+				formData.append("temperature", "0.08");
+				if (window._activeOntologyName) {
+					formData.append("ontology_name", window._activeOntologyName);
+				}
+
+				let res = await fetch(`${API_URL}/classify-dino`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (!res.ok) {
+					console.warn(`Error en DINO ${data.filename}: ${res.status}`);
+					continue;
+				}
+
+				const result = await res.json();
+				const classified = result.detections || [];
+
+				if (classified.length > 0) {
+					const groupsMap = new Map();
+					for (let i = 0; i < classified.length; i++) {
+						const det = classified[i];
+						const origDet = allDets[i] || {};
+
+						det.segmentation = det.segmentation || origDet.segmentation || [];
+						det.box = det.box || origDet.box;
+						det.bbox = det.bbox || origDet.bbox;
+						det.score = det.confidence !== undefined ? det.confidence : (origDet.score || 0.95);
+
+						const groupKey = det.class_key || det.category_id || "clase_1";
+						if (!groupsMap.has(groupKey)) {
+							groupsMap.set(groupKey, {
+								key: groupKey,
+								label: det.class_label || groupKey,
+								color: det.color || getClassColor(groupKey),
+								detections: [],
+							});
+						}
+						groupsMap.get(groupKey).detections.push(det);
+
+						if (!classRegistry.find(c => c.key === groupKey)) {
+							classRegistry.push({
+								id: classIdCounter++,
+								name: det.class_label || groupKey,
+								color: det.color || "#8b5cf6",
+								key: groupKey,
+								prompt: det.class_label || groupKey,
+							});
+						}
+					}
+					data.groups = Array.from(groupsMap.values());
+					totalClassifiedDets += classified.length;
+					totalProcessed++;
+					renderGallery();
+					updateExportStats();
+				}
+			} catch (err) {
+				console.error(`Error en DINO ${data.filename}:`, err);
+			}
+		}
+
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
+
+		statusText.textContent = `✅ DINO Lunit Lote: ${totalProcessed} imágenes clasificadas (${totalClassifiedDets} células).`;
+		setTimeout(() => {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}, 3500);
+	}
+
+	classifyDinoBtn?.addEventListener("click", () => runDinoClassification());
+
+	// --- 3. Virchow 2 + UNI + CONCH + DINO Quad-Ensemble (Batch-Aware) ---
+	const extractVirchowBtn = document.getElementById("extract-virchow-btn");
+
+	async function runVirchowExtraction(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("No hay imágenes cargadas para clasificar con el ensamble.");
+			return;
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		let totalProcessed = 0;
+		let totalClassifiedDets = 0;
+
+		for (let idx = 0; idx < keysToProcess.length; idx++) {
+			const key = keysToProcess[idx];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			// Auto-segment if this image doesn't have detections yet
+			if (!data.groups || data.groups.length === 0) {
+				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] Auto-segmentando ${data.filename}...`;
+				await runAutoSegmentation(key);
+			}
+
+			let allDets = [];
+			(data.groups || []).forEach((g) => {
+				if (g.detections) {
+					g.detections.forEach((d) => {
+						allDets.push({
+							...d,
+							id: d.id,
+							class_key: d.class_key || g.key,
+							class_label: d.class_label || g.label,
+							category_id: d.category_id || g.key,
+							color: d.color || g.color,
+							bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+							box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+							score: d.score !== undefined ? d.score : 0.95,
+						});
+					});
+				}
+			});
+
+			if (allDets.length === 0) continue;
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			if (candidateClasses.length === 0) {
+				candidateClasses = data.groups.map(g => ({
+					key: g.key,
+					name: g.label,
+					label: g.label,
+					prompt: g.label,
+					color: g.color,
+				}));
+			}
+
+			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🧬 Ensamble (Virchow+UNI+CONCH+DINO): Clasificando ${allDets.length} células en ${data.filename}...`;
+
+			try {
+				let imageFile = data.file;
+				if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+					const arr = data.dataUrl.split(",");
+					const mime = arr[0].match(/:(.*?);/)[1];
+					const bstr = atob(arr[1]);
+					let n = bstr.length;
+					const u8arr = new Uint8Array(n);
+					while (n--) u8arr[n] = bstr.charCodeAt(n);
+					imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+				}
+
+				const formData = new FormData();
+				formData.append("image", imageFile);
+				formData.append("detections", JSON.stringify(allDets));
+				formData.append("classes", JSON.stringify(candidateClasses));
+				formData.append("temperature", "0.05");
+				if (window._activeOntologyName) {
+					formData.append("ontology_name", window._activeOntologyName);
+				}
+
+				let res = await fetch(`${API_URL}/classify-virchow-prototypes`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (!res.ok && res.status === 404) {
+					res = await fetch(`${API_URL}/classify-detections-conch`, {
+						method: "POST",
+						body: formData,
+					});
+				}
+
+				if (!res.ok) {
+					console.warn(`Error en ensamble ${data.filename}: ${res.status}`);
+					continue;
+				}
+
+				const result = await res.json();
+				const classified = result.detections || [];
+
+				if (classified.length > 0) {
+					const groupsMap = new Map();
+					for (let i = 0; i < classified.length; i++) {
+						const det = classified[i];
+						const origDet = allDets[i] || {};
+
+						det.segmentation = det.segmentation || origDet.segmentation || [];
+						det.box = det.box || origDet.box;
+						det.bbox = det.bbox || origDet.bbox;
+						det.score = det.virchow_confidence !== undefined ? det.virchow_confidence : (det.conch_confidence || origDet.score || 0.95);
+
+						const groupKey = det.class_key || det.category_id || "clase_1";
+						if (!groupsMap.has(groupKey)) {
+							groupsMap.set(groupKey, {
+								key: groupKey,
+								label: det.class_label || groupKey,
+								color: det.color || getClassColor(groupKey),
+								detections: [],
+							});
+						}
+						groupsMap.get(groupKey).detections.push(det);
+
+						if (!classRegistry.find(c => c.key === groupKey)) {
+							classRegistry.push({
+								id: classIdCounter++,
+								name: det.class_label || groupKey,
+								color: det.color || "#8b5cf6",
+								key: groupKey,
+								prompt: det.class_label || groupKey,
+							});
+						}
+					}
+					data.groups = Array.from(groupsMap.values());
+					totalClassifiedDets += classified.length;
+					totalProcessed++;
+					renderGallery();
+					updateExportStats();
+				}
+			} catch (err) {
+				console.error(`Error en ensamble ${data.filename}:`, err);
+			}
+		}
+
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
+
+		statusText.textContent = `✅ Ensamble de Patología Lote: ${totalProcessed} imágenes clasificadas (${totalClassifiedDets} células).`;
+		setTimeout(() => {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}, 3500);
+	}
+
+	extractVirchowBtn?.addEventListener("click", () => runVirchowExtraction());
+
+	// --- 4. Gemini Multimodal Vision + Virchow 2 + CONCH Fusion (Batch-Aware) ---
+	const geminiMultimodalBtn = document.getElementById("gemini-multimodal-btn");
+
+	async function runGeminiMultimodalFusion(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("No hay imágenes cargadas para analizar con Gemini.");
+			return;
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		let totalProcessed = 0;
+		let totalClassifiedDets = 0;
+
+		for (let idx = 0; idx < keysToProcess.length; idx++) {
+			const key = keysToProcess[idx];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			if (!data.groups || data.groups.length === 0) {
+				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] Auto-segmentando ${data.filename}...`;
+				await runAutoSegmentation(key);
+			}
+
+			let allDets = [];
+			(data.groups || []).forEach((g) => {
+				if (g.detections) {
+					g.detections.forEach((d) => {
+						allDets.push({
+							...d,
+							id: d.id,
+							class_key: d.class_key || g.key,
+							class_label: d.class_label || g.label,
+							category_id: d.category_id || g.key,
+							color: d.color || g.color,
+							bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+							box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+							score: d.score !== undefined ? d.score : 0.95,
+						});
+					});
+				}
+			});
+
+			if (allDets.length === 0) continue;
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			if (candidateClasses.length === 0) {
+				candidateClasses = data.groups.map(g => ({
+					key: g.key,
+					name: g.label,
+					label: g.label,
+					prompt: g.label,
+					color: g.color,
+				}));
+			}
+
+			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] ✨ Gemini + Ensamble: Analizando ${allDets.length} células en ${data.filename}...`;
+
+			try {
+				let imageFile = data.file;
+				if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+					const arr = data.dataUrl.split(",");
+					const mime = arr[0].match(/:(.*?);/)[1];
+					const bstr = atob(arr[1]);
+					let n = bstr.length;
+					const u8arr = new Uint8Array(n);
+					while (n--) u8arr[n] = bstr.charCodeAt(n);
+					imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+				}
+
+				const formData = new FormData();
+				formData.append("image", imageFile);
+				formData.append("detections", JSON.stringify(allDets));
+				formData.append("classes", JSON.stringify(candidateClasses));
+				if (window._activeOntologyName) {
+					formData.append("ontology_name", window._activeOntologyName);
+				}
+
+				const res = await fetch(`${API_URL}/classify-multimodal-gemini`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (!res.ok) {
+					console.warn(`Error en Gemini Multimodal ${data.filename}: ${res.status}`);
+					continue;
+				}
+
+				const result = await res.json();
+				const classified = result.detections || [];
+
+				if (classified.length > 0) {
+					const groupsMap = new Map();
+					for (let i = 0; i < classified.length; i++) {
+						const det = classified[i];
+						const origDet = allDets[i] || {};
+
+						det.segmentation = det.segmentation || origDet.segmentation || [];
+						det.box = det.box || origDet.box;
+						det.bbox = det.bbox || origDet.bbox;
+						det.score = det.score !== undefined ? det.score : (det.gemini_confidence !== undefined ? det.gemini_confidence : (origDet.score || 0.95));
+
+						const groupKey = det.class_key || det.category_id || "clase_1";
+						if (!groupsMap.has(groupKey)) {
+							groupsMap.set(groupKey, {
+								key: groupKey,
+								label: det.class_label || groupKey,
+								color: det.color || getClassColor(groupKey),
+								detections: [],
+							});
+						}
+						groupsMap.get(groupKey).detections.push(det);
+
+						if (!classRegistry.find(c => c.key === groupKey)) {
+							classRegistry.push({
+								id: classIdCounter++,
+								name: det.class_label || groupKey,
+								color: det.color || "#8b5cf6",
+								key: groupKey,
+								prompt: det.class_label || groupKey,
+							});
+						}
+					}
+					data.groups = Array.from(groupsMap.values());
+					totalClassifiedDets += classified.length;
+					totalProcessed++;
+					renderGallery();
+					updateExportStats();
+				}
+			} catch (err) {
+				console.error(`Error en Gemini Multimodal ${data.filename}:`, err);
+			}
+		}
+
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
+
+		statusText.textContent = `✨ Gemini Multimodal Lote: ${totalProcessed} imágenes analizadas (${totalClassifiedDets} células).`;
+		setTimeout(() => {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}, 3500);
+	}
+
+	geminiMultimodalBtn?.addEventListener("click", () => runGeminiMultimodalFusion());
+
+	// --- 5. LangGraph Multi-Agent Workflow Runner (Batch-Aware) ---
+	async function runLangGraphClassification(targetKey = null) {
+		const keysToProcess = (typeof targetKey === "string" && targetKey)
+			? [targetKey]
+			: Array.from(imageStore.keys());
+
+		if (keysToProcess.length === 0) {
+			alert("Carga o selecciona imágenes primero.");
+			return;
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		let totalProcessed = 0;
+		let totalClassifiedDets = 0;
+
+		for (let idx = 0; idx < keysToProcess.length; idx++) {
+			const key = keysToProcess[idx];
+			const data = imageStore.get(key);
+			if (!data) continue;
+
+			let imageFile = data.file;
+			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+				const arr = data.dataUrl.split(",");
+				const mime = (arr[0].match(/:(.*?);/) || [])[1] || "image/png";
+				const bstr = atob(arr[1]);
+				let n = bstr.length;
+				const u8arr = new Uint8Array(n);
+				while (n--) u8arr[n] = bstr.charCodeAt(n);
+				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+			} else if (!(imageFile instanceof File || imageFile instanceof Blob) && data.url) {
+				const blob = await fetch(data.url).then(r => r.blob());
+				imageFile = new File([blob], data.filename || "image.jpg", { type: blob.type || "image/jpeg" });
+			}
+
+			if (!imageFile) continue;
+
+			// Auto-segment if needed
+			if (!data.groups || data.groups.length === 0) {
+				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🤖 LangGraph: Auto-segmentando ${data.filename}...`;
+				await runAutoSegmentation(key);
+			}
+
+			let allDets = [];
+			(data.groups || []).forEach(g => {
+				(g.detections || []).forEach(d => {
+					allDets.push({
+						...d,
+						id: d.id,
+						class_key: d.class_key || g.key,
+						class_label: d.class_label || g.label,
+						category_id: d.category_id || g.key,
+						color: d.color || g.color,
+						bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+						segmentation: d.segmentation || [],
+						score: d.score !== undefined ? d.score : 0.95,
+					});
+				});
+			});
+
+			if (allDets.length === 0) continue;
+
+			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🤖 LangGraph: Analizando figuras y leyendas en ${data.filename}...`;
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			if (candidateClasses.length === 0 && data.groups && data.groups.length > 0) {
+				candidateClasses = data.groups.map(g => ({
+					key: g.key,
+					name: g.label || g.key,
+					label: g.label || g.key,
+					prompt: g.label || g.key,
+					color: g.color,
+				}));
+			}
+
+			const formData = new FormData();
+			formData.append("image", imageFile);
+			formData.append("detections", JSON.stringify(allDets));
+			if (candidateClasses && candidateClasses.length > 0) {
+				formData.append("classes", JSON.stringify(candidateClasses));
+			}
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			try {
+				const res = await fetch(`${API_URL}/pipeline/agentic-classify`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (!res.ok) {
+					console.warn(`Error LangGraph en ${data.filename}: ${res.status}`);
+					continue;
+				}
+
+				const result = await res.json();
+				const classified = result.detections || [];
+
+				if (classified.length > 0) {
+					const groupsMap = new Map();
+					for (let i = 0; i < classified.length; i++) {
+						const det = classified[i];
+						const origDet = allDets[i] || {};
+
+						det.segmentation = det.segmentation || origDet.segmentation || [];
+						det.box = det.box || origDet.box;
+						det.bbox = det.bbox || origDet.bbox;
+						det.score = det.confidence !== undefined ? det.confidence : (origDet.score || 0.95);
+
+						const groupKey = det.class_key || det.category_id || "clase_1";
+						if (!groupsMap.has(groupKey)) {
+							groupsMap.set(groupKey, {
+								key: groupKey,
+								label: det.class_label || groupKey,
+								color: det.color || getClassColor(groupKey),
+								detections: [],
+							});
+						}
+						groupsMap.get(groupKey).detections.push(det);
+
+						if (!classRegistry.find(c => c.key === groupKey)) {
+							classRegistry.push({
+								id: classIdCounter++,
+								name: det.class_label || groupKey,
+								color: det.color || "#8b5cf6",
+								key: groupKey,
+								prompt: det.class_label || groupKey,
+							});
+						}
+					}
+					data.groups = Array.from(groupsMap.values());
+					totalClassifiedDets += classified.length;
+					totalProcessed++;
+					renderGallery();
+					updateExportStats();
+				}
+			} catch (err) {
+				console.error(`Error LangGraph ${data.filename}:`, err);
+			}
+		}
+
+		if (activeImageKey) {
+			viewerControls.style.display = "flex";
+			renderOverlay();
+			updateClassesList();
+		}
+		renderGallery();
+		updateExportStats();
+
+		statusText.textContent = `🤖 LangGraph Lote: ${totalProcessed} imágenes procesadas (${totalClassifiedDets} células).`;
+		setTimeout(() => {
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}, 3500);
+	}
+
+	langgraphClassifyBtn?.addEventListener("click", () => runLangGraphClassification());
+	toggleLanggraphBtn?.addEventListener("click", () => runLangGraphClassification());
+
+	document.querySelectorAll(".load-ontology-cells-btn").forEach(btn => {
+		btn.addEventListener("click", async () => {
+			const ontName = window._activeOntologyName || "arch4";
+			statusIdle.style.display = "none";
+			statusRunning.style.display = "flex";
+			statusText.textContent = `🧬 Cargando células de la ontología '${ontName}'...`;
+
+			try {
+				const res = await fetch(`${API_URL}/ontology/${ontName}`);
+				if (!res.ok) throw new Error("No se pudo cargar la ontología.");
+				const ontData = await res.json();
+				if (!ontData.structures || ontData.structures.length === 0) {
+					alert("La ontología no contiene estructuras.");
+					statusRunning.style.display = "none";
+					statusIdle.style.display = "flex";
+					return;
+				}
+				// Filter out top-level macro-containers to focus on fine-grained cellular subtypes
+				const cellStructs = ontData.structures.filter(s => !["testis", "testicular_lobule", "seminiferous_tubule", "tubular_wall"].includes(s.key));
+				classRegistry = cellStructs.map((s, idx) => ({
+					id: idx + 1,
+					key: s.key,
+					name: s.label || s.name || s.key,
+					prompt: s.prompt || s.name_en || s.name,
+					color: s.color || getClassColor(s.key)
+				}));
+				classIdCounter = classRegistry.length + 1;
+				updateClassesList();
+
+				// Automatically suggest the key concepts in prompt inputs
+				const suggestedPrompt = "large primary spermatocyte with voluminous nucleus, mature spermatozoon with elongated head in lumen, dome-shaped basal spermatogonia, round spermatid";
+				if (customPromptInput) customPromptInput.value = suggestedPrompt;
+				if (viewerPromptInput) viewerPromptInput.value = suggestedPrompt;
+
+				statusText.textContent = `✓ Se cargaron ${classRegistry.length} poblaciones celulares del PDF ('${ontName}').`;
+				setTimeout(() => {
+					statusRunning.style.display = "none";
+					statusIdle.style.display = "flex";
+				}, 3500);
+			} catch (err) {
+				console.error(err);
+				alert("Error al cargar células de la ontología: " + err.message);
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}
+		});
+	});
+
+
+	// --- 3. PDF Upload & Content Extraction ---
+	["dragenter", "dragover"].forEach(ev => {
+		pdfDropZone?.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); pdfDropZone.classList.add("dragover"); }, false);
+	});
+	["dragleave"].forEach(ev => {
+		pdfDropZone?.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); pdfDropZone.classList.remove("dragover"); }, false);
+	});
+	pdfDropZone?.addEventListener("drop", (e) => {
+		e.preventDefault();
+		e.stopPropagation();
+		pdfDropZone?.classList.remove("dragover");
+		const files = e.dataTransfer ? e.dataTransfer.files : [];
+		if (files.length > 0) {
+			handlePdfUpload(files[0]);
+		}
+	});
+
+	// Global window drag-and-drop handler to prevent browser navigating away when dropping a PDF
+	window.addEventListener("dragover", (e) => e.preventDefault(), false);
+	window.addEventListener("drop", (e) => {
+		const files = e.dataTransfer ? Array.from(e.dataTransfer.files) : [];
+		if (files.length > 0) {
+			const pdfs = files.filter(f => f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf");
+			if (pdfs.length > 0) {
+				e.preventDefault();
+				switchTab("pdf-tab");
+				handlePdfUpload(pdfs[0]);
+			}
+		}
+	}, false);
+
+	pdfDropZone?.addEventListener("click", () => {
+		console.log("[PDF] pdfDropZone clicked, opening file picker...");
+		if (pdfFileInput) {
+			pdfFileInput.value = "";
+			pdfFileInput.click();
+		}
+	});
+
+	pdfFileInput?.addEventListener("change", (e) => {
+		const target = e.target;
+		console.log("[PDF] pdfFileInput change event, files:", target ? target.files : null);
+		if (target && target.files && target.files.length > 0) {
+			handlePdfUpload(target.files[0]);
+		}
+	});
+
+	async function handlePdfUpload(file) {
+		console.log("[PDF] handlePdfUpload starting for:", file.name, file.size);
+		const uploadContent = document.getElementById("pdf-upload-content");
+		if (uploadContent) {
+			uploadContent.innerHTML = `
+				<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+					<span class="spinner-small"></span>
+					<span style="font-size: 0.78rem; color: var(--accent-cyan);">[1/3] Extrayendo texto e imágenes de ${file.name}...</span>
+				</div>
+			`;
+		}
+
+		const formData = new FormData();
+		formData.append("file", file);
+
+		try {
+			console.log("[PDF] Uploading to backend...");
+			const res = await fetch(`${API_URL}/upload-pdf`, { method: "POST", body: formData });
+			console.log("[PDF] Upload response status:", res.status);
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({ detail: "Error al procesar PDF" }));
+				throw new Error(err.detail || "Error al procesar PDF");
+			}
+
+			const data = await res.json();
+			console.log("[PDF] Extraction result:", {
+				pdf_id: data.pdf_id,
+				pages: data.total_pages,
+				images: data.total_images,
+				text_len: data.text_length,
+			});
+			_currentPdfData = {
+				...data,
+				_file: file,
+			};
+
+			// Show results safely
+			const fnEl = document.getElementById("pdf-filename");
+			const pagesEl = document.getElementById("pdf-pages-badge");
+			const textLenEl = document.getElementById("pdf-text-len");
+			const imgCountEl = document.getElementById("pdf-img-count");
+			const previewEl = document.getElementById("pdf-text-preview");
+
+			if (fnEl) fnEl.textContent = data.filename;
+			if (pagesEl) pagesEl.textContent = `${data.total_pages} págs`;
+			if (textLenEl) textLenEl.textContent = (data.text_length || 0).toLocaleString();
+			if (imgCountEl) imgCountEl.textContent = data.total_images || 0;
+			if (previewEl) previewEl.textContent = data.text_preview || "";
+
+			if (pdfResults) pdfResults.style.display = "block";
+
+			// Render extracted images in the CRUD gallery
+			renderPdfImagesCrud(data.images || [], data.pdf_id);
+
+			// Show workbench
+			if (ontologyWorkbench) ontologyWorkbench.style.display = "block";
+
+			// Step-by-step real-time progress
+			const explicitDomain = document.getElementById("domain-name-input")?.value?.trim() || null;
+			const mergeLabel = explicitDomain
+				? `[2/3] Generando ontología "${explicitDomain}" con Gemini IA...`
+				: `[2/3] Generando ontología temática con Gemini IA...`;
+			if (uploadContent) {
+				uploadContent.innerHTML = `
+					<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+						<span class="spinner-small"></span>
+						<span style="font-size: 0.78rem; color: var(--accent-cyan);">${mergeLabel}</span>
+					</div>
+				`;
+			}
+
+			// Automatically trigger Gemini ontology extraction with timeout
+			try {
+				const ontologyPayload = {
+					pdf_id: data.pdf_id,
+					filename: data.filename,
+					text: data.text_preview,
+					images: data.images || [],
+					domain_name: explicitDomain || null,
+				};
+
+				console.log("[PDF] Generating ontology, payload:", {
+					pdf_id: ontologyPayload.pdf_id,
+					domain_name: ontologyPayload.domain_name || "(auto)",
+					text_len: ontologyPayload.text?.length || 0,
+					images_count: ontologyPayload.images?.length || 0,
+				});
+
+				// Use AbortController with 120s timeout to prevent silent hangs
+				const controller = new AbortController();
+				const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+				const ontRes = await fetch(`${API_URL}/generate-ontology`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(ontologyPayload),
+					signal: controller.signal,
+				});
+				clearTimeout(timeoutId);
+
+				console.log("[PDF] Ontology generation response status:", ontRes.status);
+
+				if (ontRes.ok) {
+					const ontResult = await ontRes.json();
+					const updatedOntology = ontResult.ontology;
+					console.log("[PDF] Ontology generated successfully:", {
+						domain: updatedOntology?.domain,
+						structures: updatedOntology?.structures?.length,
+						images: updatedOntology?.extracted_images?.length,
+						merge_stats: ontResult.merge_stats || null,
+					});
+					displayOntologyEditor(updatedOntology);
+					window._activeOntologyName = updatedOntology?.domain || mergeTarget;
+					loadSavedOntologies();
+
+					// CRITICAL: Update _currentPdfData with the full merged ontology data so the UI and batch operations have ALL accumulated images
+					if (updatedOntology && updatedOntology.extracted_images) {
+						_currentPdfData = {
+							pdf_id: updatedOntology.pdf_id,
+							filename: updatedOntology.source_pdf,
+							total_images: updatedOntology.extracted_images.length,
+							images: updatedOntology.extracted_images,
+							structures: updatedOntology.structures,
+							domain: updatedOntology.domain,
+							_file: file,
+						};
+						// Update the PDF gallery to render ALL accumulated images
+						renderPdfImagesCrud(updatedOntology.extracted_images, updatedOntology.pdf_id);
+					}
+
+					// Show merge stats if applicable
+					if (ontResult.merge_stats) {
+						const ms = ontResult.merge_stats;
+						const statsMsg = `✅ Ontología "${ms.merged_into}" actualizada: +${ms.added} nuevas estructuras (${ms.total_after_merge} total, ${_currentPdfData?.images?.length || 0} imágenes acumuladas)`;
+						console.log("[PDF]", statsMsg);
+						if (uploadContent) {
+							uploadContent.innerHTML = `
+								<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap;">
+									<span style="font-size: 0.78rem; color: #10b981; font-weight: 600;">${statsMsg}</span>
+								</div>
+							`;
+						}
+					}
+				} else {
+					const ontErrData = await ontRes.json().catch(() => ({ detail: "Error al generar ontología" }));
+					console.error("[PDF] Ontology generation error:", ontErrData);
+					alert("⚠️ No se pudo generar la ontología con Gemini: " + (ontErrData.detail || "Verifique la API Key de Gemini en .env"));
+				}
+			} catch (ontErr) {
+				if (ontErr.name === "AbortError") {
+					console.error("[PDF] Ontology generation timed out (120s)");
+					alert("⚠️ La generación de ontología tardó más de 2 minutos. Intentá de nuevo con el botón 'Generar Ontología con IA'.");
+				} else {
+					console.error("[PDF] Ontology generation exception:", ontErr);
+					alert("⚠️ Error de conexión al generar ontología: " + ontErr.message);
+				}
+			}
+
+			// Step 3: Load first image into canvas
+			if (uploadContent && !uploadContent.innerHTML.includes("✅")) {
+				uploadContent.innerHTML = `
+					<div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+						<span class="spinner-small"></span>
+						<span style="font-size: 0.78rem; color: #10b981;">[3/3] Abriendo primera imagen en el lienzo central...</span>
+					</div>
+				`;
+			}
+
+			if (data.images && data.images.length > 0) {
+				await transferPdfImageToGallery(data.images[0], data.pdf_id, false);
+			}
+
+			updatePdfSourceSelect();
+
+			if (uploadContent) {
+				uploadContent.innerHTML = `
+					<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; width: 100%; padding: 0.25rem 0;">
+						<span style="font-size: 0.8rem; color: #10b981; font-weight: 600;">✅ PDF procesado y ontología lista</span>
+						<span style="font-size: 0.72rem; color: var(--text-muted);">${data.total_images || 0} imágenes extraídas (${data.filename})</span>
+						<div style="display: flex; gap: 0.4rem; margin-top: 0.25rem; flex-wrap: wrap; justify-content: center;">
+							<button type="button" id="go-to-annotate-btn" class="btn-small btn-primary-action" style="font-size: 0.72rem; padding: 0.3rem 0.6rem; pointer-events: auto; cursor: pointer;">
+								🎨 Ir a Anotar en Sección Imágenes ➔
+							</button>
+						</div>
+						<span style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.2rem;">(Hacé click afuera del botón o arrastrá para cambiar de PDF)</span>
+					</div>
+				`;
+				document.getElementById("go-to-annotate-btn")?.addEventListener("click", async (e) => {
+					e.stopPropagation();
+					e.preventDefault();
+					if (data.images && data.images.length > 0) {
+						await importAllPdfImagesToGallery(data.images, data.pdf_id, true);
+					} else {
+						switchTab("images-tab");
+					}
+				});
+			}
+
+		} catch (e) {
+			console.error("[PDF] handlePdfUpload error:", e);
+			if (uploadContent) {
+				uploadContent.innerHTML = `
+					<p style="color: #ef4444; font-size: 0.78rem; margin-bottom: 0.3rem;">❌ ${e.message}</p>
+					<p class="upload-text" style="font-size: 0.72rem;">Hacé click acá o arrastrá para intentar con otro archivo PDF.</p>
+				`;
+			}
+		} finally {
+			if (pdfFileInput) pdfFileInput.value = "";
+		}
+	}
+
+	// --- 4. Generate Ontology with Gemini ---
+	generateOntologyBtn?.addEventListener("click", async () => {
+		if (!_currentPdfData) return alert("Primero subí un PDF.");
+
+		if (generateOntologyBtn) generateOntologyBtn.style.display = "none";
+		if (ontologyGenerating) ontologyGenerating.style.display = "flex";
+
+		try {
+			const mergeTarget = window._activeOntologyName || null;
+			const payload = {
+				pdf_id: _currentPdfData.pdf_id,
+				filename: _currentPdfData.filename,
+				text: _currentPdfData.text_preview,
+				images: _currentPdfData.images || [],
+				domain_name: document.getElementById("domain-name-input")?.value?.trim() || mergeTarget || null,
+			};
+			// Auto-merge into active ontology if one exists
+			if (mergeTarget) {
+				payload.merge_into_ontology = mergeTarget;
+			}
+
+			console.log("[PDF] Manual generate-ontology, merge_into:", mergeTarget || "(new)");
+
+			const controller = new AbortController();
+			const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+			const res = await fetch(`${API_URL}/generate-ontology`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+				signal: controller.signal,
+			});
+			clearTimeout(timeoutId);
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({ detail: "Error generando ontología" }));
+				throw new Error(err.detail || "Error generando ontología");
+			}
+
+			const result = await res.json();
+			displayOntologyEditor(result.ontology);
+			loadSavedOntologies();
+
+			if (result.merge_stats) {
+				const ms = result.merge_stats;
+				alert(`✅ Ontología "${ms.merged_into}" actualizada: +${ms.added} nuevas estructuras (${ms.total_after_merge} total)`);
+			}
+
+		} catch (e) {
+			if (e.name === "AbortError") {
+				alert("⚠️ La generación de ontología tardó más de 2 minutos. Intentá de nuevo.");
+			} else {
+				alert("Error: " + e.message);
+			}
+		} finally {
+			if (generateOntologyBtn) generateOntologyBtn.style.display = "block";
+			if (ontologyGenerating) ontologyGenerating.style.display = "none";
+		}
+	});
+
+	function displayOntologyEditor(ontology) {
+		if (!ontology) return;
+		ontologyWorkbench.style.display = "block";
+		ontologyEditor.style.display = "block";
+		ontologyEditor.dataset.domain = ontology.domain;
+		window._activeOntologyName = ontology.domain;
+
+		const ontPillName = document.getElementById("ont-pill-name");
+		if (ontPillName) ontPillName.textContent = ontology.domain;
+
+		const container = document.getElementById("ontology-structures-list");
+		if (container) {
+			container.innerHTML = "";
+			for (const struct of (ontology.structures || [])) {
+				const row = document.createElement("div");
+				row.style.cssText = "background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.4rem;";
+				row.dataset.key = struct.key;
+
+				row.innerHTML = `
+					<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+						<input type="color" value="${struct.color || '#8b5cf6'}" class="ont-color" style="width: 22px; height: 22px; border: none; cursor: pointer; background: none;" />
+						<input type="text" value="${struct.label || struct.name}" class="ont-label" style="flex: 1; font-size: 0.78rem; font-weight: 600; background: transparent; border: none; color: var(--text-main); outline: none;" />
+					</div>
+					<div style="display: flex; align-items: center; gap: 0.35rem;">
+						<span style="font-size: 0.68rem; color: var(--text-muted); min-width: 48px;">Prompt:</span>
+						<input type="text" value="${struct.prompt || ''}" class="ont-prompt" style="flex: 1; font-size: 0.72rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--accent-cyan); font-family: monospace;" />
+					</div>
+					${struct.name_en ? `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.2rem;">EN: ${struct.name_en}</div>` : ''}
+				`;
+				container.appendChild(row);
+			}
+		}
+
+		// Synchronize with classRegistry
+		if (ontology.structures && ontology.structures.length > 0) {
+			classRegistry = ontology.structures.map((s, idx) => ({
+				id: s.id || (idx + 1),
+				key: s.key,
+				name: s.label || s.name || s.key,
+				prompt: s.prompt,
+				color: s.color || "#8b5cf6"
+			}));
+			updateClassesList();
+		}
+
+		// Also load images if available in the ontology document or backend disk
+		if (ontology.pdf_id || (ontology.extracted_images && ontology.extracted_images.length > 0)) {
+			const targetPdfId = ontology.pdf_id || (ontology.extracted_images && ontology.extracted_images[0]?.pdf_id) || "unknown";
+			_currentPdfData = {
+				pdf_id: targetPdfId,
+				filename: ontology.source_pdf || "paper.pdf",
+				images: ontology.extracted_images || [],
+			};
+			updatePdfSourceSelect();
+
+			if (ontology.pdf_id) {
+				// Fetch live images list from backend
+				fetch(`${API_URL}/pdf-images/${ontology.pdf_id}`)
+					.then(r => r.ok ? r.json() : null)
+					.then(data => {
+						if (data && data.images && data.images.length > 0) {
+							_currentPdfData.images = data.images;
+							renderPdfImagesCrud(data.images, ontology.pdf_id);
+							updatePdfSourceSelect();
+						} else if (ontology.extracted_images && ontology.extracted_images.length > 0) {
+							renderPdfImagesCrud(ontology.extracted_images, ontology.pdf_id);
+						}
+					})
+					.catch(err => {
+						console.warn("Could not fetch live PDF images:", err);
+						if (ontology.extracted_images && ontology.extracted_images.length > 0) {
+							renderPdfImagesCrud(ontology.extracted_images, ontology.pdf_id);
+						}
+					});
+			} else if (ontology.extracted_images && ontology.extracted_images.length > 0) {
+				renderPdfImagesCrud(ontology.extracted_images, targetPdfId);
+			}
+		}
+	}
+
+	// Save ontology structures
+	document.getElementById("save-ontology-btn")?.addEventListener("click", async () => {
+		const domain = ontologyEditor.dataset.domain;
+		if (!domain) return;
+
+		const rows = document.querySelectorAll("#ontology-structures-list > div[data-key]");
+		const structures = [];
+		for (const row of rows) {
+			structures.push({
+				key: row.dataset.key,
+				name: row.querySelector(".ont-label").value,
+				label: row.querySelector(".ont-label").value,
+				prompt: row.querySelector(".ont-prompt").value,
+				color: row.querySelector(".ont-color").value,
+			});
+		}
+
+		try {
+			const res = await fetch(`${API_URL}/ontology/${domain}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ structures }),
+			});
+			if (!res.ok) throw new Error("Error al guardar");
+			alert("✅ Ontología guardada correctamente.");
+			loadSavedOntologies();
+		} catch (e) {
+			alert("Error: " + e.message);
+		}
+	});
+
+	// Apply ontology
+	document.getElementById("apply-ontology-btn")?.addEventListener("click", () => {
+		const domain = ontologyEditor.dataset.domain;
+		if (!domain) return;
+		window._activeOntologyName = domain;
+
+		// Switch to images tab
+		switchTab("images-tab");
+
+		// Update status
+		statusIdle.innerHTML = `
+			<span class="status-dot" style="background: #10b981;"></span>
+			<span>Ontología activa: <strong style="color: var(--accent-cyan);">${domain}</strong></span>
+		`;
+		statusIdle.style.display = "flex";
+	});
+
+
+	// --- 5. PDF Images CRUD Interface & Lightbox ---
+
+	function renderPdfImagesCrud(images, pdf_id) {
+		if (!pdfImagesCrudGrid) return;
+		pdfImagesCrudGrid.innerHTML = "";
+
+		const countBadge = document.getElementById("batch-img-badge");
+		if (countBadge) countBadge.textContent = `${images.length} imágenes`;
+
+		if (!images || images.length === 0) {
+			pdfImagesCrudGrid.innerHTML = '<p class="empty-hint" style="font-size: 0.72rem;">No hay imágenes extraídas disponibles.</p>';
+			return;
+		}
+
+		for (const img of images) {
+			const card = document.createElement("div");
+			card.className = "pdf-img-card";
+			card.dataset.filename = img.filename;
+
+			const targetPdfId = img.pdf_id || pdf_id;
+			const imgUrl = `${API_URL}/pdf-image/${targetPdfId}/${img.filename}`;
+
+			card.innerHTML = `
+				<div class="pdf-img-thumb-wrapper" title="Click para vista previa y zoom">
+					<img src="${imgUrl}" class="pdf-img-thumb" alt="Fig ${img.page || ''}" />
+					<div class="pdf-img-zoom-hint">🔍</div>
+				</div>
+				<div class="pdf-img-details">
+					<div class="pdf-img-header">
+						<span class="pdf-img-badge">Pág ${img.page || '1'} · ${img.width || 0}x${img.height || 0}px</span>
+						<button type="button" class="btn-small btn-danger pdf-img-del-btn" style="padding: 0.15rem 0.4rem; font-size: 0.65rem;" title="Eliminar imagen">🗑️</button>
+					</div>
+					<input type="text" class="pdf-img-caption-input" value="${img.caption || ''}" placeholder="Pie de figura / caption..." title="Edita el pie de figura y presiona Enter o el botón Guardar" />
+					<div class="pdf-img-actions">
+						<button type="button" class="btn-small btn-green pdf-img-save-btn" style="padding: 0.15rem 0.45rem; font-size: 0.65rem;" title="Guardar caption">💾</button>
+						<button type="button" class="btn-small btn-primary-action pdf-img-use-btn" style="padding: 0.15rem 0.55rem; font-size: 0.68rem; font-weight: 600;" title="Abrir y anotar esta imagen en la sección Imágenes">🎯 Anotar</button>
+					</div>
+				</div>
+			`;
+
+			// Event: Open Lightbox preview
+			card.querySelector(".pdf-img-thumb-wrapper").addEventListener("click", () => {
+				openImagePreviewModal(img, pdf_id);
+			});
+
+			// Event: Save caption
+			const captionInput = card.querySelector(".pdf-img-caption-input");
+			const saveCaption = async () => {
+				const newCaption = captionInput.value.trim();
+				const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+				if (!targetPdfId) return;
+				try {
+					const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`, {
+						method: "PUT",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ caption: newCaption }),
+					});
+					if (res.ok) {
+						img.caption = newCaption;
+						captionInput.style.borderColor = "#10b981";
+						setTimeout(() => { captionInput.style.borderColor = ""; }, 1500);
+					}
+				} catch (e) {
+					console.error("Error updating caption:", e);
+				}
+			};
+
+			card.querySelector(".pdf-img-save-btn").addEventListener("click", saveCaption);
+			captionInput.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					saveCaption();
+				}
+			});
+
+			// Event: Delete image
+			card.querySelector(".pdf-img-del-btn").addEventListener("click", async (e) => {
+				e.stopPropagation();
+				if (!confirm(`¿Eliminar la imagen ${img.filename}?`)) return;
+
+				const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+				if (!targetPdfId) return;
+
+				try {
+					const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`, {
+						method: "DELETE",
+					});
+					if (res.ok) {
+						if (_currentPdfData && _currentPdfData.images) {
+							_currentPdfData.images = _currentPdfData.images.filter(i => i.filename !== img.filename);
+						}
+						card.style.opacity = "0";
+						card.style.transform = "translateX(-20px)";
+						setTimeout(() => card.remove(), 200);
+						if (countBadge) {
+							const current = parseInt(countBadge.textContent) || 1;
+							countBadge.textContent = `${Math.max(0, current - 1)} imágenes`;
+						}
+					}
+				} catch (e) {
+					alert("Error al eliminar imagen: " + e.message);
+				}
+			});
+
+			// Event: Use single image
+			card.querySelector(".pdf-img-use-btn").addEventListener("click", async (e) => {
+				e.stopPropagation();
+				await transferPdfImageToGallery(img, pdf_id, true);
+			});
+
+			pdfImagesCrudGrid.appendChild(card);
+		}
+	}
+
+	// Add manual image to PDF collection
+	pdfAddImageBtn?.addEventListener("click", () => pdfAddImageInput.click());
+	pdfAddImageInput?.addEventListener("change", async () => {
+		if (!pdfAddImageInput.files || pdfAddImageInput.files.length === 0 || !_currentPdfData) return;
+
+		const file = pdfAddImageInput.files[0];
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("caption", `Imagen subida: ${file.name}`);
+
+		try {
+			const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(_currentPdfData.pdf_id)}/upload`, {
+				method: "POST",
+				body: formData,
+			});
+			if (!res.ok) throw new Error("Error al subir imagen");
+			const result = await res.json();
+			if (result.success && result.image) {
+				_currentPdfData.images = _currentPdfData.images || [];
+				_currentPdfData.images.push(result.image);
+				renderPdfImagesCrud(_currentPdfData.images, _currentPdfData.pdf_id);
+			}
+		} catch (e) {
+			alert("Error al añadir imagen al PDF: " + e.message);
+		} finally {
+			pdfAddImageInput.value = "";
+		}
+	});
+
+	// Lightbox Modal functions
+	function openImagePreviewModal(img, pdf_id) {
+		_activeModalImg = { img, pdf_id };
+		const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+		const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`;
+
+		modalImgPreview.src = imgUrl;
+		modalImgTitle.textContent = `🖼️ ${img.filename}`;
+		modalImgMeta.textContent = `Página ${img.page || '1'} · Dimensiones: ${img.width || 0}x${img.height || 0} px`;
+		modalImgCaptionInput.value = img.caption || "";
+
+		imagePreviewModal.style.display = "flex";
+	}
+
+	closeImgModalBtn?.addEventListener("click", () => {
+		imagePreviewModal.style.display = "none";
+	});
+
+	modalSaveCaptionBtn?.addEventListener("click", async () => {
+		if (!_activeModalImg) return;
+		const { img, pdf_id } = _activeModalImg;
+		const newCaption = modalImgCaptionInput.value.trim();
+		const targetPdfId = img.pdf_id || pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+		if (!targetPdfId) return;
+
+		try {
+			const res = await fetch(`${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ caption: newCaption }),
+			});
+			if (res.ok) {
+				img.caption = newCaption;
+				// Update input in card grid
+				const card = document.querySelector(`.pdf-img-card[data-filename="${img.filename}"]`);
+				if (card) {
+					const input = card.querySelector(".pdf-img-caption-input");
+					if (input) input.value = newCaption;
+				}
+				alert("✅ Caption actualizado.");
+			}
+		} catch (e) {
+			alert("Error al guardar caption: " + e.message);
+		}
+	});
+
+	modalUseSingleImgBtn?.addEventListener("click", async () => {
+		if (!_activeModalImg) return;
+		const { img, pdf_id } = _activeModalImg;
+		imagePreviewModal.style.display = "none";
+		await transferPdfImageToGallery(img, pdf_id, true);
+	});
+
+	function resolvePdfImageMeta(img, defaultPdfId) {
+		if (!img) return null;
+		let filename = "";
+		let targetPdfId = defaultPdfId || (_currentPdfData && _currentPdfData.pdf_id) || "unknown";
+
+		if (typeof img === "string") {
+			filename = img.split("/").pop().split("\\").pop();
+		} else if (typeof img === "object") {
+			filename = img.filename || img.name || (img.path ? img.path.split("/").pop().split("\\").pop() : "");
+			if (img.pdf_id) targetPdfId = img.pdf_id;
+		}
+
+		if (!filename) return null;
+
+		// Extract actual pdf_id from filename prefix if targetPdfId is unknown or empty
+		if ((!targetPdfId || targetPdfId === "unknown") && filename.includes("_")) {
+			targetPdfId = filename.split("_")[0];
+		}
+
+		return { filename, pdf_id: targetPdfId };
+	}
+
+	async function transferPdfImageToGallery(img, pdf_id, shouldSwitchTab = false) {
+		try {
+			if (shouldSwitchTab) {
+				switchTab("images-tab");
+			}
+			const meta = resolvePdfImageMeta(img, pdf_id);
+			if (!meta || !meta.filename) {
+				throw new Error("Identificador de PDF o nombre de archivo inválido.");
+			}
+			const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(meta.pdf_id)}/${encodeURIComponent(meta.filename)}`;
+			const response = await fetch(imgUrl);
+			if (!response.ok) {
+				throw new Error(`El servidor respondió con código ${response.status}: ${response.statusText}`);
+			}
+			const blob = await response.blob();
+			const file = new File([blob], meta.filename, { type: blob.type || "image/png" });
+
+			await handleFiles([file], false);
+		} catch (e) {
+			const msg = e.message && e.message.includes("Failed to fetch")
+				? "No se pudo conectar con el servidor backend (puerto 8000). Si se estaba reiniciando, espera unos segundos y vuelve a intentarlo."
+				: e.message;
+			alert("Error al cargar imagen en galería: " + msg);
+		}
+	}
+
+	async function importAllPdfImagesToGallery(images, pdf_id, shouldSwitchTab = true) {
+		if (!images || images.length === 0) {
+			alert("No hay imágenes para cargar.");
+			return;
+		}
+
+		if (shouldSwitchTab) {
+			switchTab("images-tab");
+		}
+
+		const fallbackPdfId = pdf_id || (_currentPdfData && _currentPdfData.pdf_id);
+
+		// Download all images in parallel for speed
+		const downloadPromises = images.map(async (img) => {
+			try {
+				const meta = resolvePdfImageMeta(img, fallbackPdfId);
+				if (!meta || !meta.filename) return null;
+				const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(meta.pdf_id)}/${encodeURIComponent(meta.filename)}`;
+				const response = await fetch(imgUrl);
+				if (!response.ok) {
+					console.warn(`No se pudo descargar ${meta.filename} (HTTP ${response.status})`);
+					return null;
+				}
+				const blob = await response.blob();
+				return new File([blob], meta.filename, { type: blob.type || "image/png" });
+			} catch (err) {
+				console.warn("Error fetching PDF image:", img, err);
+				return null;
+			}
+		});
+
+		const results = await Promise.all(downloadPromises);
+		const files = results.filter(f => f !== null);
+
+		if (files.length === 0) {
+			alert("No se pudieron descargar las imágenes del PDF. Verifica que el backend esté activo.");
+			return;
+		}
+
+		await handleFiles(files, false);
+	}
+
+	// Button: Import all PDF images from PDF Workbench
+	importAllPdfToGalleryBtn?.addEventListener("click", async () => {
+		const origText = importAllPdfToGalleryBtn.innerHTML;
+		importAllPdfToGalleryBtn.disabled = true;
+		importAllPdfToGalleryBtn.innerHTML = '⏳ Cargando imágenes...';
+		try {
+			let images = _currentPdfData?.images;
+			let pdfId = _currentPdfData?.pdf_id;
+
+			// If _currentPdfData is empty, attempt to resolve from active ontology or dropdown
+			if (!images || images.length === 0) {
+				const activeOnt = window._activeOntologyName || pdfSourceSelect?.value;
+				if (activeOnt && activeOnt !== "__current__") {
+					try {
+						const res = await fetch(`${API_URL}/ontology/${encodeURIComponent(activeOnt)}`);
+						if (res.ok) {
+							const ont = await res.json();
+							pdfId = ont.pdf_id || "unknown";
+							if (ont.pdf_id) {
+								const imgRes = await fetch(`${API_URL}/pdf-images/${encodeURIComponent(ont.pdf_id)}`);
+								if (imgRes.ok) {
+									const imgData = await imgRes.json();
+									images = imgData.images;
+								}
+							}
+							if (!images || images.length === 0) {
+								images = ont.extracted_images;
+							}
+						}
+					} catch (err) {
+						console.warn("Could not fetch fallback ontology images:", err);
+					}
+				}
+			}
+
+			if (!images || images.length === 0) {
+				alert("No hay imágenes en el PDF actual para cargar.");
+				return;
+			}
+
+			await importAllPdfImagesToGallery(images, pdfId, true);
+		} catch (e) {
+			console.error("Error in importAllPdfToGalleryBtn:", e);
+			alert("Error al cargar imágenes: " + e.message);
+		} finally {
+			importAllPdfToGalleryBtn.disabled = false;
+			importAllPdfToGalleryBtn.innerHTML = origText;
+		}
+	});
+
+	// Helper to refresh PDF / Ontology dropdown in Images tab
+	function updatePdfSourceSelect() {
+		if (!pdfSourceSelect) return;
+		const prevVal = pdfSourceSelect.value;
+		pdfSourceSelect.innerHTML = '<option value="">Seleccionar PDF / Ontología...</option>';
+
+		let totalAvailable = 0;
+
+		// 1. Current active PDF
+		if (_currentPdfData && _currentPdfData.images && _currentPdfData.images.length > 0) {
+			const opt = document.createElement("option");
+			opt.value = "__current__";
+			opt.textContent = `📄 PDF Actual: ${_currentPdfData.filename} (${_currentPdfData.images.length} imgs)`;
+			pdfSourceSelect.appendChild(opt);
+			totalAvailable += _currentPdfData.images.length;
+		}
+
+		// 2. Saved ontologies with images
+		if (window._savedOntologiesList && window._savedOntologiesList.length > 0) {
+			for (const ont of window._savedOntologiesList) {
+				const opt = document.createElement("option");
+				opt.value = ont.name;
+				opt.textContent = `🧬 ${ont.domain} (${ont.num_images || 0} imgs - ${ont.source_pdf})`;
+				pdfSourceSelect.appendChild(opt);
+				totalAvailable += (ont.num_images || 0);
+			}
+		}
+
+		if (pdfImportCountBadge) {
+			pdfImportCountBadge.textContent = `${totalAvailable} disponibles`;
+		}
+
+		if (prevVal && pdfSourceSelect.querySelector(`option[value="${prevVal}"]`)) {
+			pdfSourceSelect.value = prevVal;
+		} else if (_currentPdfData) {
+			pdfSourceSelect.value = "__current__";
+		}
+	}
+
+	// Button: Import selected PDF / Ontology into gallery from Images tab
+	importPdfImgsBtn?.addEventListener("click", async () => {
+		const val = pdfSourceSelect?.value;
+		if (!val) {
+			alert("Selecciona primero un PDF u ontología del desplegable.");
+			return;
+		}
+
+		if (val === "__current__") {
+			if (_currentPdfData && _currentPdfData.images) {
+				await importAllPdfImagesToGallery(_currentPdfData.images, _currentPdfData.pdf_id, true);
+			}
+			return;
+		}
+
+		// Load from saved ontology
+		try {
+			const res = await fetch(`${API_URL}/ontology/${encodeURIComponent(val)}`);
+			if (!res.ok) throw new Error("No se pudo cargar la ontología.");
+			const ont = await res.json();
+			if (ont.pdf_id) {
+				const imgRes = await fetch(`${API_URL}/pdf-images/${encodeURIComponent(ont.pdf_id)}`);
+				if (imgRes.ok) {
+					const imgData = await imgRes.json();
+					if (imgData.images && imgData.images.length > 0) {
+						await importAllPdfImagesToGallery(imgData.images, ont.pdf_id, true);
+						return;
+					}
+				}
+			}
+			if (ont.extracted_images && ont.extracted_images.length > 0) {
+				await importAllPdfImagesToGallery(ont.extracted_images, ont.pdf_id || "unknown", true);
+			} else {
+				alert("Esta ontología no contiene imágenes asociadas.");
+			}
+		} catch (e) {
+			alert("Error al importar imágenes: " + e.message);
+		}
+	});
+
+
+	// --- 6. Batch Auto-Segmentation (SAM 3 + CONCH Zero-Shot) ---
+
+	batchSegmentPdfBtn?.addEventListener("click", async () => {
+		if (!_currentPdfData || !_currentPdfData.images || _currentPdfData.images.length === 0) {
+			alert("No hay imágenes en el PDF para segmentar.");
+			return;
+		}
+
+		const images = _currentPdfData.images;
+		const total = images.length;
+
+		if (batchProgressModal) batchProgressModal.style.display = "flex";
+		if (batchProgressFill) batchProgressFill.style.width = "0%";
+		if (batchProgressText) batchProgressText.textContent = `0 / ${total} procesadas (0%)`;
+		if (batchStepTitle) batchStepTitle.textContent = `Iniciando segmentación en lote (${total} imágenes)...`;
+
+		let firstAddedKey = null;
+
+		for (let i = 0; i < total; i++) {
+			const img = images[i];
+			const pct = Math.round(((i + 1) / total) * 100);
+
+			batchStepTitle.textContent = `[${i + 1}/${total}] Procesando: ${img.filename}`;
+			batchProgressText.textContent = `${i + 1} / ${total} procesadas (${pct}%)`;
+			batchProgressFill.style.width = `${pct}%`;
+
+			try {
+				const targetPdfId = img.pdf_id || _currentPdfData.pdf_id;
+				const imgUrl = `${API_URL}/pdf-image/${encodeURIComponent(targetPdfId)}/${encodeURIComponent(img.filename)}`;
+				const response = await fetch(imgUrl);
+				const blob = await response.blob();
+				const file = new File([blob], img.filename, { type: "image/png" });
+
+				const key = file.name + "_" + Date.now();
+				const dataUrl = await readFileAsDataUrl(file);
+				const dims = await getImageDimensions(dataUrl);
+
+				const imageData = {
+					file: file,
+					filename: file.name,
+					dataUrl: dataUrl,
+					width: dims.width,
+					height: dims.height,
+					groups: [],
+					annotated: false,
+				};
+				imageStore.set(key, imageData);
+				if (!firstAddedKey) firstAddedKey = key;
+
+				// 1. Run SAM 3 Auto-segmentation
+				const formData = new FormData();
+				formData.append("image", file);
+				formData.append("umbral", thresholdSlider.value);
+				if (window._activeOntologyName) {
+					formData.append("ontology_name", window._activeOntologyName);
+				}
+
+				const segRes = await fetch(`${API_URL}/segment-auto`, {
+					method: "POST",
+					body: formData,
+				});
+
+				if (segRes.ok) {
+					const segResult = await segRes.json();
+					imageData.groups = segResult.groups || [];
+					imageData.annotated = true;
+
+					// 2. Run CONCH Zero-Shot Classification if groups exist and domain is histology
+					let allDets = [];
+					if (segResult.is_histology !== false) {
+						imageData.groups.forEach(g => {
+							(g.detections || []).forEach(d => {
+								allDets.push({
+									id: d.id,
+									bbox: d.bbox,
+									polygon: d.polygon,
+									score: d.score,
+									class_key: g.key,
+									label: g.label,
+									color: g.color,
+								});
+							});
+						});
+					}
+
+					if (allDets.length > 0 && segResult.is_histology !== false) {
+						let candidateClasses = classRegistry.map(c => ({
+							key: c.key,
+							name: c.name,
+							label: c.name,
+							prompt: c.prompt || c.name,
+							color: c.color,
+						}));
+						if (candidateClasses.length === 0) {
+							candidateClasses = imageData.groups.map(g => ({
+								key: g.key,
+								name: g.label,
+								label: g.label,
+								prompt: g.label,
+								color: g.color,
+							}));
+						}
+
+						const conchForm = new FormData();
+						conchForm.append("image", file);
+						conchForm.append("detections", JSON.stringify(allDets));
+						conchForm.append("classes", JSON.stringify(candidateClasses));
+						conchForm.append("temperature", "0.05");
+						if (window._activeOntologyName) {
+							conchForm.append("ontology_name", window._activeOntologyName);
+						}
+
+						const conchRes = await fetch(`${API_URL}/classify-detections-conch`, {
+							method: "POST",
+							body: conchForm,
+						});
+
+						if (conchRes.ok) {
+							const conchResult = await conchRes.json();
+							if (conchResult.is_histology !== false) {
+								const classified = conchResult.detections || [];
+								const groupsMap = new Map();
+								for (const det of classified) {
+									const gKey = det.class_key || "clase_1";
+									if (!groupsMap.has(gKey)) {
+										groupsMap.set(gKey, {
+											key: gKey,
+											label: det.class_label || gKey,
+											color: det.color || getClassColor(gKey),
+											detections: [],
+										});
+									}
+									groupsMap.get(gKey).detections.push(det);
+								}
+								imageData.groups = Array.from(groupsMap.values());
+							}
+						}
+					}
+					// Update class registry
+					for (const group of imageData.groups) {
+						if (!classRegistry.find(c => c.key === group.key)) {
+							classRegistry.push({
+								id: classIdCounter++,
+								name: group.label,
+								color: group.color,
+								key: group.key,
+							});
+						}
+					}
+				}
+			} catch (e) {
+				console.warn(`Error processing ${img.filename} in batch:`, e);
+			}
+		}
+
+		batchProgressModal.style.display = "none";
+		renderGallery();
+		updateExportStats();
+
+		// Switch to images tab and select the first segmented image
+		switchTab("images-tab");
+
+		if (firstAddedKey) {
+			selectImage(firstAddedKey);
+		}
+
+		alert(`✅ Segmentación en lote completada: ${total} imágenes procesadas con SAM 3.1 y clasificadas con CONCH.`);
+	});
+	// --- 7. Load and display saved ontologies ---
+	function renderOntologyList(list) {
+		console.log("[ONT] renderOntologyList called with", list.length, "items");
+		const container = document.getElementById("saved-ontologies-list");
+		if (!container) {
+			console.error("[ONT] #saved-ontologies-list NOT FOUND in DOM!");
+			return;
+		}
+
+		if (list.length === 0) {
+			container.innerHTML = '<p class="empty-hint" style="font-size: 0.72rem;">No hay ontologías guardadas aún.</p>';
+			return;
+		}
+
+		container.innerHTML = "";
+		for (const ont of list) {
+			const item = document.createElement("div");
+			const isActive = window._activeOntologyName === ont.name;
+			item.className = "ont-item-card";
+			item.dataset.name = ont.name;
+			item.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.6rem; background: ${isActive ? 'rgba(6,182,212,0.1)' : 'var(--bg-tertiary)'}; border: 1px solid ${isActive ? 'var(--accent-cyan)' : 'var(--border-color)'}; border-radius: 6px; margin-bottom: 0.35rem; cursor: pointer; transition: all 0.15s;`;
+			item.innerHTML = `
+				<div>
+					<div style="font-size: 0.78rem; font-weight: 600; color: var(--text-main);">${ont.domain}</div>
+					<div style="font-size: 0.65rem; color: var(--text-muted);">${ont.num_structures} estructuras · ${ont.num_images || 0} imágenes · ${ont.source_pdf}</div>
+				</div>
+				<div style="display: flex; gap: 0.25rem;">
+					<button class="btn-small ont-load-btn" data-name="${ont.name}" style="font-size: 0.68rem; padding: 0.2rem 0.4rem;" title="Abrir y editar">📂</button>
+					<button class="btn-small btn-green ont-use-btn" data-name="${ont.name}" style="font-size: 0.68rem; padding: 0.2rem 0.4rem;" title="Activar para segmentación">✅</button>
+				</div>
+			`;
+
+			item.addEventListener("click", async () => {
+				window._activeOntologyName = ont.name;
+				try {
+					const res = await fetch(`${API_URL}/ontology/${ont.name}`);
+					if (res.ok) {
+						const data = await res.json();
+						displayOntologyEditor(data);
+						renderOntologyList(list);
+					}
+				} catch (err) {
+					console.error("[ONT] Error activating ontology:", err);
+				}
+			});
+
+			container.appendChild(item);
+		}
+		console.log("[ONT] Rendered", list.length, "ontology items in list");
+
+		// Attach load handlers
+		container.querySelectorAll(".ont-load-btn").forEach(btn => {
+			btn.addEventListener("click", async (e) => {
+				e.stopPropagation();
+				try {
+					const name = btn.dataset.name;
+					const res = await fetch(`${API_URL}/ontology/${name}`);
+					if (res.ok) {
+						const ont = await res.json();
+						displayOntologyEditor(ont);
+					}
+				} catch (err) {
+					console.error("[ONT] Error loading ontology:", err);
+				}
+			});
+		});
+
+		// Attach use/activate handlers
+		container.querySelectorAll(".ont-use-btn").forEach(btn => {
+			btn.addEventListener("click", async (e) => {
+				e.stopPropagation();
+				window._activeOntologyName = btn.dataset.name;
+				statusIdle.innerHTML = `
+					<span class="status-dot" style="background: #10b981;"></span>
+					<span>Ontología activa: <strong style="color: var(--accent-cyan);">${btn.dataset.name}</strong></span>
+				`;
+				statusIdle.style.display = "flex";
+				try {
+					const res = await fetch(`${API_URL}/ontology/${btn.dataset.name}`);
+					if (res.ok) {
+						const ont = await res.json();
+						displayOntologyEditor(ont);
+					}
+					renderOntologyList(list); // refresh highlights
+				} catch (err) {
+					console.error("[ONT] Error activating ontology:", err);
+				}
+			});
+		});
+	}
+
+	async function loadSavedOntologies(autoLoadFirst = false) {
+		console.log("[ONT] loadSavedOntologies called, autoLoadFirst=", autoLoadFirst);
+		try {
+			const url = `${API_URL}/ontologies`;
+			console.log("[ONT] Fetching:", url);
+			const res = await fetch(url);
+			console.log("[ONT] Response status:", res.status);
+			if (!res.ok) return false;
+
+			const data = await res.json();
+			console.log("[ONT] Response data:", JSON.stringify(data).substring(0, 200));
+			const list = data.ontologies || [];
+			console.log("[ONT] Found", list.length, "ontologies");
+
+			window._savedOntologiesList = list;
+			updatePdfSourceSelect();
+
+			// Always render the list (even if auto-load later fails)
+			renderOntologyList(list);
+			_ontologiesLoaded = true;
+
+			if (list.length === 0) {
+				const ontPillName = document.getElementById("ont-pill-name");
+				if (ontPillName && (!window._activeOntologyName || ontPillName.textContent === "Cargando...")) {
+					ontPillName.textContent = "Ninguna";
+				}
+			}
+
+			// Auto-load first ontology into workbench
+			if (autoLoadFirst && list.length > 0 && !window._activeOntologyName) {
+				try {
+					const firstOnt = list[0];
+					console.log("[ONT] Auto-loading first ontology:", firstOnt.name);
+					window._activeOntologyName = firstOnt.name;
+					statusIdle.innerHTML = `
+						<span class="status-dot" style="background: #10b981;"></span>
+						<span>Ontología activa: <strong style="color: var(--accent-cyan);">${firstOnt.name}</strong></span>
+					`;
+					statusIdle.style.display = "flex";
+
+					const ontRes = await fetch(`${API_URL}/ontology/${firstOnt.name}`);
+					if (ontRes.ok) {
+						const ontData = await ontRes.json();
+						console.log("[ONT] Auto-loaded ontology, structures:", ontData.structures?.length);
+						displayOntologyEditor(ontData);
+					}
+				} catch (autoErr) {
+					console.error("[ONT] Auto-load error (non-fatal):", autoErr);
+				}
+			}
+
+			return true;
+		} catch (e) {
+			console.warn("[ONT] loadSavedOntologies error:", e);
+			return false;
+		}
+	}
+
+	// Robust retry: the backend takes ~10s to load SAM 3 on startup.
+	(async function retryLoadOntologies() {
+		const delays = [500, 1500, 3000, 5000, 8000, 12000, 18000, 25000];
+		for (const delay of delays) {
+			console.log("[ONT] Attempting to load ontologies...");
+			const ok = await loadSavedOntologies(true);
+			if (ok) {
+				console.log("[ONT] ✅ Ontologies loaded successfully!");
+				return;
+			}
+			console.log("[ONT] Backend not ready, retrying in", delay, "ms...");
+			await new Promise(r => setTimeout(r, delay));
+		}
+		console.error("[ONT] ❌ Failed to load ontologies after all retries");
+	})();
+
 </script>
+
+

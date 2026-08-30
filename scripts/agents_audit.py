@@ -22,7 +22,7 @@ WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 
 # Files & directories to ignore (including third-party vendor models like sam3)
 IGNORE_DIRS = {
-    ".git", ".venv", "node_modules", "__pycache__", ".astro", "dist", "build", ".next", "sam3"
+    ".git", ".venv", "node_modules", "__pycache__", ".astro", "dist", "build", ".next", "sam3", "scripts"
 }
 IGNORE_FILES = {
     "package-lock.json", "yarn.lock", "pnpm-lock.yaml"

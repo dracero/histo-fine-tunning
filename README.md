@@ -1,38 +1,127 @@
-# SAM 3 Histology Annotator & Roboflow Pipeline 🚀
+# SAM 3 Histology Annotator, Foundation Models & Roboflow Pipeline 🚀🔬
 
-Plataforma integral de **segmentación automática**, **edición e inspección fina de anotaciones** y **pipeline de entrenamiento en Roboflow**, utilizando **SAM 3 (Segment Anything Model 3 de Meta AI)**.
+Plataforma integral de **segmentación celular e histológica de alta precisión**, **modelos fundacionales de patología (CONCH, UNI, Virchow 2)**, **sistema multi-agente con LangGraph y Gemini Vision**, **extracción de ontologías desde PDFs académicos** y **pipeline de exportación y entrenamiento en Roboflow**.
 
-Diseñada especialmente para imágenes complejas (como histología o microscopía) que contienen cientos de células o estructuras por imagen, permitiendo segmentarlas automáticamente en segundos, curar/corregir clases o falsos positivos individualmente y exportar o entrenar modelos en Roboflow.
+Diseñada para analizar cortes histológicos y micrografías complejas con cientos o miles de células y estructuras por imagen. Permite segmentar automáticamente en segundos con aceleración por GPU, clasificar biológicamente mediante modelos de fundación, curar/corregir anotaciones individualmente y exportar o entrenar modelos de visión artificial para investigación biomédica y patología computacional.
+
+---
+
+## 🌟 Tabla de Contenidos
+1. [Características Principales](#-características-principales)
+   - [1. Motores de Segmentación Duales en GPU](#-1-motores-de-segmentación-duales-en-gpu)
+   - [2. Modelos Fundacionales de Patología](#-2-modelos-fundacionales-de-patología-digital)
+   - [3. Pipeline Multi-Agente con LangGraph y Gemini Vision](#-3-pipeline-multi-agente-con-langgraph-y-gemini-vision)
+   - [4. Extracción de PDFs, Ontologías Asistidas por IA y Atlas](#-4-extracción-de-pdfs-ontologías-asistidas-por-ia-y-atlas)
+   - [5. Suite de Anotación y Visor Web Reactivo](#-5-suite-de-anotación-y-visor-web-reactivo)
+   - [6. Exportación e Integración con Roboflow](#-6-exportación-e-integración-con-roboflow)
+2. [Estructura del Proyecto](#️-estructura-del-proyecto)
+3. [Rutas de la API (Endpoints Backend)](#-rutas-de-la-api-endpoints-backend)
+4. [Arquitectura y Rendimiento](#-arquitectura-y-rendimiento)
+5. [Requisitos Previos](#-requisitos-previos)
+6. [Instalación y Configuración](#️-instalación-y-configuración)
+7. [Puesta en Marcha](#-puesta-en-marcha)
+8. [Flujo de Trabajo Paso a Paso](#-flujo-de-trabajo-paso-a-paso)
+9. [Licencias y Agradecimientos](#️-licencias-y-agradecimientos)
 
 ---
 
 ## 🌟 Características Principales
 
-### 🧠 1. Segmentación Automática con SAM 3 (Meta AI)
-- **Multi-Prompt Automático**: Ejecuta automáticamente una suite de prompts visuales universales (*cell or nucleus, elongated dark nucleus, circular tissue structure, object, etc.*) para detectar cientos de instancias por imagen.
-- **Extracción de Polígonos de Alta Precisión**: Convierte las máscaras binarias generadas por SAM 3 en contornos poligonales (formato COCO) simplificados mediante OpenCV (`findContours` + `approxPolyDP`).
-- **Ajuste de Umbral en Tiempo Real**: Slider para filtrar la confianza de las detecciones al instante sin re-ejecutar el modelo.
+### 🧠 1. Motores de Segmentación Duales en GPU
 
-### 🖼️ 2. Soporte Multi-Imagen
-- Carga de múltiples imágenes (Drag & Drop o selector).
-- Galería con estado en tiempo real (🔴 Pendiente / 🟢 Anotada).
-- Preservación independiente del estado de anotación y correcciones por cada imagen.
+* **Meta SAM 3.1 (Segment Anything Model 3.1)**:
+  * Segmentación *zero-shot* guiada por lenguaje natural (*open-vocabulary*).
+  * Arquitectura híbrida: inferencia de ultra-alta velocidad mediante `SAM3SemanticPredictor` (Ultralytics) con conmutación por error transparente a `Sam3Processor` nativo de Meta.
+  * **Click-to-Segment (`/api/segment-point`)**: Segmentación instantánea de estructuras celulares haciendo click sobre el punto de interés.
+  * **Multi-Prompt Automático (`/api/segment-auto`)**: Detección masiva paralela usando batería de conceptos histológicos (*"cell nucleus"*, *"circular lumen"*, *"elongated fiber"*, etc.).
+  * **Aislamiento por hilo (`sam3_inference_context`)**: Ejecución thread-safe en precisión mixta `bfloat16` con `torch.inference_mode()` para prevenir discrepancias de tipo de dato (*dtype mismatches*).
 
-### ✂️ 3. Edición Fina e Individual de Detecciones
-- **Selección Individual y Múltiple**: Click sobre cualquier celda/polígono para seleccionarla, `Shift + Click` para selección múltiple, o `Ctrl + A` para seleccionar todas las detecciones visibles.
-- **Reasignación de Clases**: Menú contextual con click derecho o dropdown en la barra superior para mover detecciones individuales o en lote entre clases.
-- **Eliminación Rápida**: Tecla `Delete` / `Backspace` o botón en pantalla para borrar falsos positivos o elementos no deseados.
+* **Cellpose & Cellpose-SAM (`cpsam`, `cpsam_v2`, `nuclei`, `cyto3`, `tissuenet`)**:
+  * Motor especializado en microscopía de fluorescencia y cortes densos teñidos con Hematoxilina & Eosina (H&E).
+  * Estimación automática o manual del diámetro celular para optimizar la escala de detección.
+  * Extracción de máscaras y polígonos celulares de alta densidad con separación de bordes contiguos.
 
-### 🏷️ 4. Gestión Completa de Clases
-- **Renombrado Inline**: Edita el nombre genérico (*Clase 1*, *Clase 2*) a nombres semánticos (*Espermatogonia B*, *Célula de Sertoli*, etc.).
-- **Selector de Color**: Color picker por clase para ajustar el tono de visualización.
-- **Visibilidad Toggle**: Muestra u oculta clases específicas para facilitar el trabajo en zonas muy pobladas.
-- **Creación y Eliminación de Clases**: Agrega clases personalizadas vacías o elimina clases enteras.
+* **Gestor Dinámico de Memoria VRAM (`prepare_engine_vram`)**:
+  * Intercambio inteligente (*swapping*) entre GPU y CPU al alternar entre SAM 3 y Cellpose.
+  * Limpieza activa de fragmentación con `torch.cuda.empty_cache()`, permitiendo ejecutar modelos de miles de millones de parámetros en GPUs de consumo (ej. NVIDIA RTX 3050 / 3060) sin errores de *CUDA Out of Memory*.
 
-### 🚀 5. Exportación e Integración con Roboflow
-- **Exportación Local COCO JSON**: Descarga directa de anotaciones consolidadas (imágenes, categorías, bboxes y polígonos `segmentation`).
-- **Subida Directa a Roboflow**: Envío de imágenes y dataset anotado a tu workspace y proyecto de Roboflow vía API.
-- **Disparo de Entrenamiento**: Lanza el entrenamiento de tu modelo (ej. YOLOv8) en Roboflow con un solo click desde la interfaz web.
+---
+
+### 🧬 2. Modelos Fundacionales de Patología Digital
+
+* **CONCH (Mahmood Lab - Harvard/BWH)**:
+  * Modelo Vision-Language pre-entrenado en más de **1.17 millones de pares imagen-texto** histológicos.
+  * Proyección en espacio latente de **512 dimensiones** para clasificación *zero-shot* y cálculo de similitud texto-morfología celular.
+* **UNI (Mahmood Lab)**:
+  * Extractor de representaciones morfológicas densas de **1024 dimensiones** basado en ViT-Large pre-entrenado en más de **100 millones de parches tisulares**.
+* **Virchow 2 (Paige AI)**:
+  * Modelo de patología computacional de escala masiva (ViT-Huge, **1280 dimensiones**) entrenado sobre **3.1 millones de láminas histológicas completas** (*WSI*).
+  * Clasificación morfológica y clustering de prototipos celulares por distancia coseno para identificar subtipos y patrones atípicos.
+* **Status y Precarga en Tiempo Real (`/api/pathology-models-status`, `/api/preload-model`)**:
+  * Indicadores visuales en el header que muestran el estado de carga en VRAM de cada modelo con posibilidad de precarga manual con un click.
+
+---
+
+### 🤖 3. Pipeline Multi-Agente con LangGraph y Gemini Vision
+
+Flujo orquestado mediante un grafo agéntico de 5 nodos para máxima exactitud taxonómica en láminas complejas:
+
+```mermaid
+graph LR
+    A["1. OntologyReaderNode<br/>(Ontología & Contexto)"] --> B["2. ImageLabelDetectorNode<br/>(OCR & Flechas/Letras en Lámina)"]
+    B --> C["3. SegmentationCropperNode<br/>(Cellpose / SAM3 + Morfometría)"]
+    C --> D["4. FoundationMatcherNode<br/>(CONCH 512d + Virchow 2 1280d)"]
+    D --> E["5. FinalClassifierNode<br/>(Razonamiento Agéntico Gemini)"]
+```
+
+1. **`OntologyReaderNode`**: Carga la ontología tisular activa y filtra las clases biológicas plausibles para el órgano analizado.
+2. **`ImageLabelDetectorNode` (Visual Grounding & OCR con Gemini Vision)**: Detecta marcas visuales impresas en la lámina (flechas, cabezas de flecha, letras guía como *A, B, S, L* o asteriscos) y las vincula con la leyenda del documento.
+3. **`SegmentationCropperNode`**: Extrae recortes de alta resolución de cada detección y calcula métricas morfométricas determinísticas (área, circularidad, excentricidad, relación núcleo-citoplasma y densidad óptica).
+4. **`FoundationMatcherNode`**: Computa similitudes texto-imagen (CONCH) y similitudes morfológicas profundas (Virchow 2).
+5. **`FinalClassifierNode`**: Árbitro agéntico multimodal que sintetiza morfometría, proximidad espacial a flechas/etiquetas y puntajes de los modelos fundacionales, emitiendo la clasificación final con una traza de razonamiento explicativa.
+
+---
+
+### 📄 4. Extracción de PDFs, Ontologías Asistidas por IA y Atlas
+
+* **Extracción de Contenido con PyMuPDF**:
+  * Procesa libros y papers académicos en PDF extrayendo el texto completo y todas las figuras y micrografías incrustadas.
+  * **Renderizado de respaldo automático (150 DPI)**: Si el PDF contiene figuras vectoriales o compuestas, renderiza vistas completas de alta resolución para que ninguna lámina quede excluida.
+* **Ingeniería de Ontologías con Gemini IA**:
+  * Diseña jerarquías biológicas canónicas en español y en inglés con descripciones y *prompts visuales optimizados* para el vocabulario de SAM 3.
+  * **Sistema de resiliencia**: Extracción multimodal (visión de micrografías + texto) con reintento automático en texto plano mediante `gemini-2.5-flash` para garantizar la generación consistente de la ontología.
+  * **Aislamiento de dominios**: Cada documento crea su propia ontología temática con soporte para fusión incremental opcional (*merge*).
+* **Gestor CRUD de Imágenes de Atlas**:
+  * Galería interactiva con visor modal y zoom de alta resolución.
+  * Edición y persistencia de pies de figura (*captions*).
+  * Adición de imágenes externas y eliminación de diagramas irrelevantes.
+  * **Segmentación en lote (*Batch Segment*)**: Procesa y segmenta automáticamente todas las láminas del PDF con un solo click.
+
+---
+
+### ✂️ 5. Suite de Anotación y Visor Web Reactivo
+
+* **Renderizado Vectorial SVG de Alto Rendimiento**:
+  * Simplificación de contornos poligonales con algoritmo **Ramer-Douglas-Peucker (`approxPolyDP`)**, transformando miles de píxeles densos en polígonos vectoriales livianos (10–30 vértices).
+* **Herramientas de Selección y Edición**:
+  * Selección individual, múltiple con `Shift + Click`, o masiva con `Ctrl + A`.
+  * Reasignación rápida de categorías biológicas mediante menú contextual (click derecho) o panel de clases.
+  * Eliminación de anotaciones con las teclas `Delete` o `Backspace`.
+* **Filtrado Reactivo por Confianza**:
+  * Slider reactivo en cliente que filtra detecciones en memoria \(O(N)\) en tiempo real sin requerir re-ejecución en la GPU.
+* **Gestor Dinámico de Clases**:
+  * Modificación de nombres, paleta de colores RGB/HEX (*Color Picker*) y ocultamiento/visibilidad por categoría.
+
+---
+
+### 🚀 6. Exportación e Integración con Roboflow
+
+* **Exportación COCO JSON**:
+  * Descarga directa del dataset en formato estándar COCO (`images`, `categories`, `annotations` con bounding boxes y polígonos `segmentation`).
+* **Subida Directa a Roboflow**:
+  * Envío de imágenes y dataset anotado directamente a tu Workspace y Proyecto de Roboflow mediante API REST multipart.
+* **Disparo de Entrenamiento Remoto**:
+  * Lanza el entrenamiento de modelos de visión artificial (ej. YOLOv8, YOLOv11) en la nube de Roboflow desde la interfaz.
 
 ---
 
@@ -41,118 +130,138 @@ Diseñada especialmente para imágenes complejas (como histología o microscopí
 ```text
 Meta_SAM_V3/
 ├── backend/
-│   ├── main.py                  # API FastAPI para inferencia de SAM 3 y endpoints REST
-│   └── roboflow_integration.py  # Módulo de conversión COCO, upload y training en Roboflow
+│   ├── main.py                     # API FastAPI: Endpoints de inferencia, modelos y Roboflow
+│   ├── cellpose_segmenter.py       # Motor Cellpose & Cellpose-SAM con gestión dinámica de GPU
+│   ├── histology_graph.py          # Grafo multi-agente LangGraph (5 nodos de razonamiento)
+│   ├── pathology_models.py         # Modelos fundacionales: CONCH (512d), UNI (1024d) y Virchow 2 (1280d)
+│   ├── gemini_vision.py            # Asistente multimodal, OCR y refinamiento con Gemini Vision
+│   ├── pdf_ontology.py             # Extracción de PDFs, ontologías jerárquicas y CRUD de imágenes
+│   └── roboflow_integration.py     # Exportación COCO JSON, upload multipart y training en Roboflow
 ├── frontend/
 │   ├── src/
 │   │   └── pages/
-│   │       └── index.astro      # Interfaz de usuario interactiva (Astro + Vanilla JS + CSS)
+│   │       └── index.astro         # Aplicación web reactiva moderna (Astro + Vanilla JS + CSS)
 │   ├── package.json
 │   └── astro.config.mjs
-├── .env                         # Credenciales y configuración de Roboflow (Ignorado en git)
-├── .env.example                 # Plantilla de variables de entorno
-├── package.json                 # Script principal (npm run dev)
-└── start.sh                     # Script Bash de lanzamiento simultáneo de servidores
+├── sam3/                           # Submódulo / Repositorio local de Meta SAM 3.1
+├── datasets/
+│   ├── ontologies/                 # Ontologías temáticas guardadas en formato JSON
+│   └── pdf_images/                 # Imágenes y textos extraídos organizados por PDF ID
+├── segmenter.py                    # Script CLI para segmentación interactiva por terminal
+├── sam3.pt                         # Checkpoint de pesos de SAM 3
+├── pyproject.toml                  # Configuración de dependencias Python (uv / hatchling)
+├── start.sh                        # Script de inicio concurrente del backend y frontend
+└── package.json                    # Script principal de ejecución (npm run dev)
 ```
 
 ---
 
-## 📐 Arquitectura, Patrones de Diseño y Complejidad
+## 📡 Rutas de la API (Endpoints Backend)
 
-### 🧩 1. Patrones de Diseño Aplicados
+### 🔬 Segmentación
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| `POST` | `/api/segment` | Segmentación zero-shot con SAM 3 basada en texto o caja delimitadora. |
+| `POST` | `/api/segment-auto` | Segmentación automática multi-concepto (núcleos, lúmenes, fibras). |
+| `POST` | `/api/segment-point` | Segmentación interactiva por coordenadas de click (*Click-to-Segment*). |
+| `POST` | `/api/segment-cellpose` | Segmentación celular especializada con Cellpose / Cellpose-SAM. |
 
-- **Singleton / Resource Holder (Carga Única del Modelo)**:
-  - En `backend/main.py` ([main.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/main.py#L56-L75)), el modelo SAM 3 (`build_sam3_image_model`) y su procesador (`Sam3Processor`) se instancian una sola vez durante el evento de inicio (`lifespan`) de FastAPI y se mantienen residentes globalmente en VRAM. Esto evita la penalización severa de recargar el modelo de varios GB en cada petición HTTP.
+### 🧬 Modelos Fundacionales & LangGraph
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| `GET` | `/api/pathology-models-status` | Estado de carga en VRAM y dimensiones de CONCH, UNI y Virchow 2. |
+| `POST` | `/api/preload-model` | Precarga manual de un modelo de fundación en VRAM. |
+| `POST` | `/api/classify-conch` | Clasificación zero-shot de recortes celulares con CONCH (512d). |
+| `POST` | `/api/extract-virchow-features` | Extracción de embeddings y clustering con Virchow 2 (1280d). |
+| `POST` | `/api/gemini-multimodal-classify` | Clasificación visual multimodal con Gemini Vision. |
+| `POST` | `/api/langgraph-classify` | Ejecución del pipeline de 5 agentes con LangGraph. |
 
-- **Multi-Prompt Visual Strategy (Estrategia de Prompting en Cascada)**:
-  - Definición de una tabla de estrategias de prompts universales (`AUTO_SEGMENT_PROMPTS` en `backend/main.py`) que ejecutan de forma secuencial descripciones geométricas y biológicas (*"cell or nucleus"*, *"elongated dark nucleus"*, *"circular tissue structure"*, etc.) sobre una misma imagen para lograr la partición y segmentación automática multi-clase sin requerir pre-etiquetado manual.
+### 📄 PDFs & Ontología
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| `POST` | `/api/upload-pdf` | Extracción de texto e imágenes (embebidas y renders) desde un PDF. |
+| `POST` | `/api/generate-ontology` | Generación de ontología temática jerárquica con Gemini IA. |
+| `GET` | `/api/ontologies` | Listado de todas las ontologías persistidas en `datasets/ontologies/`. |
+| `GET` | `/api/ontology/{name}` | Obtención del documento JSON de una ontología específica. |
+| `PUT` | `/api/ontology/{name}` | Actualización y edición de estructuras de una ontología. |
+| `GET` | `/api/pdf-images/{pdf_id}` | Listado de imágenes extraídas asociadas a un PDF. |
+| `GET` | `/api/pdf-image/{pdf_id}/{filename}` | Servidor de archivos de imágenes extraídas del PDF. |
+| `POST` | `/api/pdf-images/{pdf_id}/add` | Carga de una imagen adicional al dataset del PDF. |
+| `DELETE` | `/api/pdf-images/{pdf_id}/{filename}` | Eliminación de una imagen del dataset del PDF. |
+| `PUT` | `/api/pdf-images/{pdf_id}/{filename}/caption` | Actualización del pie de figura (*caption*) de una imagen. |
+| `POST` | `/api/batch-segment-pdf` | Segmentación en lote de todas las imágenes del PDF. |
 
-- **State Pattern / In-Memory Store (Frontend)**:
-  - En `frontend/src/pages/index.astro`, se implementa una tienda centralizada en memoria mediante JavaScript `Map` (`imageStore`). Almacena los metadatos, archivos base, dimensiones y grupos de detecciones de cada imagen subida, permitiendo cambios reactivos instantáneos de imagen activa, clases y selección sin persistencia redundante en servidor.
-
-- **Factory Method**:
-  - `build_coco_json` y `build_multi_image_coco` en `backend/roboflow_integration.py` ([roboflow_integration.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/roboflow_integration.py#L158-L298)) encapsulan la construcción dinámica de payloads estructurados en formato estándar COCO Dataset (categorías, imágenes, bounding boxes y polígonos `segmentation`), permitiendo exportación individual o en lote.
-
-- **Facade / Adapter Pattern**:
-  - El módulo `roboflow_integration.py` actúa como fachada entre la API REST/UI y los servicios remotos de Roboflow. Oculta la complejidad del SDK de Roboflow, gestionando la resolución dinámica de slugs de proyectos, la subida multipart de imágenes con JSON de anotación, el versionado del dataset y el disparo de entrenamientos remotos.
-
-- **Decoupled Vector Layer Overlay (Capa de Renderizado Vectorial)**:
-  - En la interfaz web (`index.astro`), la visualización de la imagen base (`<img>`) está desglosada de la capa vectorial SVG (`<svg viewBox>`). Las modificaciones de umbral de confianza, visibilidad de clase o selección múltiple interactúan con el DOM SVG en tiempo real sin requerir renderizados en Canvas rasterizado ni re-descarga de imágenes.
+### 🚀 Roboflow & Exportación
+| Método | Endpoint | Descripción |
+| :--- | :--- | :--- |
+| `POST` | `/api/export-coco` | Conversión y descarga del dataset en formato COCO JSON estándar. |
+| `GET` | `/api/roboflow-status` | Verificación de conexión con el workspace y proyecto en Roboflow. |
+| `POST` | `/api/upload-roboflow` | Subida multipart de imágenes y anotaciones a Roboflow. |
+| `POST` | `/api/train-roboflow` | Disparo de entrenamiento de modelos de visión en Roboflow. |
 
 ---
 
-### ⏱️ 2. Controles de Complejidad Temporal (Time Complexity)
+## 📐 Arquitectura y Rendimiento
 
-- **Caché de Embeddings Visuales en SAM 3 (\(O(1)\) para prompts secundarios)**:
-  - `processor.set_image(inf_image)` en `backend/main.py` procesa el Vision Transformer (ViT) de SAM 3 sobre la imagen **una única vez**. 
-  - Las consultas consecutivas de la suite multi-prompt ejecutan `reset_all_prompts` y `set_text_prompt`, reutilizando las características visuales extraídas previamente. Esto reduce la complejidad temporal de prompts adicionales de \(O(\text{ViT Backbone Heavy Forward})\) a \(O(\text{Text Encoder} + \text{Cross-Attention})\), acelerando la inferencia multi-clase de segundos a milisegundos por prompt.
+### ⏱️ Complejidad Temporal (Time Complexity)
+1. **Caché de Embeddings Visuales en SAM 3 (\(O(1)\) para prompts secundarios)**:
+   * El Vision Transformer (ViT) procesa la imagen una sola vez (`processor.set_image`).
+   * Los prompts de texto o puntos subsiguientes reutilizan el mapa de características visuales en memoria, reduciendo el costo de inferencia de \(O(\text{ViT Backbone Forward})\) a \(O(\text{Cross-Attention})\).
+2. **Simplificación Poligonal Ramer-Douglas-Peucker (\(O(P_{\text{denso}}) \to O(P_{\text{aprox}})\))**:
+   * Algoritmo `cv2.approxPolyDP` (`epsilon=1.5`) reduce contornos de miles de píxeles a polígonos vectoriales livianos (10–30 vértices), acelerando el renderizado SVG en el navegador y reduciendo el tamaño del payload JSON.
+3. **Filtrado Reactivo en Cliente (\(O(N)\))**:
+   * El slider de umbral filtra las \(N\) detecciones directamente en memoria en JavaScript en \(O(N)\), eliminando llamadas de red y re-inferencias innecesarias en PyTorch.
 
-- **Filtrado de Umbral en Tiempo Real en Cliente (\(O(N)\) local vs. \(O(\text{Inferencia HTTP})\))**:
-  - El backend retorna todas las detecciones candidatas a un umbral bajo (0.01). El frontend almacena las \(N\) detecciones en memoria y aplica filtrado instantáneo al mover el slider de confianza mediante iteración lineal simple (\(O(N)\) en JavaScript). Esto elimina la latencia de red y evita re-ejecutar la inferencia del modelo PyTorch.
-
-- **Simplificación Poligonal Ramer-Douglas-Peucker (\(O(P_{\text{denso}}) \to O(P_{\text{aprox}})\))**:
-  - Uso de `cv2.approxPolyDP` en `mask_to_polygons` ([main.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/main.py#L124-L171)) con tolerancia `epsilon=1.5`. Reduce el número de vértices de los contornos extraídos de miles de píxeles contiguos (\(O(P_{\text{denso}})\)) a listas compactas de 10-30 puntos (\(O(P_{\text{aprox}})\)). Esto acelera drásticamente el renderizado SVG en el cliente, la serialización JSON y la velocidad de transferencia HTTP.
-
-- **Estructuras de Datos con Búsqueda en Tiempo Constante (\(O(1)\))**:
-  - Uso intensivo de `Set` (`selectedDetections`, `hiddenCategories`) y `Map` (`imageStore`) en el cliente para operaciones de adición, borrado y verificación de visibilidad/selección en \(O(1)\) sin recorridos de arreglos \(O(N)\).
-  - Deduplicación de categorías en COCO mediante búsquedas por llave en diccionarios Python (\(O(1)\)).
-
----
-
-### 💾 3. Controles de Complejidad Espacial y Optimización VRAM (Space Complexity)
-
-- **Redimensionamiento Controlado para Inferencia (`MAX_INFERENCE_DIM = 1440`)**:
-  - En `_prepare_image_for_inference` ([main.py](file:///run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/backend/main.py#L234-L255)), las imágenes gigapíxel o de alta resolución se redimensionan proporcionalmente a un máximo de 1440px antes de pasar a la red neuronal.
-  - Mantiene el consumo espacial de memoria VRAM acotado en \(O(\text{MAX\_DIM}^2)\) en lugar de escalar cuadráticamente con resoluciones arbitrarias del usuario (\(O(W \times H)\)), evitando errores de Out-Of-Memory (OOM) en la GPU. Las coordenadas de detecciones se reescalan linealmente (`scale_x`, `scale_y`) a las dimensiones originales sin pérdida de precisión.
-
-- **Gestión de Segmentos de Memoria CUDA (`PYTORCH_CUDA_ALLOC_CONF`)**:
-  - Configuración inicial `os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"` para prevenir la fragmentación de memoria en la VRAM de la GPU (ej. NVIDIA RTX 3060) durante múltiples peticiones consecutivas.
-
-- **Inferencia en Precisión Mixta (`bfloat16` + `torch.inference_mode()`)**:
-  - **`torch.bfloat16`**: Reduce en un 50% el espacio ocupado por tensores y mapas de activación en VRAM en comparación con `float32`.
-  - **`torch.inference_mode()`**: Inhabilitación total del rastreo del grafo de autograd y gradientes de PyTorch, fijando la complejidad espacial del pase forward en estricto \(O(1)\) respecto a la memoria retenida.
-
-- **Liberación Activa de Caché VRAM (`torch.cuda.empty_cache()`)**:
-  - Invocación explícita de `torch.cuda.empty_cache()` al finalizar cada endpoint de inferencia (`/api/segment-auto`, `/api/segment-point`) y en el apagado del servidor (`lifespan`), previniendo fugas de memoria en la GPU.
-
-- **Stream en Memoria y Limpieza de Disco**:
-  - Procesamiento de archivos de imagen vía `io.BytesIO` sin persistencia temporal redundante en disco durante las llamadas a la API.
-  - Creación de directorios aislados con `tempfile.mkdtemp` para la subida a Roboflow, asegurando la eliminación garantizada mediante `shutil.rmtree` en bloques `try...finally`.
+### 💾 Complejidad Espacial y Gestión de Memoria GPU (Space Complexity)
+1. **Dynamic VRAM Swapping**:
+   * Descarga selectiva de tensores a CPU (`.to("cpu")`) y limpieza de fragmentación con `torch.cuda.empty_cache()` al alternar entre SAM 3 y Cellpose-SAM.
+2. **Inferencia en Precisión Mixta (`bfloat16` + `torch.inference_mode()`)**:
+   * Reduce el consumo de VRAM en un 50% frente a Float32.
+   * `torch.inference_mode()` deshabilita el grafo de autograd, fijando la memoria retenida en \(O(1)\).
+3. **Escalado Acotado (`MAX_INFERENCE_DIM = 1440`)**:
+   * Previene desbordamientos de memoria en imágenes gigapíxel escalando proporcionalmente antes de la inferencia y reescalando las coordenadas de salida sin pérdida de precisión.
 
 ---
 
 ## 🛠️ Requisitos Previos
 
-1. **Python**: Version 3.10 o 3.12 con soporte PyTorch y CUDA (GPU recomendada para SAM 3).
-2. **Node.js**: Version 18 o superior.
-3. **Acceso a SAM 3 en Hugging Face**: Debes tener acceso aprobado en [facebook/sam3](https://huggingface.co/facebook/sam3) y haber ejecutado `huggingface-cli login`.
-4. **Cuenta en Roboflow**: API Key y un proyecto configurado en Roboflow (tipo *Instance Segmentation* u *Object Detection*).
+1. **Sistema Operativo**: Linux (Ubuntu 20.04+, Debian, Arch, Fedora) o Windows con WSL2.
+2. **GPU NVIDIA**: Tarjeta gráfica compatible con CUDA (RTX 3050, 3060, 4060 o superior recomendada).
+3. **Python**: Versión `>= 3.10` (recomendado Python 3.12).
+4. **Node.js**: Versión `>= 18.0.0`.
+5. **Administrador de paquetes uv**: [uv de Astral](https://github.com/astral-sh/uv) para resolución ultra-rápida de dependencias Python.
+6. **Credenciales de API**:
+   * **Google Gemini API Key**: Para extracción de ontologías y razonamiento agéntico en LangGraph.
+   * **Hugging Face Token**: Para descargar checkpoints de SAM 3.1, CONCH, UNI y Virchow 2.
+   * **Roboflow API Key** *(opcional)*: Para exportación y entrenamiento remoto.
 
 ---
 
-## ⚙️ Configuración e Instalación
+## ⚙️ Instalación y Configuración
 
 ### 1. Variables de Entorno
-Crea un archivo `.env` en la raíz del proyecto basándote en `.env.example`:
+Copia la plantilla `.env.example` a `.env` y completa tus credenciales:
 
 ```env
+# Gemini API Key para Ontologías y LangGraph
+GEMINI_API_KEY=AIzaSy...
+
+# Hugging Face Token para SAM 3.1 y Modelos Fundacionales
+HF_TOKEN=hf_...
+
+# Roboflow (Opcional)
 ROBOFLOW_API_KEY=tu_api_key_privada
 ROBOFLOW_WORKSPACE=nombre_de_tu_workspace
 ROBOFLOW_PROJECT=nombre_de_tu_proyecto
 ```
 
-### 2. Entorno Python y Dependencias
-Asegúrate de tener configurado tu entorno virtual (ej. `.venv`):
-
+### 2. Instalación de Dependencias con uv
 ```bash
-# Activar entorno virtual
-source .venv/bin/activate
-
-# Instalar dependencias requeridas
-pip install roboflow python-dotenv opencv-python-headless "numpy>=1.26,<2"
+# Sincronizar el entorno virtual de Python con todas las dependencias
+uv sync
 ```
 
-### 3. Dependencias del Frontend
+### 3. Dependencias de Node.js (Frontend)
 ```bash
 cd frontend
 npm install
@@ -161,41 +270,53 @@ cd ..
 
 ---
 
-## 🚀 Ejecución del Proyecto
+## 🚀 Puesta en Marcha
 
-Puedes iniciar el backend y el frontend simultáneamente ejecutando un único comando desde la raíz del proyecto:
+Para iniciar el Backend (FastAPI en puerto `8000`) y el Frontend (Astro en puerto `4321`) simultáneamente con un solo comando:
 
 ```bash
 npm run dev
 ```
 
-o directamente mediante el script bash:
+o mediante el script de arranque directo:
 
 ```bash
-bash ./start.sh
+./start.sh
 ```
 
-### Puertos por Defecto:
-- **Frontend (Astro)**: [http://localhost:4321](http://localhost:4321)
-- **Backend API (FastAPI)**: [http://localhost:8000](http://localhost:8000)
+### URLs de Acceso:
+* 🌐 **Frontend Web**: [http://localhost:4321](http://localhost:4321)
+* 📡 **API Backend & Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## 💻 Flujo de Trabajo Sugerido
+## 💻 Flujo de Trabajo Paso a Paso
 
-1. **Cargar Imágenes**: Abre la app en el navegador ([http://localhost:4321](http://localhost:4321)) y arrastra tus fotos de histología o microscopía.
-2. **Segmentación**: SAM 3 procesará la imagen automáticamente extrayendo clases y polígonos.
-3. **Renombrar Clases**: Ve a la pestaña **Clases** y renombrá *"Clase 1"*, *"Clase 2"* con sus nombres biológicos reales.
-4. **Curar Detecciones**:
-   - Haz click en detecciones erróneas y presiona `Delete` para borrarlas.
-   - Selecciona detecciones y cámbialas de clase mediante el menú desplegable o click derecho.
-5. **Exportar / Entrenar**:
-   - Ve a la pestaña **Exportar**.
-   - Haz click en **Descargar COCO JSON** para guardar la copia local, o
-   - Haz click en **Subir a Roboflow** y luego en **Entrenar Modelo** para iniciar el entrenamiento remoto.
+1. **Subida de Imágenes o PDFs**:
+   * En la pestaña **`🖼️ Imágenes`**, sube micrografías locales mediante arrastrar y soltar.
+   * En la pestaña **`📄 PDFs & Ontología`**, sube un paper o libro en PDF para extraer automáticamente figuras, texto y generar la ontología biológica con Gemini IA.
+2. **Selección de Motor de Segmentación**:
+   * Elige **Meta SAM 3.1** para segmentación guiada por texto o click interactivo.
+   * Elige **Cellpose-SAM** (`cpsam`) para cortes celulares densos.
+3. **Segmentación**:
+   * Haz click en **`⚡ Segmentar Elementos`**, **`⚡ Auto-Segmentar`** o activa **`🖱️ Modo Click`** para segmentar estructuras individuales haciendo click sobre ellas.
+4. **Refinamiento Multi-Agente con LangGraph**:
+   * Pulsa **`⚡ Multi-Agente LangGraph`** para que el pipeline de 5 nodos analice las marcas de la lámina, calcule la morfometría y clasifique los recortes con **CONCH (512d)** y **Virchow 2 (1280d)**.
+5. **Curación y Edición Manual**:
+   * Selecciona detecciones (`Shift + Click` o `Ctrl + A`).
+   * Reasigna categorías con click derecho o el panel de clases.
+   * Elimina falsos positivos con `Delete` o `Backspace`.
+6. **Exportación y Entrenamiento**:
+   * Descarga el dataset en formato **COCO JSON**.
+   * O súbelo directamente a **Roboflow** para entrenar tus modelos YOLOv8 / YOLOv11 en la nube.
 
 ---
 
-## 🛡️ Licencia y Créditos
-- **Modelo SAM 3**: Desenvolupado por Meta AI.
-- **Integración y UI**: Desarrollado para segmentación e inspección histológica de precisión.
+## 🛡️ Licencias y Agradecimientos
+
+* **Meta SAM 3.1**: Desarrollado por Meta AI Research.
+* **Cellpose / Cellpose-SAM**: Desarrollado por Carsen Stringer, Marius Pachitariu et al.
+* **CONCH & UNI**: Mahmood Lab (Harvard Medical School / Brigham and Women's Hospital).
+* **Virchow 2**: Paige AI.
+* **LangGraph & Gemini**: LangChain & Google DeepMind.
+* **Roboflow**: Roboflow Inc.

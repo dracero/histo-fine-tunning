@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import warnings
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Generator
 
 # Ensure backend and root are in sys.path for direct imports
@@ -28,6 +29,9 @@ if os.getenv("HF_TOKEN"):
     os.environ["HUGGING_FACE_HUB_TOKEN"] = os.getenv("HF_TOKEN")
     os.environ["HF_TOKEN"] = os.getenv("HF_TOKEN")
 
+import starlette.datastructures
+import starlette.formparsers
+import starlette.requests
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -35,6 +39,57 @@ from PIL import Image
 import torch
 import numpy as np
 import cv2
+
+# Configure high payload limits for Starlette multipart form parsers (default in Starlette is 1024KB / 1MB).
+# Pathology WSI crops, embeddings, high-resolution mask polygons, and multi-annotation JSON payloads
+# frequently exceed 1MB.
+DEFAULT_MAX_PART_SIZE: int = 100 * 1024 * 1024  # 100 MB
+DEFAULT_MAX_FIELDS: int = 50000
+DEFAULT_MAX_FILES: int = 10000
+
+starlette.formparsers.MultiPartParser.max_part_size = DEFAULT_MAX_PART_SIZE
+starlette.formparsers.MultiPartParser.spool_max_size = DEFAULT_MAX_PART_SIZE
+starlette.formparsers.FormParser.max_part_size = DEFAULT_MAX_PART_SIZE
+
+_orig_get_form = starlette.requests.Request._get_form
+
+
+async def _patched_get_form(
+    self: starlette.requests.Request,
+    *,
+    max_files: int | float = DEFAULT_MAX_FILES,
+    max_fields: int | float = DEFAULT_MAX_FIELDS,
+    max_part_size: int = DEFAULT_MAX_PART_SIZE,
+) -> starlette.datastructures.FormData:
+    return await _orig_get_form(
+        self,
+        max_files=max_files,
+        max_fields=max_fields,
+        max_part_size=max_part_size,
+    )
+
+
+starlette.requests.Request._get_form = _patched_get_form
+
+_orig_form = starlette.requests.Request.form
+
+
+def _patched_form(
+    self: starlette.requests.Request,
+    *,
+    max_files: int | float = DEFAULT_MAX_FILES,
+    max_fields: int | float = DEFAULT_MAX_FIELDS,
+    max_part_size: int = DEFAULT_MAX_PART_SIZE,
+) -> Any:
+    return _orig_form(
+        self,
+        max_files=max_files,
+        max_fields=max_fields,
+        max_part_size=max_part_size,
+    )
+
+
+starlette.requests.Request.form = _patched_form
 
 # Suppress non-fatal deprecation warnings from third-party libraries
 warnings.filterwarnings("ignore", category=FutureWarning)

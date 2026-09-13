@@ -35,12 +35,10 @@ dependencies = [
     "regex>=2023.12.25",
     "tqdm>=4.66.0",
     "psutil>=5.9.0",
-    # PDF Extraction & LLM Ontology
+    # PDF Extraction
     "pymupdf>=1.24.0",
-    "google-genai>=0.1.0",
-    # Multi-Agent Workflow
-    "langgraph>=0.2.0",
-    "langchain-core",
+    # FAISS Similarity Search (CPU — sufficient for <10k vectors per image)
+    "faiss-cpu>=1.7.4",
     # Roboflow & Utilities
     "python-dotenv>=1.0.0",
     "roboflow>=1.1.0",

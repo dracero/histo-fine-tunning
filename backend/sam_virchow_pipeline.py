@@ -103,6 +103,7 @@ class SamVirchowPipeline:
             "model": self.sam_weights_path,
             "quantize": 16 if self.device.type == "cuda" else 32,
             "save": False,
+            "imgsz": 644,
         }
         self.predictor = SAM3SemanticPredictor(overrides=overrides)
         logger.info("✅ SAM 3 Predictor ready.")

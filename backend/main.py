@@ -146,6 +146,7 @@ from pdf_ontology import (
     delete_pdf_image,
     merge_ontology_structures,
     is_histology_ontology,
+    validate_spatial_rules,
     PDF_IMAGES_DIR,
 )
 
@@ -164,13 +165,6 @@ from pathology_models import (
     filter_cellular_candidate_classes,
 )
 
-# Import Dynamic Multimodal LLM Vision Assistant (Gemini 2.5 Flash)
-from gemini_vision import (
-    refine_prompt_multimodal,
-    discover_visual_primitives_from_image,
-    classify_with_multimodal_gemini_fusion,
-)
-
 # Import Cellpose & Cellpose-SAM Histological Segmentation Module
 from cellpose_segmenter import (
     is_cellpose_available,
@@ -181,11 +175,12 @@ from cellpose_segmenter import (
     offload_cellpose_to_cpu,
 )
 
-# Import LangGraph Multi-Agent Histopathology Workflow
-from histology_graph import (
-    HistologyMultiAgentPipeline,
-    build_histology_graph,
-)
+# Import FAISS Semantic Similarity Labeler for Histology
+from faiss_similarity_labeler import FAISSSimilarityLabeler
+try:
+    import faiss
+except ImportError:
+    faiss = None
 
 # Import Automated Histology Labeling Pipeline
 from histology_autolabel import HistologyAutoLabeler
@@ -314,6 +309,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     "model": model_file,
                     "quantize": 16,
                     "save": False,
+                    "imgsz": 644,
                 })
                 logger.info(f"Ultralytics SAM3SemanticPredictor loaded successfully from '{model_file}'.")
         except Exception as e:
@@ -746,6 +742,7 @@ async def segment_image(
                 try:
                     if hasattr(sam3_semantic_predictor, "args") and sam3_semantic_predictor.args is not None:
                         sam3_semantic_predictor.args.conf = float(umbral)
+                        sam3_semantic_predictor.args.imgsz = 644
                     sam3_semantic_predictor.set_image(pil_image)
                     results = sam3_semantic_predictor(text=concept_list)
                     detections = _extract_detections_ultralytics(
@@ -838,6 +835,37 @@ async def segment_auto(
     try:
         contents = await image.read()
 
+        # Dual-Scale Automated Histology Pipeline (Macro SAM 3.1 + Micro Cellpose + Gemini)
+        if (ontology_name and ontology_name.strip()) or model_engine == "dual":
+            logger.info(f"Executing Dual-Scale Pipeline (Macro SAM 3.1 + Micro Cellpose + Gemini) for ontology '{ontology_name}'...")
+            pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+            labeler = HistologyAutoLabeler(
+                default_cellpose_model=cellpose_model,
+                sam3_predictor=sam3_semantic_predictor,
+                sam3_processor=processor,
+            )
+            autolabel_res = labeler.autolabel_single_image(
+                image=pil_image,
+                image_filename=image.filename or "histology_image.png",
+                ontology_name=ontology_name.strip() if ontology_name else None,
+                cellpose_model=cellpose_model,
+                cell_diameter=cell_diameter,
+                confidence_threshold=float(umbral),
+                use_gemini_validation=True,
+                include_macro_layers=True,
+            )
+            return {
+                "width": autolabel_res.get("width", pil_image.width),
+                "height": autolabel_res.get("height", pil_image.height),
+                "groups": autolabel_res.get("groups", []),
+                "total_detections": autolabel_res.get("total_detections", 0),
+                "macro_layers_count": autolabel_res.get("macro_layers_count", 0),
+                "cells_count": autolabel_res.get("cells_count", 0),
+                "inference_time_seconds": autolabel_res.get("execution_time_seconds", 0.0),
+                "umbral": umbral,
+                "is_histology": True,
+            }
+
         # Engine Branch 1: Cellpose / Cellpose-SAM Histology Segmenter
         if model_engine in ("cellpose", "cpsam"):
             if not is_cellpose_available():
@@ -870,18 +898,12 @@ async def segment_auto(
                 prompts_to_run = list(ont_prompts)
                 logger.info(f"Loaded {len(prompts_to_run)} dynamic prompts from ontology '{ontology_name}'")
 
-        # B. Priority 2: If no ontology is available, discover visual structures dynamically with Gemini Vision
-        if not prompts_to_run:
-            logger.info("No ontology specified or empty. Using Gemini Vision for dynamic visual structure discovery...")
-            prompts_to_run = discover_visual_primitives_from_image(pil_image)
-
-        # C. User custom prompt refinement (multimodal)
+        # B. Priority 2: If no ontology, use user custom prompt or histology defaults
         if custom_prompt and custom_prompt.strip():
             cp_text = custom_prompt.strip()
-            refined_cp = refine_prompt_multimodal(pil_image, cp_text, prompts_to_run)
             prompts_to_run.insert(0, {
                 "key": f"custom_{len(prompts_to_run) + 1}",
-                "prompt": refined_cp,
+                "prompt": cp_text,
                 "label": cp_text,
                 "color": "#a855f7",
             })
@@ -941,6 +963,7 @@ async def segment_auto(
                 concept_texts = [p.get("prompt", "") for p in prompts_to_run if p.get("prompt")]
                 if hasattr(sam3_semantic_predictor, "args") and sam3_semantic_predictor.args is not None:
                     sam3_semantic_predictor.args.conf = float(umbral)
+                    sam3_semantic_predictor.args.imgsz = 644
                 sam3_semantic_predictor.set_image(pil_image)
                 results = sam3_semantic_predictor(text=concept_texts)
                 all_raw_detections = _extract_detections_ultralytics(
@@ -1320,6 +1343,46 @@ async def update_ontology(name: str, payload: Dict[str, Any] = Body(...)) -> Dic
         raise HTTPException(status_code=404, detail=f"Ontología '{name}' no encontrada.")
 
     return {"success": True, "ontology": updated}
+
+
+@app.post("/api/validate-spatial-ontology")
+async def validate_spatial_ontology_endpoint(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """
+    Validate cell/micro detections against segmented macro-structure boundaries
+    according to the spatial ontology rules (e.g. spermatozoa forbidden in basement membrane).
+    """
+    detections = payload.get("detections", [])
+    macro_annotations = payload.get("macro_annotations", [])
+    domain = payload.get("domain")
+    custom_rules = payload.get("spatial_rules", {})
+
+    rules_lookup: Dict[str, Dict[str, Any]] = {}
+    if domain:
+        ont = load_ontology(domain)
+        if ont:
+            for s in ont.get("micro_structures", []):
+                if s.get("key") and s.get("spatial_rules"):
+                    rules_lookup[s["key"].lower()] = s["spatial_rules"]
+            for s in ont.get("structures", []):
+                if not s.get("is_macro") and s.get("key") and s.get("spatial_rules"):
+                    rules_lookup[s["key"].lower()] = s["spatial_rules"]
+
+    # Merge custom rules if passed in payload
+    if isinstance(custom_rules, dict):
+        for k, v in custom_rules.items():
+            if isinstance(v, dict):
+                rules_lookup[k.lower()] = v
+    elif isinstance(custom_rules, list):
+        for r in custom_rules:
+            if isinstance(r, dict) and r.get("micro_key"):
+                rules_lookup[r["micro_key"].lower()] = r
+
+    result = validate_spatial_rules(
+        detections=detections,
+        macro_annotations=macro_annotations,
+        spatial_rules_lookup=rules_lookup,
+    )
+    return {"success": True, **result}
 
 
 @app.get("/api/pdf-images/{pdf_id}")
@@ -1715,102 +1778,36 @@ async def classify_dino_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/classify-multimodal-gemini")
-async def classify_multimodal_gemini_endpoint(
+# ======================== FAISS Semantic Similarity Labeling ========================
+
+# Global labeler instance (per-session, holds the FAISS index and prototypes)
+_similarity_labeler: Optional[FAISSSimilarityLabeler] = None
+_similarity_image_hash: Optional[str] = None  # Track which image the index was built for
+
+
+def _get_image_hash(contents: bytes) -> str:
+    """Fast hash for cache-invalidating the FAISS index when image changes."""
+    import hashlib
+    return hashlib.sha256(contents[:8192]).hexdigest()[:16]
+
+
+@app.post("/api/similarity/build-index")
+async def similarity_build_index(
     image: UploadFile = File(...),
     detections: str = Form(...),
-    classes: Optional[str] = Form(None),
-    ontology_name: Optional[str] = Form(None),
+    model: str = Form("virchow"),
 ) -> Dict[str, Any]:
     """
-    Multimodal Agentic Classification:
-    Fuses Gemini Multimodal Spatial Vision + Virchow 2 (1280d) Texture + CONCH (512d) Embeddings.
+    Build FAISS embedding index for all detections in the image.
+
+    This must be called before any similarity search or label propagation.
+    Uses pathology foundation models (Virchow2 1280d / UNI 1024d / CONCH 512d)
+    to extract embeddings for each segmented cell crop.
     """
-    try:
-        contents = await image.read()
-        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+    global _similarity_labeler, _similarity_image_hash
 
-        try:
-            detections_list = json.loads(detections) if isinstance(detections, str) else detections
-        except Exception as json_err:
-            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+    prepare_engine_vram("autolabel")
 
-        if not isinstance(detections_list, list):
-            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
-
-        candidate_classes = []
-        if classes and classes.strip():
-            try:
-                candidate_classes = json.loads(classes)
-            except Exception as parse_err:
-                logger.warning(f"Failed to parse candidate classes: {parse_err}")
-                candidate_classes = []
-
-        # Load ontology doc if available
-        ont_doc = None
-        if ontology_name and ontology_name.strip():
-            ont_doc = load_ontology(ontology_name.strip())
-            if ont_doc and "structures" in ont_doc and not candidate_classes:
-                candidate_classes = ont_doc["structures"]
-
-        classified = classify_with_multimodal_gemini_fusion(
-            image=pil_image,
-            detections=detections_list,
-            candidate_classes=candidate_classes,
-            ontology_name=ontology_name,
-            ontology_context=ont_doc,
-        )
-
-        return {
-            "success": True,
-            "total_classified": len(classified),
-            "detections": classified,
-            "fusion_mode": "Gemini Multimodal Vision + Paige AI Virchow 2 (1280d) + CONCH (512d)",
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in Multimodal Gemini classification: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ======================== LangGraph Multi-Agent Workflow ========================
-
-@app.get("/api/pipeline/agentic-status")
-def agentic_status() -> Dict[str, Any]:
-    """Check LangGraph Multi-Agent Histopathology Workflow status."""
-    has_gemini = bool(os.environ.get("GEMINI_API_KEY"))
-    return {
-        "status": "ready",
-        "framework": "LangGraph + Gemini 2.5/3.1 + CONCH + Virchow 2",
-        "gemini_configured": has_gemini,
-        "nodes": [
-            "ontology_reader",
-            "image_label_detector",
-            "segmentation_cropper",
-            "foundation_matcher",
-            "final_classifier",
-        ],
-    }
-
-
-@app.post("/api/pipeline/agentic-classify")
-async def pipeline_agentic_classify(
-    image: UploadFile = File(...),
-    detections: str = Form(...),
-    classes: Optional[str] = Form(None),
-    ontology_name: Optional[str] = Form(None),
-    raw_ontology: Optional[str] = Form(None),
-    user_context_hint: Optional[str] = Form(None),
-) -> Dict[str, Any]:
-    """
-    Run the LangGraph Multi-Agent Histopathology Pipeline:
-    1. Read and structure active ontology (Gemini / Ontology Store).
-    2. Extract visual labels, abbreviations, letters, and arrows from the image (Gemini Vision).
-    3. Calculate morphometric descriptors and link spatial proximity hints.
-    4. Compute CONCH zero-shot similarities and Virchow 2 ViT-H 1280d embeddings.
-    5. Adjudicate cellular classes, resolve ambiguity, and assign final annotations.
-    """
     try:
         contents = await image.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
@@ -1821,47 +1818,210 @@ async def pipeline_agentic_classify(
             raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {json_err}")
 
         if not isinstance(detections_list, list):
-            raise HTTPException(status_code=400, detail="Detections must be a list of detection objects.")
+            raise HTTPException(status_code=400, detail="detections must be a JSON array.")
 
-        parsed_classes = None
-        if classes and classes.strip():
-            try:
-                parsed_classes = json.loads(classes)
-            except Exception as e:
-                logger.warning(f"Could not parse candidate classes: {e}")
+        # Build or rebuild the labeler
+        _similarity_labeler = FAISSSimilarityLabeler(primary_model=model)
+        result = _similarity_labeler.build_index(pil_image, detections_list)
+        _similarity_image_hash = _get_image_hash(contents)
 
-        parsed_raw_ontology = None
-        if raw_ontology and raw_ontology.strip():
-            try:
-                parsed_raw_ontology = json.loads(raw_ontology)
-            except Exception as e:
-                logger.warning(f"Could not parse raw_ontology: {e}")
+        return result
 
-        pipeline = HistologyMultiAgentPipeline.get_instance()
-        results = pipeline.run(
-            image=pil_image,
-            detections=detections_list,
-            ontology_name=ontology_name,
-            candidate_classes=parsed_classes,
-            raw_ontology=parsed_raw_ontology,
-            user_context_hint=user_context_hint,
-        )
-
-        return {
-            "success": True,
-            "detections": results.get("detections", []),
-            "detected_figure_labels": results.get("detected_figure_labels", []),
-            "figure_abbreviations": results.get("figure_abbreviations", {}),
-            "figure_visual_notes": results.get("figure_visual_notes", ""),
-            "classification_summary": results.get("classification_summary", {}),
-            "reasoning_log": results.get("reasoning_log", []),
-            "candidate_classes": results.get("candidate_classes", []),
-            "execution_metrics": results.get("execution_metrics", {}),
-        }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in LangGraph agentic classify pipeline: {e}", exc_info=True)
+        logger.error(f"Error building FAISS index: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/similarity/search")
+async def similarity_search(
+    detection_index: int = Form(...),
+    threshold: float = Form(0.80),
+    top_k: int = Form(0),
+    label: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Search for detections similar to a given detection.
+
+    If *label* is provided, uses the registered prototype centroid.
+    Otherwise uses the raw embedding of detection_index as query.
+    """
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(status_code=400, detail="FAISS index not built. Call /api/similarity/build-index first.")
+
+    try:
+        if label and label.strip():
+            result = _similarity_labeler.search_similar(
+                label.strip(), threshold=threshold, top_k=top_k
+            )
+            return {
+                "success": True,
+                "prototype_label": result.prototype_label,
+                "prototype_color": result.prototype_color,
+                "matches": result.matches,
+                "total_matches": len(result.matches),
+            }
+        else:
+            matches = _similarity_labeler.search_similar_by_index(
+                detection_index, threshold=threshold, top_k=top_k if top_k > 0 else 500
+            )
+            return {
+                "success": True,
+                "query_detection_index": detection_index,
+                "matches": matches,
+                "total_matches": len(matches),
+            }
+    except (ValueError, IndexError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in similarity search: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/similarity/add-prototype")
+async def similarity_add_prototype(
+    label: str = Form(...),
+    color: str = Form("#e11d48"),
+    detection_indices: str = Form(...),
+) -> Dict[str, Any]:
+    """
+    Register one or more detections as a named prototype class.
+
+    The pathologist clicks on a cell, names it (e.g. "Espermatogonia A Clara"),
+    and the system registers it as a prototype for FAISS similarity search.
+    Multiple detections can be registered for the same label to build a
+    more robust centroid (multi-prototype).
+    """
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(status_code=400, detail="FAISS index not built. Call /api/similarity/build-index first.")
+
+    try:
+        indices = json.loads(detection_indices) if isinstance(detection_indices, str) else detection_indices
+        if not isinstance(indices, list):
+            indices = [int(indices)]
+        indices = [int(i) for i in indices]
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid detection_indices: {e}")
+
+    result = _similarity_labeler.add_prototype(label.strip(), color.strip(), indices)
+    return result
+
+
+@app.delete("/api/similarity/remove-prototype/{label}")
+def similarity_remove_prototype(label: str) -> Dict[str, Any]:
+    """Remove a registered prototype by label."""
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(status_code=400, detail="FAISS index not built.")
+
+    removed = _similarity_labeler.remove_prototype(label)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Prototype '{label}' not found.")
+    return {"success": True, "removed": label}
+
+
+@app.get("/api/similarity/prototypes")
+def similarity_list_prototypes() -> Dict[str, Any]:
+    """List all registered prototypes and their metadata."""
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        return {"prototypes": []}
+
+    return {"prototypes": _similarity_labeler.list_prototypes()}
+
+
+@app.post("/api/similarity/propagate-label")
+async def similarity_propagate_label(
+    label: str = Form(...),
+    detections: str = Form(...),
+    threshold: float = Form(0.80),
+) -> Dict[str, Any]:
+    """
+    Propagate a single prototype's label to all similar detections.
+
+    Mutates the detections array and returns the updated version with
+    category_name, color, similarity_score set on matched items.
+    """
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(status_code=400, detail="FAISS index not built.")
+
+    try:
+        detections_list = json.loads(detections) if isinstance(detections, str) else detections
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {e}")
+
+    try:
+        updated, num_labeled = _similarity_labeler.propagate_label(
+            label.strip(), detections_list, threshold=threshold
+        )
+        return {
+            "success": True,
+            "label": label.strip(),
+            "num_labeled": num_labeled,
+            "detections": updated,
+        }
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/similarity/propagate-all")
+async def similarity_propagate_all(
+    detections: str = Form(...),
+    threshold: float = Form(0.80),
+) -> Dict[str, Any]:
+    """
+    Propagate labels from ALL registered prototypes to similar detections.
+
+    Winner-takes-all: if a detection matches multiple prototypes, the one
+    with the highest cosine similarity wins.
+    """
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(status_code=400, detail="FAISS index not built.")
+
+    try:
+        detections_list = json.loads(detections) if isinstance(detections, str) else detections
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {e}")
+
+    result = _similarity_labeler.propagate_all_labels(detections_list, threshold=threshold)
+    return result
+
+
+@app.post("/api/similarity/auto-cluster")
+async def similarity_auto_cluster(
+    n_clusters: int = Form(5),
+) -> Dict[str, Any]:
+    """
+    Run unsupervised k-means clustering over the FAISS embeddings.
+
+    Returns suggested groups without any user-labeled prototypes.
+    Useful as a starting point for the pathologist to review.
+    """
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(status_code=400, detail="FAISS index not built.")
+
+    try:
+        clusters = _similarity_labeler.auto_cluster(n_clusters=n_clusters)
+        return {
+            "success": True,
+            "n_clusters": len(clusters),
+            "clusters": clusters,
+        }
+    except Exception as e:
+        logger.error(f"Auto-cluster error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1989,8 +2149,8 @@ def autolabel_status_endpoint() -> Dict[str, Any]:
         "cellpose": get_cellpose_status(),
         "pathology_models": get_pathology_models_status(),
         "ontologies": list_ontologies(),
-        "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")),
-        "pipeline": "HistologyAutoLabeler (Cellpose-SAM + CONCH + Virchow 2 + UNI + Lunit DINO + Gemini)",
+        "faiss_available": faiss is not None,
+        "pipeline": "FAISS Similarity (Cellpose-SAM + Virchow 2 + UNI + CONCH)",
     }
 
 
@@ -2004,11 +2164,13 @@ async def autolabel_endpoint(
     confidence_threshold: float = Form(0.50),
     uncertainty_threshold: float = Form(0.30),
     use_gemini_validation: bool = Form(True),
+    include_macro_layers: bool = Form(True),
     min_area: int = Form(15),
 ) -> Dict[str, Any]:
     """
     Automated High-Precision Histology Labeling for single image.
-    Fuses Cellpose instance segmentation with Quad-Foundation Model ensemble (Virchow2 + UNI + CONCH + Lunit DINO).
+    Fuses Cellpose instance segmentation with Quad-Foundation Model ensemble (Virchow2 + UNI + CONCH + Lunit DINO)
+    and Gemini Multimodal Vision macro-layer grounding and arbitration.
     """
     prepare_engine_vram("autolabel")
     try:
@@ -2023,7 +2185,11 @@ async def autolabel_endpoint(
             except Exception as e:
                 logger.warning(f"Failed to parse raw_ontology: {e}")
 
-        labeler = HistologyAutoLabeler(default_cellpose_model=cellpose_model)
+        labeler = HistologyAutoLabeler(
+            default_cellpose_model=cellpose_model,
+            sam3_predictor=sam3_semantic_predictor,
+            sam3_processor=processor,
+        )
         result = labeler.autolabel_single_image(
             image=pil_image,
             image_filename=filename,
@@ -2034,6 +2200,7 @@ async def autolabel_endpoint(
             confidence_threshold=confidence_threshold,
             uncertainty_threshold=uncertainty_threshold,
             use_gemini_validation=use_gemini_validation,
+            include_macro_layers=include_macro_layers,
             min_area=min_area,
         )
 
@@ -2054,6 +2221,7 @@ async def autolabel_batch_endpoint(
     cell_diameter: Optional[float] = Form(None),
     confidence_threshold: float = Form(0.50),
     use_gemini_validation: bool = Form(True),
+    include_macro_layers: bool = Form(True),
     auto_upload_roboflow: bool = Form(False),
 ) -> Dict[str, Any]:
     """
@@ -2082,7 +2250,11 @@ async def autolabel_batch_endpoint(
             except Exception as e:
                 logger.warning(f"Failed to parse raw_ontology: {e}")
 
-        labeler = HistologyAutoLabeler(default_cellpose_model=cellpose_model)
+        labeler = HistologyAutoLabeler(
+            default_cellpose_model=cellpose_model,
+            sam3_predictor=sam3_semantic_predictor,
+            sam3_processor=processor,
+        )
         batch_result = labeler.autolabel_batch(
             images=loaded_images,
             ontology_name=ontology_name,
@@ -2091,6 +2263,7 @@ async def autolabel_batch_endpoint(
             cell_diameter=cell_diameter,
             confidence_threshold=confidence_threshold,
             use_gemini_validation=use_gemini_validation,
+            include_macro_layers=include_macro_layers,
         )
 
         # Upload to Roboflow if requested

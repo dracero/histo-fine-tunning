@@ -51,6 +51,7 @@
 					<!-- Tab Buttons -->
 					<div class="tab-bar">
 						<button class="tab-btn active" data-tab="images-tab">🖼️ Imágenes</button>
+						<button class="tab-btn" data-tab="similarity-tab" id="tab-btn-similarity" style="color: #c084fc;">🧬 Similaridad FAISS</button>
 						<button class="tab-btn" data-tab="pdf-tab">📄 PDFs & Ontología</button>
 						<button class="tab-btn" data-tab="classes-tab">🏷️ Clases</button>
 						<button class="tab-btn" data-tab="export-tab">🚀 Exportar</button>
@@ -147,27 +148,13 @@
 								</div>
 								<!-- Prompt suggestion tags -->
 								<div class="prompt-tags" id="prompt-tags-container" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem;">
-									<span class="prompt-chip" data-concept="large primary spermatocyte with voluminous nucleus">🔬 Espermatocito I</span>
-									<span class="prompt-chip" data-concept="secondary spermatocyte with spherical nucleus">🔬 Espermatocito II</span>
-									<span class="prompt-chip" data-concept="mature spermatozoon with elongated head in lumen">🩸 Espermatozoide</span>
-									<span class="prompt-chip" data-concept="dome-shaped basal spermatogonia">⭕ Espermatogonia</span>
-									<span class="prompt-chip" data-concept="round or elongating spermatid">🧬 Espermátide</span>
-									<span class="prompt-chip" data-concept="cell nucleus">🔬 Núcleos</span>
-									<span class="prompt-chip" data-concept="empty circular lumen">⭕ Lumen</span>
+									<span class="prompt-chip" data-concept="cell nucleus">🔬 Células</span>
+									<span class="prompt-chip" data-concept="tubular lumen cavity">⭕ Lumen</span>
+									<span class="prompt-chip" data-concept="basement membrane boundary or wall">🧱 Membrana / Pared</span>
+									<span class="prompt-chip" data-concept="blood vessel structure">🩸 Vasos</span>
+									<span class="prompt-chip" data-concept="epithelial tissue layer">🧬 Epitelio</span>
+									<span class="prompt-chip" data-concept="stroma interstitial tissue">🕸️ Estroma</span>
 								</div>
-							</div>
-
-							<!-- Dedicated Cellular Classes & Ontology Quick Bar -->
-							<div style="margin-top: 0.45rem; padding: 0.5rem 0.65rem; background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; display: flex; flex-direction: column; gap: 0.35rem;">
-								<div style="display: flex; justify-content: space-between; align-items: center;">
-									<span style="font-size: 0.74rem; font-weight: 700; color: var(--accent-cyan);">🧬 Células del PDF / Ontología:</span>
-									<button type="button" class="load-ontology-cells-btn btn-small" style="font-size: 0.7rem; padding: 0.25rem 0.55rem; background: var(--accent-cyan); color: #000; font-weight: 700; border: none; border-radius: 4px; cursor: pointer;">
-										📥 Cargar Células
-									</button>
-								</div>
-								<p style="font-size: 0.66rem; color: var(--text-muted); margin: 0;">
-									Carga espermatocitos, espermatozoides, espermatogonias y espermátides para clasificar con CONCH.
-								</p>
 							</div>
 
 							<div class="form-group">
@@ -348,14 +335,15 @@
 
 								<!-- 1. Ontology structures editor -->
 								<div id="ontology-editor" class="panel-box" style="margin-bottom: 1rem;">
-									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
 										<h3 class="section-title-sm" style="margin: 0;">🧬 Ontología del Dominio</h3>
 										<div style="display: flex; gap: 0.35rem;">
 											<button type="button" id="save-ontology-btn" class="btn-small btn-green" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">💾 Guardar</button>
 											<button type="button" id="apply-ontology-btn" class="btn-small btn-primary-action" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">🎯 Activar</button>
 										</div>
 									</div>
-									<div id="ontology-structures-list" style="max-height: 280px; overflow-y: auto;"></div>
+									<div id="ont-tissue-badge" style="font-size: 0.72rem; color: var(--accent-cyan); font-weight: 600; margin-bottom: 0.5rem;"></div>
+									<div id="ontology-structures-list" style="max-height: 380px; overflow-y: auto;"></div>
 								</div>
 
 								<!-- 2. PDF Extracted Images CRUD Gallery -->
@@ -387,6 +375,141 @@
 							</div>
 						</div>
 					</div>
+
+					<!-- ==================== FAISS SIMILARITY TAB ==================== -->
+					<div class="tab-content" id="similarity-tab">
+						<!-- 1. Engine & Index Management Card -->
+						<div class="panel-box" style="margin-bottom: 0.85rem; border-left: 3px solid #8b5cf6; background: rgba(139, 92, 246, 0.04);">
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+								<h3 class="section-title-sm" style="margin: 0; color: #c084fc; display: flex; align-items: center; gap: 0.35rem;">
+									🧬 Motor FAISS Histología
+								</h3>
+								<span id="faiss-index-status-badge" class="badge" style="background: rgba(139,92,246,0.15); color: #c084fc; border: 1px solid rgba(139,92,246,0.3); font-size: 0.68rem;">
+									⚪ Sin Indexar
+								</span>
+							</div>
+							<p style="font-size: 0.72rem; color: var(--text-muted); margin: 0 0 0.6rem 0; line-height: 1.35;">
+								Extrae embeddings morfológicos de alta dimensión (Virchow2 1280d / UNI 1024d) y encuentra todas las células idénticas por similaridad coseno directa (sin LLMs).
+							</p>
+
+							<div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.6rem;">
+								<label style="font-size: 0.72rem; color: var(--text-muted); white-space: nowrap;">Modelo:</label>
+								<select id="faiss-model-select" class="form-input-sm" style="flex: 1; font-size: 0.72rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); color: var(--text-main);">
+									<option value="virchow" selected>Virchow 2 (1280d · Óptimo para espermatogénesis y subtipos)</option>
+									<option value="uni">UNI (1024d · Balance celular y tisular)</option>
+									<option value="conch">CONCH (512d · Rápido zero-shot)</option>
+								</select>
+							</div>
+
+							<button type="button" id="faiss-tab-build-btn" class="btn-action btn-primary-action" style="width: 100%; font-size: 0.76rem; padding: 0.45rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #fff; font-weight: 600; border: none; box-shadow: 0 2px 10px rgba(168,85,247,0.35);">
+								⚡ Indexar Detecciones de Imagen Activa
+							</button>
+						</div>
+
+						<!-- 2. Active Prototype Cell Marker -->
+						<div class="panel-box" style="margin-bottom: 0.85rem;">
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+								<h3 class="section-title-sm" style="margin: 0; display: flex; align-items: center; gap: 0.35rem;">
+									🎯 Célula Prototipo
+								</h3>
+								<button type="button" id="faiss-toggle-proto-mode-btn" class="btn-small btn-outline" style="font-size: 0.68rem; padding: 0.2rem 0.45rem; color: #c084fc; border-color: rgba(192,132,252,0.4);">
+									👆 Activar Selección
+								</button>
+							</div>
+
+							<div id="faiss-no-selection-hint" style="padding: 0.65rem; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 8px; margin-bottom: 0.6rem;">
+								<p style="font-size: 0.72rem; color: var(--text-muted); margin: 0;">
+									Haz clic en cualquier célula en el visor para seleccionarla como prototipo.
+								</p>
+							</div>
+
+							<div id="faiss-selected-cell-box" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.6rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+									<span id="faiss-cell-id-text" style="font-size: 0.75rem; font-weight: 600; color: var(--accent-cyan);">Célula seleccionada</span>
+									<span id="faiss-cell-current-class" class="badge" style="font-size: 0.65rem;">Sin clasificar</span>
+								</div>
+								
+								<div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.45rem;">
+									<input type="text" id="faiss-proto-label-input" placeholder="Nombre (ej: Espermatogonia A Clara)" class="form-input-sm" style="flex: 1; font-size: 0.75rem; padding: 0.3rem 0.5rem; background: var(--bg-tertiary);" />
+									<input type="color" id="faiss-proto-color-input" value="#e11d48" style="width: 32px; height: 28px; border: 1px solid var(--border-color); border-radius: 4px; background: transparent; cursor: pointer; padding: 1px;" title="Color de la clase" />
+								</div>
+
+								<!-- Quick Histology Chips (Dynamic from Ontology / Classes) -->
+								<div style="margin-bottom: 0.5rem;" id="faiss-chips-container">
+									<span style="font-size: 0.65rem; color: var(--text-muted);">Clases del tejido / sugerencias:</span>
+									<div id="faiss-chips-list" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;">
+										<button type="button" class="faiss-chip-btn" data-label="Célula Epitelial" data-color="#3b82f6">Epitelio</button>
+										<button type="button" class="faiss-chip-btn" data-label="Célula Endotelial" data-color="#06b6d4">Endotelio</button>
+										<button type="button" class="faiss-chip-btn" data-label="Célula Muscular Lisa" data-color="#ec4899">Músculo Liso</button>
+										<button type="button" class="faiss-chip-btn" data-label="Fibroblasto / Estroma" data-color="#8b5cf6">Estroma</button>
+										<button type="button" class="faiss-chip-btn" data-label="Espermatogonia A Clara" data-color="#e11d48">Esp. A Clara</button>
+										<button type="button" class="faiss-chip-btn" data-label="Espermatocito Primario" data-color="#059669">Esp. Primario</button>
+										<button type="button" class="faiss-chip-btn" data-label="Espermatozoide" data-color="#f59e0b">Espermatozoide</button>
+									</div>
+								</div>
+
+								<div style="display: flex; gap: 0.4rem;">
+									<button type="button" id="faiss-add-proto-btn" class="btn-small btn-primary-action" style="flex: 1; font-size: 0.72rem; padding: 0.35rem 0.5rem; background: #6366f1;">
+										➕ Registrar Prototipo
+									</button>
+									<button type="button" id="faiss-search-proto-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.72rem; padding: 0.35rem 0.5rem; color: #c084fc; border-color: rgba(192,132,252,0.4);">
+										🔍 Buscar Similares
+									</button>
+								</div>
+							</div>
+
+							<!-- Search Controls & Single-Prototype Propagation -->
+							<div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+									<label style="font-size: 0.72rem; color: var(--text-muted);">Umbral Similitud Coseno:</label>
+									<span id="faiss-threshold-val" style="font-size: 0.75rem; font-weight: 700; color: #c084fc;">≥ 0.80</span>
+								</div>
+								<input type="range" id="faiss-threshold-slider" min="0.50" max="0.98" step="0.01" value="0.80" style="width: 100%; accent-color: #a855f7; margin-bottom: 0.5rem; cursor: pointer;" />
+
+								<div id="faiss-search-result-box" style="display: none; margin-bottom: 0.5rem; padding: 0.45rem 0.55rem; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 6px;">
+									<div style="display: flex; justify-content: space-between; align-items: center;">
+										<span id="faiss-search-result-text" style="font-size: 0.72rem; color: #e9d5ff; font-weight: 600;">
+											🎯 0 células encontradas
+										</span>
+										<button type="button" id="faiss-clear-matches-btn" class="btn-small btn-outline" style="font-size: 0.65rem; padding: 0.15rem 0.35rem; border: none; color: #cbd5e1;">✕ Limpiar</button>
+									</div>
+								</div>
+
+								<button type="button" id="faiss-propagate-btn" class="btn-action btn-green" style="width: 100%; font-size: 0.75rem; padding: 0.45rem; display: none;">
+									🏷️ Propagar Etiqueta a Células Similares
+								</button>
+							</div>
+						</div>
+
+						<!-- 3. Registered Prototypes Multi-Centroid Registry -->
+						<div class="panel-box" style="margin-bottom: 0.85rem;">
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+								<h3 class="section-title-sm" style="margin: 0;">📋 Clases y Prototipos</h3>
+								<span id="faiss-proto-count-badge" class="badge" style="font-size: 0.65rem;">0 clases</span>
+							</div>
+							<div id="faiss-prototypes-list" style="max-height: 220px; overflow-y: auto; margin-bottom: 0.6rem;">
+								<p class="empty-hint" style="font-size: 0.72rem;">No hay clases registradas aún.</p>
+							</div>
+							<button type="button" id="faiss-propagate-all-btn" class="btn-action btn-primary-action" style="width: 100%; font-size: 0.75rem; padding: 0.45rem; background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 600; border: none; display: none;">
+								🚀 Propagar Todas las Clases (Winner-Takes-All)
+							</button>
+						</div>
+
+						<!-- 4. Unsupervised K-Means Auto-Cluster -->
+						<div class="panel-box">
+							<h3 class="section-title-sm" style="margin: 0 0 0.35rem 0;">🧩 Clustering No Supervisado (K-Means)</h3>
+							<p style="font-size: 0.68rem; color: var(--text-muted); margin: 0 0 0.5rem 0; line-height: 1.35;">
+								Agrupa morfológicamente todas las células con embeddings FAISS sin necesidad de prototipos previos.
+							</p>
+							<div style="display: flex; gap: 0.4rem; align-items: center;">
+								<label style="font-size: 0.72rem; color: var(--text-muted);">Grupos (K):</label>
+								<input type="number" id="faiss-clusters-input" min="2" max="15" value="5" class="form-input-sm" style="width: 50px; font-size: 0.72rem; padding: 0.2rem 0.3rem;" />
+								<button type="button" id="faiss-run-cluster-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.72rem; padding: 0.3rem 0.5rem; color: #7c3aed; border-color: rgba(124,58,237,0.4);">
+									Ejecutar K-Means
+								</button>
+							</div>
+						</div>
+					</div>
 				</aside>
 
 				<!-- CENTER: Viewer -->
@@ -409,32 +532,17 @@
 								</button>
 							</div>
 							<span class="separator">|</span>
-							<button type="button" id="toggle-click-mode" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
-								👆 Modo Click (SAM 3)
+							<button type="button" id="toggle-prototype-mode" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; color: #c084fc; border-color: rgba(192,132,252,0.4); font-weight: 600;" title="Haz clic en cualquier célula para marcarla como prototipo de similaridad FAISS">
+								🎯 Modo Prototipo
 							</button>
-							<button type="button" id="toggle-draw-mode" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
-								✏️ Dibujar Polígono
+							<button type="button" id="faiss-build-index-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(168,85,247,0.35);" title="Construir índice FAISS de embeddings con Virchow2/UNI para búsqueda por similaridad semántica">
+								🔍 FAISS Similaridad
 							</button>
-							<button type="button" id="finish-polygon-btn" class="btn-small btn-green" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; display: none;">
-								✓ Finalizar Polígono
+							<button type="button" id="faiss-auto-cluster-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; color: #7c3aed; border-color: rgba(124,58,237,0.4);" title="Clustering automático k-means sobre embeddings (sugiere grupos sin prototipos)">
+								🧩 Auto-Cluster
 							</button>
-							<button type="button" class="load-ontology-cells-btn btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);" title="Cargar todas las subpoblaciones celulares del PDF">
-								🧬 Células PDF
-							</button>
-							<button type="button" id="toggle-conch-classify-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;" title="Clasificar detecciones con CONCH zero-shot (512d)">
-								🔬 CONCH
-							</button>
-							<button type="button" id="classify-dino-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #f59e0b; border-color: rgba(245,158,11,0.4);" title="Clasificar usando Lunit DINO (ViT-Small/8 preentrenado en 33M parches H&E)">
-								🦕 DINO Lunit
-							</button>
-							<button type="button" id="extract-virchow-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Ensamble Cuádruple: Virchow 2 (1280d) + UNI (1024d) + CONCH (512d) + Lunit DINO (384d)">
-								🧬 Ensamble (Virchow + UNI + CONCH + DINO)
-							</button>
-							<button type="button" id="gemini-multimodal-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(168,85,247,0.35);" title="Fusión Multimodal: Virchow 2 + UNI + CONCH + DINO + Arbitraje Gemini HD">
-								✨ Gemini + Ensamble (DINO/Virchow/CONCH)
-							</button>
-							<button type="button" id="toggle-langgraph-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #2563eb, #7c3aed); color: #ffffff; border: none; font-weight: 600; box-shadow: 0 2px 8px rgba(124,58,237,0.35);" title="Pipeline Multi-Agente: LangGraph + Gemini OCR/Etiquetas + CONCH + Virchow2 + DINO">
-								🤖 LangGraph Multi-Agente
+							<button type="button" id="validate-spatial-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; color: #10b981; border-color: rgba(16,185,129,0.4); font-weight: 600;" title="Validar que las células detectadas respeten las restricciones espaciales de la ontología anatómica (ej: no espermatozoides en membrana basal)">
+								📐 Validar Espacial
 							</button>
 							<span class="separator">|</span>
 							<label class="toggle-container">
@@ -492,6 +600,9 @@
 		<!-- Context menu -->
 		<div id="context-menu" class="context-menu" style="display: none;">
 			<div class="ctx-header" id="ctx-header">Detección</div>
+			<div class="ctx-item" id="ctx-mark-prototype" style="color: #c084fc; font-weight: 600;">🧬 Marcar como Prototipo FAISS</div>
+			<div class="ctx-item" id="ctx-search-similar" style="color: #38bdf8;">🔍 Buscar Células Similares</div>
+			<div class="ctx-separator"></div>
 			<div class="ctx-item" id="ctx-delete">🗑️ Eliminar</div>
 			<div class="ctx-separator"></div>
 			<div class="ctx-sub-header">Mover a clase:</div>
@@ -858,6 +969,65 @@
 	}
 	.modal-header h3 { margin: 0; font-size: 1rem; color: var(--text-main); }
 	.modal-body { padding: 1.25rem; }
+
+	/* FAISS Similarity System Styles */
+	.faiss-chip-btn {
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		border-radius: 4px;
+		color: #e2e8f0;
+		font-size: 0.65rem;
+		padding: 2px 7px;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.faiss-chip-btn:hover {
+		background: rgba(168, 85, 247, 0.25);
+		border-color: #a855f7;
+		color: #ffffff;
+		transform: translateY(-1px);
+	}
+	.faiss-proto-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.45rem 0.6rem;
+		background: rgba(255, 255, 255, 0.02);
+		border: 1px solid var(--border-color);
+		border-radius: 6px;
+		margin-bottom: 0.35rem;
+		transition: background 0.12s;
+	}
+	.faiss-proto-item:hover {
+		background: rgba(255, 255, 255, 0.05);
+	}
+	.det-polygon.similar-match {
+		stroke: #c084fc !important;
+		stroke-width: 3.5 !important;
+		stroke-dasharray: 6 3;
+		animation: dash-pulse 2s infinite linear;
+		filter: drop-shadow(0 0 8px rgba(192, 132, 252, 0.9));
+	}
+	.det-box.similar-match {
+		stroke: #c084fc !important;
+		stroke-width: 3.5 !important;
+		stroke-dasharray: 6 3;
+		animation: dash-pulse 2s infinite linear;
+		filter: drop-shadow(0 0 8px rgba(192, 132, 252, 0.9));
+	}
+	.det-polygon.prototype-cell {
+		stroke: #22c55e !important;
+		stroke-width: 4 !important;
+		filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.95));
+	}
+	.det-box.prototype-cell {
+		stroke: #22c55e !important;
+		stroke-width: 4 !important;
+		filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.95));
+	}
+	@keyframes dash-pulse {
+		to { stroke-dashoffset: -18; }
+	}
 </style>
 
 <script>
@@ -1510,6 +1680,9 @@
 
 				const detId = `${group.key}:${detIdx}`;
 				const isSelected = selectedDetections.has(detId);
+				const isMatched = (typeof _faissMatchedDets !== "undefined") && _faissMatchedDets.has(detId);
+				const isProto = (typeof _faissProtoDets !== "undefined") && _faissProtoDets.has(detId);
+				const detClasses = `${isSelected ? "selected" : ""} ${isMatched ? "similar-match" : ""} ${isProto ? "prototype-cell" : ""}`.trim();
 
 				// Draw polygon
 				if (showPolygons && det.segmentation && det.segmentation.length > 0) {
@@ -1520,10 +1693,10 @@
 						}
 						const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
 						polygon.setAttribute("points", points.join(" "));
-						polygon.setAttribute("class", `det-polygon ${isSelected ? "selected" : ""}`);
-						polygon.style.fill = hexToRgba(color, isSelected ? 0.35 : 0.2);
-						polygon.style.stroke = color;
-						polygon.style.strokeWidth = isSelected ? "3" : "1.5";
+						polygon.setAttribute("class", `det-polygon ${detClasses}`.trim());
+						polygon.style.fill = hexToRgba(color, isSelected ? 0.35 : (isMatched ? 0.3 : 0.2));
+						polygon.style.stroke = isProto ? "#22c55e" : (isMatched ? "#c084fc" : color);
+						polygon.style.strokeWidth = isProto ? "4" : (isSelected ? "3" : (isMatched ? "3.5" : "1.5"));
 						polygon.dataset.detId = detId;
 						addDetectionListeners(polygon, group, det, detIdx, color, label);
 						overlaySvg.appendChild(polygon);
@@ -1538,8 +1711,9 @@
 					rect.setAttribute("y", y1);
 					rect.setAttribute("width", x2 - x1);
 					rect.setAttribute("height", y2 - y1);
-					rect.setAttribute("class", `det-box ${isSelected ? "selected" : ""}`);
-					rect.style.stroke = color;
+					rect.setAttribute("class", `det-box ${detClasses}`.trim());
+					rect.style.stroke = isProto ? "#22c55e" : (isMatched ? "#c084fc" : color);
+					rect.style.strokeWidth = isProto ? "4" : (isSelected ? "3" : (isMatched ? "3.5" : "1.2"));
 					rect.dataset.detId = detId;
 					addDetectionListeners(rect, group, det, detIdx, color, label);
 					overlaySvg.appendChild(rect);
@@ -1553,8 +1727,9 @@
 					rect.setAttribute("y", y1);
 					rect.setAttribute("width", x2 - x1);
 					rect.setAttribute("height", y2 - y1);
-					rect.setAttribute("class", `det-box ${isSelected ? "selected" : ""}`);
-					rect.style.stroke = color;
+					rect.setAttribute("class", `det-box ${detClasses}`.trim());
+					rect.style.stroke = isProto ? "#22c55e" : (isMatched ? "#c084fc" : color);
+					rect.style.strokeWidth = isProto ? "4" : (isSelected ? "3" : (isMatched ? "3.5" : "1.2"));
 					rect.style.fill = hexToRgba(color, 0.08);
 					rect.dataset.detId = detId;
 					addDetectionListeners(rect, group, det, detIdx, color, label);
@@ -1610,8 +1785,11 @@
 			if (det.model_contributions && det.model_contributions.lunit_dino) {
 				scoreText += ` · 🦠 DINO: ${(det.model_contributions.lunit_dino * 100).toFixed(0)}%`;
 			}
-			if (det.gemini_confidence !== undefined && det.multimodal_fused) {
-				scoreText += ` · ✨ Gemini HD: ${(det.gemini_confidence * 100).toFixed(0)}%`;
+			if (det.similarity_score !== undefined) {
+				scoreText += ` · 🎯 FAISS: ${(det.similarity_score * 100).toFixed(1)}%`;
+			}
+			if (det.is_prototype) {
+				scoreText += ` · 🌟 Prototipo`;
 			}
 			tooltipScore.textContent = scoreText;
 			if (det.box) {
@@ -1653,6 +1831,12 @@
 			}
 			updateSelectionToolbar();
 			renderOverlay();
+			if (selectedDetections.size === 1) {
+				const [firstId] = selectedDetections;
+				if (typeof onDetectionSelectedForFaiss === "function") {
+					onDetectionSelectedForFaiss(firstId);
+				}
+			}
 		});
 
 		// Right-click context menu
@@ -1862,6 +2046,35 @@
 		contextMenu.style.display = "none";
 	});
 
+	const ctxMarkProto = document.getElementById("ctx-mark-prototype");
+	const ctxSearchSimilar = document.getElementById("ctx-search-similar");
+
+	ctxMarkProto?.addEventListener("click", () => {
+		if (contextDetId) {
+			if (typeof selectFaissPrototypeCell === "function") {
+				selectFaissPrototypeCell(contextDetId);
+			}
+			switchTab("similarity-tab");
+			setTimeout(() => {
+				document.getElementById("faiss-proto-label-input")?.focus();
+			}, 150);
+		}
+		contextMenu.style.display = "none";
+	});
+
+	ctxSearchSimilar?.addEventListener("click", async () => {
+		if (contextDetId) {
+			if (typeof selectFaissPrototypeCell === "function") {
+				selectFaissPrototypeCell(contextDetId);
+			}
+			switchTab("similarity-tab");
+			if (typeof runFaissSearchForCell === "function") {
+				await runFaissSearchForCell(contextDetId);
+			}
+		}
+		contextMenu.style.display = "none";
+	});
+
 	document.addEventListener("click", () => { contextMenu.style.display = "none"; });
 
 	// ======================= CLASSES TAB =======================
@@ -1885,11 +2098,19 @@
 			});
 
 			const isHidden = hiddenCategories.has(cls.key);
+			const macroBadge = cls.is_macro
+				? `<span title="Macroestructura anatómica (SAM 3.1)" style="font-size:0.58rem; padding: 1px 4px; border-radius: 3px; background: rgba(59, 130, 246, 0.2); color: #93c5fd; white-space: nowrap;">🏛️ Macro</span>`
+				: (cls.spatial_rules && Object.keys(cls.spatial_rules).length > 0
+					? `<span title="Microestructura celular con ontología espacial (Cellpose)" style="font-size:0.58rem; padding: 1px 4px; border-radius: 3px; background: rgba(16, 185, 129, 0.2); color: #6ee7b7; white-space: nowrap;">🔬 Micro</span>`
+					: '');
 			const item = document.createElement("div");
 			item.className = `class-item ${isHidden ? "hidden" : ""}`;
 			item.innerHTML = `
 				<span class="class-swatch" style="background:${cls.color}" title="Click para cambiar color"></span>
-				<input class="class-name" type="text" value="${cls.name}" data-key="${cls.key}" />
+				<div style="flex: 1; display: flex; align-items: center; gap: 0.35rem; min-width: 0;">
+					<input class="class-name" type="text" value="${cls.name}" data-key="${cls.key}" style="flex: 1; min-width: 60px;" />
+					${macroBadge}
+				</div>
 				<span class="class-count">${totalCount}</span>
 				<button class="class-toggle" title="${isHidden ? "Mostrar" : "Ocultar"}">${isHidden ? "👁️‍🗨️" : "👁️"}</button>
 				<button class="class-delete" title="Eliminar clase">✕</button>
@@ -1956,6 +2177,41 @@
 			});
 
 			classesList.appendChild(item);
+		});
+
+		updateFaissSuggestionChips();
+	}
+
+	function updateFaissSuggestionChips() {
+		const container = document.getElementById("faiss-chips-list");
+		if (!container) return;
+
+		const candidates = [];
+		if (classRegistry && classRegistry.length > 0) {
+			classRegistry.forEach(c => {
+				if (!candidates.find(item => item.label.toLowerCase() === c.name.toLowerCase())) {
+					candidates.push({ label: c.name, color: c.color });
+				}
+			});
+		}
+
+		if (candidates.length === 0) return;
+
+		container.innerHTML = "";
+		candidates.forEach(c => {
+			const btn = document.createElement("button");
+			btn.type = "button";
+			btn.className = "faiss-chip-btn";
+			btn.dataset.label = c.label;
+			btn.dataset.color = c.color;
+			btn.textContent = c.label;
+			btn.addEventListener("click", () => {
+				const protoInput = document.getElementById("faiss-proto-label-input");
+				const colorInput = document.getElementById("faiss-proto-color-input");
+				if (protoInput) protoInput.value = c.label;
+				if (colorInput) colorInput.value = c.color;
+			});
+			container.appendChild(btn);
 		});
 	}
 
@@ -3268,335 +3524,716 @@
 
 	extractVirchowBtn?.addEventListener("click", () => runVirchowExtraction());
 
-	// --- 4. Gemini Multimodal Vision + Virchow 2 + CONCH Fusion (Batch-Aware) ---
-	const geminiMultimodalBtn = document.getElementById("gemini-multimodal-btn");
+	// =========================================================================
+	// --- 4. FAISS SEMANTIC SIMILARITY SYSTEM FOR HISTOLOGY (PURE EMBEDDINGS) ---
+	// =========================================================================
 
-	async function runGeminiMultimodalFusion(targetKey = null) {
-		const keysToProcess = (typeof targetKey === "string" && targetKey)
-			? [targetKey]
-			: Array.from(imageStore.keys());
+	// State
+	let _faissIndexBuilt = false;
+	let _faissIndexInfo = null;
+	let _faissPrototypes = [];
+	let _faissMatchedDets = new Set(); // detIds currently matching similarity search
+	let _faissProtoDets = new Set();   // detIds registered as exemplar prototypes
+	let _faissSelectedCellDetId = null;
+	let _faissSelectedCellFlatIdx = null;
+	let _isPrototypeModeActive = false;
 
-		if (keysToProcess.length === 0) {
-			alert("No hay imágenes cargadas para analizar con Gemini.");
-			return;
-		}
+	// UI Elements
+	const faissBuildBtn = document.getElementById("faiss-build-index-btn");
+	const faissAutoClusterBtn = document.getElementById("faiss-auto-cluster-btn");
+	const faissTabBuildBtn = document.getElementById("faiss-tab-build-btn");
+	const faissModelSelect = document.getElementById("faiss-model-select");
+	const faissIndexBadge = document.getElementById("faiss-index-status-badge");
+	const faissToggleProtoModeBtn = document.getElementById("faiss-toggle-proto-mode-btn");
+	const togglePrototypeModeBtn = document.getElementById("toggle-prototype-mode");
+	const faissSelectedCellBox = document.getElementById("faiss-selected-cell-box");
+	const faissNoSelectionHint = document.getElementById("faiss-no-selection-hint");
+	const faissCellIdText = document.getElementById("faiss-cell-id-text");
+	const faissCellCurrentClass = document.getElementById("faiss-cell-current-class");
+	const faissProtoLabelInput = document.getElementById("faiss-proto-label-input");
+	const faissProtoColorInput = document.getElementById("faiss-proto-color-input");
+	const faissAddProtoBtn = document.getElementById("faiss-add-proto-btn");
+	const faissSearchProtoBtn = document.getElementById("faiss-search-proto-btn");
+	const faissThresholdSlider = document.getElementById("faiss-threshold-slider");
+	const faissThresholdVal = document.getElementById("faiss-threshold-val");
+	const faissSearchResultBox = document.getElementById("faiss-search-result-box");
+	const faissSearchResultText = document.getElementById("faiss-search-result-text");
+	const faissClearMatchesBtn = document.getElementById("faiss-clear-matches-btn");
+	const faissPropagateBtn = document.getElementById("faiss-propagate-btn");
+	const faissPrototypesList = document.getElementById("faiss-prototypes-list");
+	const faissProtoCountBadge = document.getElementById("faiss-proto-count-badge");
+	const faissPropagateAllBtn = document.getElementById("faiss-propagate-all-btn");
+	const faissClustersInput = document.getElementById("faiss-clusters-input");
+	const faissRunClusterBtn = document.getElementById("faiss-run-cluster-btn");
 
-		statusIdle.style.display = "none";
-		statusRunning.style.display = "flex";
-		let totalProcessed = 0;
-		let totalClassifiedDets = 0;
+	// 1. Helper: extract flat detections and maintain 1-to-1 index mapping with data.groups
+	function getActiveImageFlatDetections() {
+		if (!activeImageKey) return { flatDets: [], mapping: [], imageFile: null };
+		const data = imageStore.get(activeImageKey);
+		if (!data) return { flatDets: [], mapping: [], imageFile: null };
 
-		for (let idx = 0; idx < keysToProcess.length; idx++) {
-			const key = keysToProcess[idx];
-			const data = imageStore.get(key);
-			if (!data) continue;
+		const flatDets = [];
+		const mapping = []; // index in flatDets -> { groupIndex, detIndex, groupKey, detId }
 
-			if (!data.groups || data.groups.length === 0) {
-				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] Auto-segmentando ${data.filename}...`;
-				await runAutoSegmentation(key);
-			}
-
-			let allDets = [];
-			(data.groups || []).forEach((g) => {
-				if (g.detections) {
-					g.detections.forEach((d) => {
-						allDets.push({
-							...d,
-							id: d.id,
-							class_key: d.class_key || g.key,
-							class_label: d.class_label || g.label,
-							category_id: d.category_id || g.key,
-							color: d.color || g.color,
-							bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
-							box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
-							score: d.score !== undefined ? d.score : 0.95,
-						});
-					});
-				}
-			});
-
-			if (allDets.length === 0) continue;
-
-			let candidateClasses = classRegistry.map(c => ({
-				key: c.key,
-				name: c.name,
-				label: c.name,
-				prompt: c.prompt || c.name,
-				color: c.color,
-			}));
-
-			if (candidateClasses.length === 0) {
-				candidateClasses = data.groups.map(g => ({
-					key: g.key,
-					name: g.label,
-					label: g.label,
-					prompt: g.label,
-					color: g.color,
-				}));
-			}
-
-			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] ✨ Gemini + Ensamble: Analizando ${allDets.length} células en ${data.filename}...`;
-
-			try {
-				let imageFile = data.file;
-				if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
-					const arr = data.dataUrl.split(",");
-					const mime = arr[0].match(/:(.*?);/)[1];
-					const bstr = atob(arr[1]);
-					let n = bstr.length;
-					const u8arr = new Uint8Array(n);
-					while (n--) u8arr[n] = bstr.charCodeAt(n);
-					imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
-				}
-
-				const formData = new FormData();
-				formData.append("image", imageFile);
-				formData.append("detections", JSON.stringify(allDets));
-				formData.append("classes", JSON.stringify(candidateClasses));
-				if (window._activeOntologyName) {
-					formData.append("ontology_name", window._activeOntologyName);
-				}
-
-				const res = await fetch(`${API_URL}/classify-multimodal-gemini`, {
-					method: "POST",
-					body: formData,
+		(data.groups || []).forEach((g, gIdx) => {
+			(g.detections || []).forEach((d, dIdx) => {
+				if (d._deleted) return;
+				const detId = `${g.key}:${dIdx}`;
+				flatDets.push({
+					...d,
+					id: d.id || detId,
+					class_key: d.class_key || g.key,
+					class_label: d.class_label || g.label,
+					category_id: d.category_id || g.key,
+					color: d.color || g.color,
+					bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
+					box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+					segmentation: d.segmentation || [],
+					score: d.score !== undefined ? d.score : 0.95,
 				});
+				mapping.push({ groupIndex: gIdx, detIndex: dIdx, groupKey: g.key, detId });
+			});
+		});
 
-				if (!res.ok) {
-					console.warn(`Error en Gemini Multimodal ${data.filename}: ${res.status}`);
-					continue;
-				}
-
-				const result = await res.json();
-				const classified = result.detections || [];
-
-				if (classified.length > 0) {
-					const groupsMap = new Map();
-					for (let i = 0; i < classified.length; i++) {
-						const det = classified[i];
-						const origDet = allDets[i] || {};
-
-						det.segmentation = det.segmentation || origDet.segmentation || [];
-						det.box = det.box || origDet.box;
-						det.bbox = det.bbox || origDet.bbox;
-						det.score = det.score !== undefined ? det.score : (det.gemini_confidence !== undefined ? det.gemini_confidence : (origDet.score || 0.95));
-
-						const groupKey = det.class_key || det.category_id || "clase_1";
-						if (!groupsMap.has(groupKey)) {
-							groupsMap.set(groupKey, {
-								key: groupKey,
-								label: det.class_label || groupKey,
-								color: det.color || getClassColor(groupKey),
-								detections: [],
-							});
-						}
-						groupsMap.get(groupKey).detections.push(det);
-
-						if (!classRegistry.find(c => c.key === groupKey)) {
-							classRegistry.push({
-								id: classIdCounter++,
-								name: det.class_label || groupKey,
-								color: det.color || "#8b5cf6",
-								key: groupKey,
-								prompt: det.class_label || groupKey,
-							});
-						}
-					}
-					data.groups = Array.from(groupsMap.values());
-					totalClassifiedDets += classified.length;
-					totalProcessed++;
-					renderGallery();
-					updateExportStats();
-				}
-			} catch (err) {
-				console.error(`Error en Gemini Multimodal ${data.filename}:`, err);
-			}
+		let imageFile = data.file;
+		if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+			const arr = data.dataUrl.split(",");
+			const mime = (arr[0].match(/:(.*?);/) || [])[1] || "image/png";
+			const bstr = atob(arr[1]);
+			let n = bstr.length;
+			const u8arr = new Uint8Array(n);
+			while (n--) u8arr[n] = bstr.charCodeAt(n);
+			imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
 		}
 
-		if (activeImageKey) {
-			viewerControls.style.display = "flex";
-			renderOverlay();
-			updateClassesList();
-		}
-		renderGallery();
-		updateExportStats();
-
-		statusText.textContent = `✨ Gemini Multimodal Lote: ${totalProcessed} imágenes analizadas (${totalClassifiedDets} células).`;
-		setTimeout(() => {
-			statusRunning.style.display = "none";
-			statusIdle.style.display = "flex";
-		}, 3500);
+		return { flatDets, mapping, imageFile };
 	}
 
-	geminiMultimodalBtn?.addEventListener("click", () => runGeminiMultimodalFusion());
-
-	// --- 5. LangGraph Multi-Agent Workflow Runner (Batch-Aware) ---
-	async function runLangGraphClassification(targetKey = null) {
-		const keysToProcess = (typeof targetKey === "string" && targetKey)
-			? [targetKey]
-			: Array.from(imageStore.keys());
-
-		if (keysToProcess.length === 0) {
-			alert("Carga o selecciona imágenes primero.");
-			return;
+	// 2. Build FAISS Index
+	async function buildFaissIndex(model = null) {
+		if (!activeImageKey) {
+			alert("Por favor selecciona o sube una imagen histológica primero.");
+			return false;
 		}
+
+		const data = imageStore.get(activeImageKey);
+		if (!data) return false;
+
+		// Auto-segment if needed
+		if (!data.groups || data.groups.length === 0) {
+			statusIdle.style.display = "none";
+			statusRunning.style.display = "flex";
+			statusText.textContent = `🔬 Segmentando células en ${data.filename} con Cellpose-SAM...`;
+			await runAutoSegmentation(activeImageKey);
+		}
+
+		const { flatDets, imageFile } = getActiveImageFlatDetections();
+		if (flatDets.length === 0) {
+			alert("No se encontraron detecciones celulares para indexar.");
+			return false;
+		}
+
+		const chosenModel = model || (faissModelSelect ? faissModelSelect.value : "virchow");
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		let totalProcessed = 0;
-		let totalClassifiedDets = 0;
+		statusText.textContent = `🧬 Extrayendo embeddings con ${chosenModel.toUpperCase()} y construyendo índice FAISS (${flatDets.length} células)...`;
 
-		for (let idx = 0; idx < keysToProcess.length; idx++) {
-			const key = keysToProcess[idx];
-			const data = imageStore.get(key);
-			if (!data) continue;
+		if (faissIndexBadge) {
+			faissIndexBadge.textContent = "⏳ Indexando...";
+			faissIndexBadge.style.color = "#f59e0b";
+		}
 
-			let imageFile = data.file;
-			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
-				const arr = data.dataUrl.split(",");
-				const mime = (arr[0].match(/:(.*?);/) || [])[1] || "image/png";
-				const bstr = atob(arr[1]);
-				let n = bstr.length;
-				const u8arr = new Uint8Array(n);
-				while (n--) u8arr[n] = bstr.charCodeAt(n);
-				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
-			} else if (!(imageFile instanceof File || imageFile instanceof Blob) && data.url) {
-				const blob = await fetch(data.url).then(r => r.blob());
-				imageFile = new File([blob], data.filename || "image.jpg", { type: blob.type || "image/jpeg" });
-			}
-
-			if (!imageFile) continue;
-
-			// Auto-segment if needed
-			if (!data.groups || data.groups.length === 0) {
-				statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🤖 LangGraph: Auto-segmentando ${data.filename}...`;
-				await runAutoSegmentation(key);
-			}
-
-			let allDets = [];
-			(data.groups || []).forEach(g => {
-				(g.detections || []).forEach(d => {
-					allDets.push({
-						...d,
-						id: d.id,
-						class_key: d.class_key || g.key,
-						class_label: d.class_label || g.label,
-						category_id: d.category_id || g.key,
-						color: d.color || g.color,
-						bbox: d.bbox || (d.box ? [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] : null),
-						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
-						segmentation: d.segmentation || [],
-						score: d.score !== undefined ? d.score : 0.95,
-					});
-				});
-			});
-
-			if (allDets.length === 0) continue;
-
-			statusText.textContent = `[${idx + 1}/${keysToProcess.length}] 🤖 LangGraph: Analizando figuras y leyendas en ${data.filename}...`;
-
-			let candidateClasses = classRegistry.map(c => ({
-				key: c.key,
-				name: c.name,
-				label: c.name,
-				prompt: c.prompt || c.name,
-				color: c.color,
-			}));
-
-			if (candidateClasses.length === 0 && data.groups && data.groups.length > 0) {
-				candidateClasses = data.groups.map(g => ({
-					key: g.key,
-					name: g.label || g.key,
-					label: g.label || g.key,
-					prompt: g.label || g.key,
-					color: g.color,
-				}));
-			}
-
+		try {
 			const formData = new FormData();
 			formData.append("image", imageFile);
-			formData.append("detections", JSON.stringify(allDets));
-			if (candidateClasses && candidateClasses.length > 0) {
-				formData.append("classes", JSON.stringify(candidateClasses));
+			formData.append("detections", JSON.stringify(flatDets));
+			formData.append("model", chosenModel);
+
+			const res = await fetch(`${API_URL}/similarity/build-index`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const errData = await res.json().catch(() => ({}));
+				throw new Error(errData.detail || `Error HTTP ${res.status}`);
 			}
-			if (window._activeOntologyName) {
-				formData.append("ontology_name", window._activeOntologyName);
+
+			const result = await res.json();
+			_faissIndexBuilt = true;
+			_faissIndexInfo = result;
+
+			if (faissIndexBadge) {
+				faissIndexBadge.textContent = `🟢 ${result.total_detections} células (${result.model_used.toUpperCase()} ${result.embedding_dim}d)`;
+				faissIndexBadge.style.color = "#10b981";
+				faissIndexBadge.style.borderColor = "rgba(16,185,129,0.4)";
+				faissIndexBadge.style.background = "rgba(16,185,129,0.1)";
 			}
 
-			try {
-				const res = await fetch(`${API_URL}/pipeline/agentic-classify`, {
-					method: "POST",
-					body: formData,
-				});
+			statusText.textContent = `✅ Índice FAISS: ${result.total_detections} células indexadas (${result.embedding_dim}d, ${result.index_build_time_ms}ms).`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3000);
 
-				if (!res.ok) {
-					console.warn(`Error LangGraph en ${data.filename}: ${res.status}`);
-					continue;
-				}
-
-				const result = await res.json();
-				const classified = result.detections || [];
-
-				if (classified.length > 0) {
-					const groupsMap = new Map();
-					for (let i = 0; i < classified.length; i++) {
-						const det = classified[i];
-						const origDet = allDets[i] || {};
-
-						det.segmentation = det.segmentation || origDet.segmentation || [];
-						det.box = det.box || origDet.box;
-						det.bbox = det.bbox || origDet.bbox;
-						det.score = det.confidence !== undefined ? det.confidence : (origDet.score || 0.95);
-
-						const groupKey = det.class_key || det.category_id || "clase_1";
-						if (!groupsMap.has(groupKey)) {
-							groupsMap.set(groupKey, {
-								key: groupKey,
-								label: det.class_label || groupKey,
-								color: det.color || getClassColor(groupKey),
-								detections: [],
-							});
-						}
-						groupsMap.get(groupKey).detections.push(det);
-
-						if (!classRegistry.find(c => c.key === groupKey)) {
-							classRegistry.push({
-								id: classIdCounter++,
-								name: det.class_label || groupKey,
-								color: det.color || "#8b5cf6",
-								key: groupKey,
-								prompt: det.class_label || groupKey,
-							});
-						}
-					}
-					data.groups = Array.from(groupsMap.values());
-					totalClassifiedDets += classified.length;
-					totalProcessed++;
-					renderGallery();
-					updateExportStats();
-				}
-			} catch (err) {
-				console.error(`Error LangGraph ${data.filename}:`, err);
+			await refreshFaissPrototypes();
+			return true;
+		} catch (err) {
+			console.error("Error al construir índice FAISS:", err);
+			alert(`⚠️ Error al construir índice FAISS: ${err.message}`);
+			if (faissIndexBadge) {
+				faissIndexBadge.textContent = "❌ Error Indexando";
+				faissIndexBadge.style.color = "#ef4444";
 			}
-		}
-
-		if (activeImageKey) {
-			viewerControls.style.display = "flex";
-			renderOverlay();
-			updateClassesList();
-		}
-		renderGallery();
-		updateExportStats();
-
-		statusText.textContent = `🤖 LangGraph Lote: ${totalProcessed} imágenes procesadas (${totalClassifiedDets} células).`;
-		setTimeout(() => {
 			statusRunning.style.display = "none";
 			statusIdle.style.display = "flex";
-		}, 3500);
+			return false;
+		}
 	}
 
-	langgraphClassifyBtn?.addEventListener("click", () => runLangGraphClassification());
-	toggleLanggraphBtn?.addEventListener("click", () => runLangGraphClassification());
+	// 3. Select Prototype Cell on canvas or list
+	function selectFaissPrototypeCell(detId) {
+		if (!detId) return;
+		const { mapping, flatDets } = getActiveImageFlatDetections();
+		const idx = mapping.findIndex(m => m.detId === detId);
+		if (idx === -1) return;
+
+		_faissSelectedCellDetId = detId;
+		_faissSelectedCellFlatIdx = idx;
+
+		const det = flatDets[idx];
+		const mapEntry = mapping[idx];
+
+		if (faissCellIdText) {
+			faissCellIdText.textContent = `Célula #${idx} (${detId})`;
+		}
+		if (faissCellCurrentClass) {
+			faissCellCurrentClass.textContent = det.class_label || mapEntry.groupKey;
+			faissCellCurrentClass.style.backgroundColor = hexToRgba(det.color || "#8b5cf6", 0.2);
+			faissCellCurrentClass.style.color = det.color || "#8b5cf6";
+		}
+
+		if (faissProtoLabelInput && !faissProtoLabelInput.value.trim()) {
+			faissProtoLabelInput.value = det.class_label || "";
+		}
+		if (faissProtoColorInput && det.color) {
+			faissProtoColorInput.value = det.color;
+		}
+
+		if (faissNoSelectionHint) faissNoSelectionHint.style.display = "none";
+		if (faissSelectedCellBox) faissSelectedCellBox.style.display = "block";
+
+		// If prototype mode is active, make sure similarity tab is in view
+		if (_isPrototypeModeActive) {
+			switchTab("similarity-tab");
+		}
+	}
+	window.selectFaissPrototypeCell = selectFaissPrototypeCell;
+	window.onDetectionSelectedForFaiss = selectFaissPrototypeCell;
+
+	// 4. Register Prototype
+	async function registerActiveCellAsPrototype() {
+		if (!_faissIndexBuilt) {
+			const ok = await buildFaissIndex();
+			if (!ok) return;
+		}
+
+		if (_faissSelectedCellFlatIdx === null) {
+			alert("Selecciona primero una célula en el visor.");
+			return;
+		}
+
+		const label = faissProtoLabelInput ? faissProtoLabelInput.value.trim() : "";
+		if (!label) {
+			alert("Por favor ingresa un nombre para la clase (ej: 'Espermatogonia A Clara').");
+			if (faissProtoLabelInput) faissProtoLabelInput.focus();
+			return;
+		}
+
+		const color = faissProtoColorInput ? faissProtoColorInput.value : "#e11d48";
+
+		try {
+			const formData = new FormData();
+			formData.append("label", label);
+			formData.append("color", color);
+			formData.append("detection_indices", JSON.stringify([_faissSelectedCellFlatIdx]));
+
+			const res = await fetch(`${API_URL}/similarity/add-prototype`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			_faissProtoDets.add(_faissSelectedCellDetId);
+
+			// Register class in global classRegistry if not present
+			let existingCls = classRegistry.find(c => c.name.toLowerCase() === label.toLowerCase() || c.key.toLowerCase() === label.toLowerCase());
+			if (!existingCls) {
+				classRegistry.push({
+					id: classIdCounter++,
+					name: label,
+					color: color,
+					key: label.toLowerCase().replace(/\s+/g, "_"),
+					prompt: label,
+				});
+				updateClassesList();
+			}
+
+			renderOverlay();
+			await refreshFaissPrototypes();
+
+			statusText.textContent = `🎯 Prototipo registrado: '${label}' (${result.num_prototypes} ejemplo${result.num_prototypes > 1 ? "s" : ""}).`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 2500);
+
+			// Automatically search for similar cells
+			await runFaissSearchForCell(_faissSelectedCellDetId, label);
+		} catch (err) {
+			console.error("Error al registrar prototipo:", err);
+			alert(`⚠️ Error al registrar prototipo: ${err.message}`);
+		}
+	}
+
+	// 5. Search Similar Cells
+	async function runFaissSearchForCell(detId = null, label = null) {
+		if (!_faissIndexBuilt) {
+			const ok = await buildFaissIndex();
+			if (!ok) return;
+		}
+
+		const targetDetId = detId || _faissSelectedCellDetId;
+		const { mapping } = getActiveImageFlatDetections();
+		let flatIdx = _faissSelectedCellFlatIdx;
+
+		if (targetDetId) {
+			const idx = mapping.findIndex(m => m.detId === targetDetId);
+			if (idx !== -1) flatIdx = idx;
+		}
+
+		if (flatIdx === null && !label) {
+			alert("Selecciona una célula o prototipo para buscar similares.");
+			return;
+		}
+
+		const threshold = faissThresholdSlider ? parseFloat(faissThresholdSlider.value) : 0.80;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `🔍 Buscando células similares con FAISS (umbral ≥ ${(threshold * 100).toFixed(0)}%)...`;
+
+		try {
+			const formData = new FormData();
+			if (flatIdx !== null) formData.append("detection_index", flatIdx.toString());
+			formData.append("threshold", threshold.toString());
+			formData.append("top_k", "0"); // all above threshold
+			if (label && label.trim()) formData.append("label", label.trim());
+
+			const res = await fetch(`${API_URL}/similarity/search`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			const matches = result.matches || [];
+
+			_faissMatchedDets.clear();
+			matches.forEach(m => {
+				const mapEntry = mapping[m.detection_index];
+				if (mapEntry) {
+					_faissMatchedDets.add(mapEntry.detId);
+				}
+			});
+
+			// Update UI
+			if (faissSearchResultBox) faissSearchResultBox.style.display = "block";
+			if (faissSearchResultText) {
+				faissSearchResultText.textContent = `🎯 ${matches.length} célula${matches.length === 1 ? "" : "s"} similar${matches.length === 1 ? "" : "es"} (≥ ${(threshold * 100).toFixed(0)}%)`;
+			}
+			if (faissPropagateBtn) {
+				faissPropagateBtn.style.display = matches.length > 0 ? "block" : "none";
+				const targetLabel = label || (faissProtoLabelInput ? faissProtoLabelInput.value.trim() : "esta clase");
+				faissPropagateBtn.textContent = `🏷️ Propagar '${targetLabel}' a las ${matches.length} similares`;
+			}
+
+			renderOverlay();
+
+			statusText.textContent = `🎯 FAISS encontró ${matches.length} células idénticas/similares.`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3000);
+		} catch (err) {
+			console.error("Error en búsqueda FAISS:", err);
+			alert(`⚠️ Error en búsqueda FAISS: ${err.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+	window.runFaissSearchForCell = runFaissSearchForCell;
+
+	// 6. Propagate Label to Matches
+	async function propagateActivePrototypeLabel() {
+		if (!_faissIndexBuilt) return;
+		const label = faissProtoLabelInput ? faissProtoLabelInput.value.trim() : "";
+		if (!label) {
+			alert("Ingresa un nombre de clase para propagar.");
+			return;
+		}
+
+		const color = faissProtoColorInput ? faissProtoColorInput.value : "#e11d48";
+		const threshold = faissThresholdSlider ? parseFloat(faissThresholdSlider.value) : 0.80;
+
+		const { flatDets } = getActiveImageFlatDetections();
+		if (flatDets.length === 0) return;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `✨ Propagando etiqueta '${label}' con FAISS...`;
+
+		try {
+			const formData = new FormData();
+			formData.append("label", label);
+			formData.append("detections", JSON.stringify(flatDets));
+			formData.append("threshold", threshold.toString());
+
+			const res = await fetch(`${API_URL}/similarity/propagate-label`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			const updatedDets = result.detections || [];
+
+			applyUpdatedDetectionsToActiveImage(updatedDets);
+
+			_faissMatchedDets.clear();
+			if (faissSearchResultBox) faissSearchResultBox.style.display = "none";
+			if (faissPropagateBtn) faissPropagateBtn.style.display = "none";
+
+			statusText.textContent = `✅ Etiqueta '${label}' asignada a ${result.num_labeled} células.`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3000);
+		} catch (err) {
+			console.error("Error al propagar etiqueta:", err);
+			alert(`⚠️ Error al propagar: ${err.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+
+	// 7. Propagate All Prototypes (Winner-Takes-All)
+	async function propagateAllPrototypes() {
+		if (!_faissIndexBuilt) return;
+		const threshold = faissThresholdSlider ? parseFloat(faissThresholdSlider.value) : 0.80;
+		const { flatDets } = getActiveImageFlatDetections();
+		if (flatDets.length === 0) return;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `🚀 Propagando todas las clases de prototipos con FAISS (winner-takes-all)...`;
+
+		try {
+			const formData = new FormData();
+			formData.append("detections", JSON.stringify(flatDets));
+			formData.append("threshold", threshold.toString());
+
+			const res = await fetch(`${API_URL}/similarity/propagate-all`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			const updatedDets = result.detections || [];
+
+			applyUpdatedDetectionsToActiveImage(updatedDets);
+
+			_faissMatchedDets.clear();
+			if (faissSearchResultBox) faissSearchResultBox.style.display = "none";
+			if (faissPropagateBtn) faissPropagateBtn.style.display = "none";
+
+			statusText.textContent = `✅ Propagación completa: ${result.total_labeled} células etiquetadas entre ${Object.keys(result.summary || {}).length} clases.`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3500);
+		} catch (err) {
+			console.error("Error al propagar todas las clases:", err);
+			alert(`⚠️ Error al propagar: ${err.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+
+	// 8. Reconstruct imageStore.get(activeImageKey).groups from flat detections
+	function applyUpdatedDetectionsToActiveImage(updatedDets) {
+		if (!activeImageKey || !updatedDets || updatedDets.length === 0) return;
+		const data = imageStore.get(activeImageKey);
+		if (!data) return;
+
+		const groupsMap = new Map();
+
+		for (let i = 0; i < updatedDets.length; i++) {
+			const det = updatedDets[i];
+			const groupKey = det.class_key || det.category_name || det.category_id || "clase_1";
+			const groupLabel = det.class_label || det.category_name || groupKey;
+			const groupColor = det.color || getClassColor(groupKey);
+
+			if (!groupsMap.has(groupKey)) {
+				groupsMap.set(groupKey, {
+					key: groupKey,
+					label: groupLabel,
+					color: groupColor,
+					detections: [],
+				});
+			}
+			groupsMap.get(groupKey).detections.push(det);
+
+			if (!classRegistry.find(c => c.key === groupKey)) {
+				classRegistry.push({
+					id: classIdCounter++,
+					name: groupLabel,
+					color: groupColor,
+					key: groupKey,
+					prompt: groupLabel,
+				});
+			}
+		}
+
+		data.groups = Array.from(groupsMap.values());
+		renderOverlay();
+		updateClassesList();
+		renderGallery();
+		updateExportStats();
+	}
+
+	// 9. Fetch & Render Registered Prototypes
+	async function refreshFaissPrototypes() {
+		try {
+			const res = await fetch(`${API_URL}/similarity/prototypes`);
+			if (!res.ok) return;
+			const data = await res.json();
+			_faissPrototypes = data.prototypes || [];
+
+			if (faissProtoCountBadge) {
+				faissProtoCountBadge.textContent = `${_faissPrototypes.length} clase${_faissPrototypes.length === 1 ? "" : "s"}`;
+			}
+			if (faissPropagateAllBtn) {
+				faissPropagateAllBtn.style.display = _faissPrototypes.length > 0 ? "block" : "none";
+			}
+
+			if (!faissPrototypesList) return;
+			faissPrototypesList.innerHTML = "";
+
+			if (_faissPrototypes.length === 0) {
+				faissPrototypesList.innerHTML = '<p class="empty-hint" style="font-size: 0.72rem;">No hay clases registradas aún.</p>';
+				return;
+			}
+
+			_faissPrototypes.forEach(proto => {
+				const item = document.createElement("div");
+				item.className = "faiss-proto-item";
+				item.innerHTML = `
+					<div style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden;">
+						<span style="width: 12px; height: 12px; border-radius: 3px; background: ${proto.color}; flex-shrink: 0;"></span>
+						<span style="font-size: 0.75rem; font-weight: 600; color: #f1f5f9; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" title="${proto.label}">${proto.label}</span>
+						<span class="badge" style="font-size: 0.62rem; padding: 1px 4px; background: rgba(255,255,255,0.06); color: var(--text-muted);">${proto.num_prototypes} célula${proto.num_prototypes > 1 ? "s" : ""}</span>
+					</div>
+					<div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
+						<button type="button" class="btn-small btn-outline proto-search-btn" style="font-size: 0.65rem; padding: 0.15rem 0.35rem; color: #c084fc; border-color: rgba(192,132,252,0.4);" title="Buscar células similares a ${proto.label}">🔍</button>
+						<button type="button" class="btn-small btn-outline proto-propagate-btn" style="font-size: 0.65rem; padding: 0.15rem 0.35rem; color: #10b981; border-color: rgba(16,185,129,0.4);" title="Propagar etiqueta '${proto.label}'">🏷️</button>
+						<button type="button" class="btn-small btn-outline proto-del-btn" style="font-size: 0.65rem; padding: 0.15rem 0.35rem; color: #ef4444; border-color: rgba(239,68,68,0.4);" title="Eliminar prototipo">🗑️</button>
+					</div>
+				`;
+
+				item.querySelector(".proto-search-btn")?.addEventListener("click", () => {
+					if (faissProtoLabelInput) faissProtoLabelInput.value = proto.label;
+					if (faissProtoColorInput) faissProtoColorInput.value = proto.color;
+					runFaissSearchForCell(null, proto.label);
+				});
+
+				item.querySelector(".proto-propagate-btn")?.addEventListener("click", () => {
+					if (faissProtoLabelInput) faissProtoLabelInput.value = proto.label;
+					if (faissProtoColorInput) faissProtoColorInput.value = proto.color;
+					propagateActivePrototypeLabel();
+				});
+
+				item.querySelector(".proto-del-btn")?.addEventListener("click", async () => {
+					if (!confirm(`¿Eliminar prototipo '${proto.label}'?`)) return;
+					await fetch(`${API_URL}/similarity/remove-prototype/${encodeURIComponent(proto.label)}`, { method: "DELETE" });
+					await refreshFaissPrototypes();
+				});
+
+				faissPrototypesList.appendChild(item);
+			});
+		} catch (err) {
+			console.error("Error al obtener prototipos:", err);
+		}
+	}
+
+	// 10. Auto-cluster K-Means
+	async function runFaissAutoCluster() {
+		if (!_faissIndexBuilt) {
+			const ok = await buildFaissIndex();
+			if (!ok) return;
+		}
+
+		const k = faissClustersInput ? parseInt(faissClustersInput.value) || 5 : 5;
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `🧩 Ejecutando K-Means sobre embeddings FAISS (${k} clusters)...`;
+
+		try {
+			const formData = new FormData();
+			formData.append("n_clusters", k.toString());
+
+			const res = await fetch(`${API_URL}/similarity/auto-cluster`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			const clusters = result.clusters || [];
+			const { flatDets } = getActiveImageFlatDetections();
+
+			// Assign each detection to its cluster
+			const updatedDets = flatDets.map(d => ({ ...d }));
+			clusters.forEach(cluster => {
+				(cluster.detection_indices || []).forEach(idx => {
+					if (updatedDets[idx]) {
+						updatedDets[idx].class_key = `cluster_${cluster.cluster_id + 1}`;
+						updatedDets[idx].class_label = cluster.label || `Cluster ${cluster.cluster_id + 1}`;
+						updatedDets[idx].category_name = cluster.label || `Cluster ${cluster.cluster_id + 1}`;
+						updatedDets[idx].color = cluster.color;
+					}
+				});
+			});
+
+			applyUpdatedDetectionsToActiveImage(updatedDets);
+
+			statusText.textContent = `✅ Clustering completado: ${flatDets.length} células agrupadas en ${clusters.length} clusters morfológicos.`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3500);
+		} catch (err) {
+			console.error("Error en auto-cluster:", err);
+			alert(`⚠️ Error en clustering: ${err.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+
+	// 11. Wire Listeners
+	faissBuildBtn?.addEventListener("click", async () => {
+		switchTab("similarity-tab");
+		await buildFaissIndex();
+	});
+
+	faissAutoClusterBtn?.addEventListener("click", async () => {
+		switchTab("similarity-tab");
+		await runFaissAutoCluster();
+	});
+
+	faissTabBuildBtn?.addEventListener("click", async () => {
+		await buildFaissIndex();
+	});
+
+	faissAddProtoBtn?.addEventListener("click", async () => {
+		await registerActiveCellAsPrototype();
+	});
+
+	faissSearchProtoBtn?.addEventListener("click", async () => {
+		await runFaissSearchForCell();
+	});
+
+	faissPropagateBtn?.addEventListener("click", async () => {
+		await propagateActivePrototypeLabel();
+	});
+
+	faissPropagateAllBtn?.addEventListener("click", async () => {
+		await propagateAllPrototypes();
+	});
+
+	faissRunClusterBtn?.addEventListener("click", async () => {
+		await runFaissAutoCluster();
+	});
+
+	faissClearMatchesBtn?.addEventListener("click", () => {
+		_faissMatchedDets.clear();
+		if (faissSearchResultBox) faissSearchResultBox.style.display = "none";
+		if (faissPropagateBtn) faissPropagateBtn.style.display = "none";
+		renderOverlay();
+	});
+
+	// Slider live update
+	faissThresholdSlider?.addEventListener("input", (e) => {
+		const val = parseFloat(e.target.value);
+		if (faissThresholdVal) faissThresholdVal.textContent = `≥ ${val.toFixed(2)}`;
+	});
+
+	// Chips quick fill
+	document.querySelectorAll(".faiss-chip-btn").forEach(chip => {
+		chip.addEventListener("click", () => {
+			if (faissProtoLabelInput) faissProtoLabelInput.value = chip.dataset.label;
+			if (faissProtoColorInput) faissProtoColorInput.value = chip.dataset.color;
+		});
+	});
+
+	// Toggle Prototype Mode (in viewer toolbar & in tab)
+	function togglePrototypeMode(forceState = null) {
+		_isPrototypeModeActive = (forceState !== null) ? forceState : !_isPrototypeModeActive;
+
+		if (togglePrototypeModeBtn) {
+			togglePrototypeModeBtn.classList.toggle("btn-primary-action", _isPrototypeModeActive);
+			togglePrototypeModeBtn.classList.toggle("btn-outline", !_isPrototypeModeActive);
+			togglePrototypeModeBtn.textContent = _isPrototypeModeActive ? "🎯 Modo Prototipo [ON]" : "🎯 Modo Prototipo";
+		}
+		if (faissToggleProtoModeBtn) {
+			faissToggleProtoModeBtn.classList.toggle("btn-primary-action", _isPrototypeModeActive);
+			faissToggleProtoModeBtn.classList.toggle("btn-outline", !_isPrototypeModeActive);
+			faissToggleProtoModeBtn.textContent = _isPrototypeModeActive ? "✓ Selección Activa" : "👆 Activar Selección";
+		}
+
+		if (_isPrototypeModeActive) {
+			switchTab("similarity-tab");
+			statusText.textContent = "🎯 Modo Prototipo: Haz clic en cualquier célula del visor para seleccionarla como prototipo.";
+		}
+	}
+
+	togglePrototypeModeBtn?.addEventListener("click", () => togglePrototypeMode());
+	faissToggleProtoModeBtn?.addEventListener("click", () => togglePrototypeMode());
+
+
 
 	document.querySelectorAll(".load-ontology-cells-btn").forEach(btn => {
 		btn.addEventListener("click", async () => {
@@ -3967,34 +4604,106 @@
 
 	function displayOntologyEditor(ontology) {
 		if (!ontology) return;
+		window._activeOntologyData = ontology;
 		ontologyWorkbench.style.display = "block";
 		ontologyEditor.style.display = "block";
 		ontologyEditor.dataset.domain = ontology.domain;
 		window._activeOntologyName = ontology.domain;
 
 		const ontPillName = document.getElementById("ont-pill-name");
-		if (ontPillName) ontPillName.textContent = ontology.domain;
+		if (ontPillName) ontPillName.textContent = ontology.tissue_name ? `${ontology.domain} (${ontology.tissue_name})` : ontology.domain;
+
+		const ontTissueBadge = document.getElementById("ont-tissue-badge");
+		if (ontTissueBadge) {
+			const macroCount = ontology.macro_structures?.length || (ontology.structures || []).filter(s => s.is_macro).length;
+			const microCount = ontology.micro_structures?.length || (ontology.structures || []).filter(s => !s.is_macro).length;
+			ontTissueBadge.innerHTML = `🏷️ Tejido: <strong style="color: #fff;">${ontology.tissue_name || 'Tejido Histológico General'}</strong> <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: normal; margin-left: 0.35rem;">(${macroCount} Macro SAM 3.1 • ${microCount} Micro Cellpose-SAM con Ontología Espacial)</span>`;
+		}
+
+		function createStructureRow(struct, isMacro) {
+			const row = document.createElement("div");
+			row.style.cssText = "background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.55rem; margin-bottom: 0.4rem;";
+			row.dataset.key = struct.key;
+
+			const roleBadge = struct.role ? `<span style="font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; background: var(--bg-tertiary); color: var(--text-muted);">${struct.role}</span>` : '';
+			const engineBadge = isMacro
+				? `<span style="font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; background: rgba(59,130,246,0.18); color: #60a5fa; font-weight: 600;">🏛️ SAM 3.1</span>`
+				: `<span style="font-size: 0.6rem; padding: 1px 5px; border-radius: 4px; background: rgba(16,185,129,0.18); color: #34d399; font-weight: 600;">🔬 Cellpose-SAM</span>`;
+
+			let spatialHtml = "";
+			if (!isMacro && struct.spatial_rules && Object.keys(struct.spatial_rules).length > 0) {
+				const sr = struct.spatial_rules;
+				const rulesBadges = [];
+				if (sr.compartment) rulesBadges.push(`<span style="color: #38bdf8;">📍 Compartimento: ${sr.compartment}</span>`);
+				if (sr.forbidden_in && sr.forbidden_in.length > 0) {
+					rulesBadges.push(`<span style="color: #f87171;">🚫 Prohibido en: ${Array.isArray(sr.forbidden_in) ? sr.forbidden_in.join(", ") : sr.forbidden_in}</span>`);
+				}
+				if (sr.parent_macro) rulesBadges.push(`<span style="color: #a78bfa;">🏢 En: ${sr.parent_macro}</span>`);
+				if (sr.relative_radial_position && Array.isArray(sr.relative_radial_position)) {
+					rulesBadges.push(`<span style="color: #fbbf24;">📏 Radio: [${sr.relative_radial_position.join(" - ")}]</span>`);
+				}
+
+				spatialHtml = `
+					<div style="font-size: 0.65rem; background: rgba(0,0,0,0.25); padding: 0.35rem 0.5rem; border-radius: 5px; margin-top: 0.35rem; border-left: 2px solid #34d399;">
+						<div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.15rem; font-weight: 600;">${rulesBadges.join(" • ")}</div>
+						${sr.rule_description ? `<div style="color: var(--text-muted); font-style: italic;">💡 ${sr.rule_description}</div>` : ''}
+					</div>
+				`;
+			}
+
+			row.innerHTML = `
+				<div style="display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; flex-wrap: wrap;">
+					<input type="color" value="${struct.color || '#8b5cf6'}" class="ont-color" style="width: 20px; height: 20px; border: none; cursor: pointer; background: none; border-radius: 4px;" />
+					<input type="text" value="${struct.label || struct.name}" class="ont-label" style="flex: 1; min-width: 110px; font-size: 0.78rem; font-weight: 600; background: transparent; border: none; color: var(--text-main); outline: none;" />
+					<div style="display: flex; gap: 0.25rem; align-items: center;">
+						${roleBadge}
+						${engineBadge}
+					</div>
+				</div>
+				<div style="display: flex; align-items: center; gap: 0.35rem;">
+					<span style="font-size: 0.65rem; color: var(--text-muted); min-width: 44px;">Prompt:</span>
+					<input type="text" value="${struct.prompt || ''}" class="ont-prompt" style="flex: 1; font-size: 0.7rem; padding: 0.2rem 0.35rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--accent-cyan); font-family: monospace;" />
+				</div>
+				${struct.name_en ? `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.2rem;">EN: ${struct.name_en}</div>` : ''}
+				${spatialHtml}
+			`;
+			return row;
+		}
 
 		const container = document.getElementById("ontology-structures-list");
 		if (container) {
 			container.innerHTML = "";
-			for (const struct of (ontology.structures || [])) {
-				const row = document.createElement("div");
-				row.style.cssText = "background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.4rem;";
-				row.dataset.key = struct.key;
 
-				row.innerHTML = `
-					<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
-						<input type="color" value="${struct.color || '#8b5cf6'}" class="ont-color" style="width: 22px; height: 22px; border: none; cursor: pointer; background: none;" />
-						<input type="text" value="${struct.label || struct.name}" class="ont-label" style="flex: 1; font-size: 0.78rem; font-weight: 600; background: transparent; border: none; color: var(--text-main); outline: none;" />
-					</div>
-					<div style="display: flex; align-items: center; gap: 0.35rem;">
-						<span style="font-size: 0.68rem; color: var(--text-muted); min-width: 48px;">Prompt:</span>
-						<input type="text" value="${struct.prompt || ''}" class="ont-prompt" style="flex: 1; font-size: 0.72rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--accent-cyan); font-family: monospace;" />
-					</div>
-					${struct.name_en ? `<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 0.2rem;">EN: ${struct.name_en}</div>` : ''}
-				`;
-				container.appendChild(row);
+			const allStructures = ontology.structures || [];
+			const macroList = allStructures.filter(s => s.is_macro);
+			const microList = allStructures.filter(s => !s.is_macro);
+
+			if (macroList.length > 0) {
+				const macroHeader = document.createElement("div");
+				macroHeader.style.cssText = "font-size: 0.72rem; font-weight: 700; color: #60a5fa; margin: 0.4rem 0 0.35rem; display: flex; align-items: center; justify-content: space-between; padding-bottom: 0.2rem; border-bottom: 1px solid rgba(96,165,250,0.2);";
+				macroHeader.innerHTML = `<span>🏛️ Macroestructuras Anatómicas</span><span style="font-size: 0.62rem; background: rgba(59,130,246,0.18); color: #93c5fd; padding: 1px 6px; border-radius: 4px;">SAM 3.1 (Límites & Cavidades)</span>`;
+				container.appendChild(macroHeader);
+
+				for (const struct of macroList) {
+					container.appendChild(createStructureRow(struct, true));
+				}
+			}
+
+			if (microList.length > 0) {
+				const microHeader = document.createElement("div");
+				microHeader.style.cssText = "font-size: 0.72rem; font-weight: 700; color: #34d399; margin: 0.8rem 0 0.35rem; display: flex; align-items: center; justify-content: space-between; padding-bottom: 0.2rem; border-bottom: 1px solid rgba(52,211,153,0.2);";
+				microHeader.innerHTML = `<span>🔬 Microestructuras & Células</span><span style="font-size: 0.62rem; background: rgba(16,185,129,0.18); color: #6ee7b7; padding: 1px 6px; border-radius: 4px;">Cellpose-SAM + Reglas Espaciales</span>`;
+				container.appendChild(microHeader);
+
+				for (const struct of microList) {
+					container.appendChild(createStructureRow(struct, false));
+				}
+			}
+
+			if (macroList.length === 0 && microList.length === 0) {
+				for (const struct of allStructures) {
+					container.appendChild(createStructureRow(struct, Boolean(struct.is_macro)));
+				}
 			}
 		}
 
@@ -4005,7 +4714,12 @@
 				key: s.key,
 				name: s.label || s.name || s.key,
 				prompt: s.prompt,
-				color: s.color || "#8b5cf6"
+				color: s.color || "#8b5cf6",
+				is_macro: Boolean(s.is_macro),
+				target_engine: s.target_engine || (s.is_macro ? "sam3" : "cellpose"),
+				role: s.role || (s.is_macro ? "compartment" : "cell"),
+				spatial_rules: s.spatial_rules || {},
+				expected_diameter_px: s.expected_diameter_px || (s.is_macro ? null : 20),
 			}));
 			updateClassesList();
 		}
@@ -4050,15 +4764,19 @@
 		const domain = ontologyEditor.dataset.domain;
 		if (!domain) return;
 
+		const existingMap = new Map((window._activeOntologyData?.structures || []).map(s => [s.key, s]));
 		const rows = document.querySelectorAll("#ontology-structures-list > div[data-key]");
 		const structures = [];
 		for (const row of rows) {
+			const k = row.dataset.key;
+			const prev = existingMap.get(k) || {};
 			structures.push({
-				key: row.dataset.key,
-				name: row.querySelector(".ont-label").value,
-				label: row.querySelector(".ont-label").value,
-				prompt: row.querySelector(".ont-prompt").value,
-				color: row.querySelector(".ont-color").value,
+				...prev,
+				key: k,
+				name: row.querySelector(".ont-label")?.value || prev.name || k,
+				label: row.querySelector(".ont-label")?.value || prev.label || k,
+				prompt: row.querySelector(".ont-prompt")?.value || prev.prompt || "",
+				color: row.querySelector(".ont-color")?.value || prev.color || "#8b5cf6",
 			});
 		}
 
@@ -4073,6 +4791,105 @@
 			loadSavedOntologies();
 		} catch (e) {
 			alert("Error: " + e.message);
+		}
+	});
+
+	// Validate Spatial Ontology Constraints
+	document.getElementById("validate-spatial-btn")?.addEventListener("click", async () => {
+		if (!activeImageKey) return alert("Por favor selecciona una imagen primero.");
+		const activeData = imageStore.get(activeImageKey);
+		if (!activeData || !activeData.groups || activeData.groups.length === 0) {
+			return alert("No hay anotaciones ni detecciones en la imagen activa para validar.");
+		}
+
+		// Separate macro annotations from cell/micro detections
+		const macroAnnotations = [];
+		const microDetections = [];
+
+		for (const group of activeData.groups) {
+			const clsMeta = classRegistry.find(c => c.key === group.key) || {};
+			const isMacro = clsMeta.is_macro || ["cavity", "boundary_outer", "boundary_inner", "stroma", "layer", "compartment"].includes(clsMeta.role);
+
+			for (const det of group.detections) {
+				if (det._deleted) continue;
+				if (isMacro) {
+					macroAnnotations.push({
+						class_key: group.key,
+						label: group.label || group.key,
+						segmentation: det.segmentation || [],
+						box: det.box,
+						bbox: det.bbox,
+					});
+				} else {
+					microDetections.push({
+						class_key: group.key,
+						label: group.label || group.key,
+						box: det.box,
+						bbox: det.bbox,
+						centroid: det.centroid,
+						detRef: det,
+					});
+				}
+			}
+		}
+
+		if (macroAnnotations.length === 0) {
+			return alert("⚠️ No se encontraron macroestructuras anatómicas segmentadas (ej: luz, membrana basal, estroma) en esta imagen para contrastar con las células. Segmenta primero las macroestructuras con SAM 3.1.");
+		}
+
+		if (microDetections.length === 0) {
+			return alert("⚠️ No hay detecciones celulares/microestructurales en la imagen activa.");
+		}
+
+		try {
+			const payload = {
+				domain: window._activeOntologyName || null,
+				detections: microDetections.map(d => ({
+					class_key: d.class_key,
+					label: d.label,
+					box: d.box,
+					bbox: d.bbox,
+					centroid: d.centroid,
+				})),
+				macro_annotations: macroAnnotations,
+				spatial_rules: window._activeOntologyData?.spatial_rules || [],
+			};
+
+			const res = await fetch(`${API_URL}/validate-spatial-ontology`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({ detail: "Error validando ontología espacial" }));
+				throw new Error(err.detail || "Error en validación espacial");
+			}
+
+			const result = await res.json();
+			if (result.violations_count === 0) {
+				alert(`✅ Validación Anatómica Exitosa:\n\nTodas las ${result.valid_count} células evaluadas cumplen estrictamente con la ontología espacial y distribución anatómica del tejido.`);
+			} else {
+				const sampleViolations = result.violations.slice(0, 5).map(v => `• ${v.reason}`).join("\n");
+				const extraMsg = result.violations_count > 5 ? `\n... y ${result.violations_count - 5} más.` : "";
+				const confirmDelete = confirm(
+					`⚠️ Se detectaron ${result.violations_count} violaciones espaciales anatómicas:\n\n${sampleViolations}${extraMsg}\n\n¿Deseas marcar o eliminar automáticamente las detecciones en zonas prohibidas?`
+				);
+				if (confirmDelete) {
+					for (const v of result.violations) {
+						if (microDetections[v.detection_index]?.detRef) {
+							microDetections[v.detection_index].detRef._deleted = true;
+						}
+					}
+					renderOverlay();
+					renderGallery();
+					updateClassesList();
+					updateExportStats();
+					alert(`🗑️ Se eliminaron ${result.violations_count} detecciones que violaban las restricciones espaciales.`);
+				}
+			}
+		} catch (e) {
+			alert("Error en validación espacial: " + e.message);
 		}
 	});
 

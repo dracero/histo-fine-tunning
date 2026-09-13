@@ -1,0 +1,1354 @@
+{
+  "domain": "arch4",
+  "tissue_name": "Testículo",
+  "source_pdf": "arch4.pdf",
+  "pdf_id": "af51e67a2f47",
+  "macro_structures": [
+    {
+      "key": "tubulo_seminifero",
+      "name": "Túbulo seminífero",
+      "name_en": "Seminiferous tubule",
+      "role": "compartment",
+      "target_engine": "sam3",
+      "prompt": "circular or oval seminiferous tubule cross section",
+      "description": "Estructura tubular principal del testículo, donde ocurre la espermatogénesis.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#e11d48",
+      "label": "Túbulo seminífero"
+    },
+    {
+      "key": "epitelio_seminifero",
+      "name": "Epitelio seminífero",
+      "name_en": "Seminiferous epithelium",
+      "role": "layer",
+      "target_engine": "sam3",
+      "prompt": "stratified epithelium lining seminiferous tubule",
+      "description": "Epitelio estratificado que contiene las células germinales y de Sertoli, extendiéndose desde la lámina basal hasta la luz.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#8b5cf6",
+      "label": "Epitelio seminífero"
+    },
+    {
+      "key": "pared_tubular",
+      "name": "Pared tubular",
+      "name_en": "Tubular wall",
+      "role": "boundary_outer",
+      "target_engine": "sam3",
+      "prompt": "thin fibrous wall surrounding seminiferous tubule",
+      "description": "Capa que delimita el túbulo seminífero, compuesta por lámina basal, células peritubulares y fibras colágenas.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#06b6d4",
+      "label": "Pared tubular"
+    },
+    {
+      "key": "lamina_basal",
+      "name": "Lámina basal",
+      "name_en": "Basal lamina",
+      "role": "boundary_inner",
+      "target_engine": "sam3",
+      "prompt": "thin eosinophilic basal lamina layer",
+      "description": "Capa basal que separa el epitelio seminífero de las células peritubulares y el intersticio.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#f59e0b",
+      "label": "Lámina basal"
+    },
+    {
+      "key": "luz_tubular",
+      "name": "Luz del túbulo",
+      "name_en": "Tubular lumen",
+      "role": "cavity",
+      "target_engine": "sam3",
+      "prompt": "empty central lumen space cavity",
+      "description": "Cavidad central del túbulo seminífero donde se liberan los espermatozoides maduros.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#10b981",
+      "label": "Luz del túbulo"
+    },
+    {
+      "key": "espacio_intersticial",
+      "name": "Espacio intersticial",
+      "name_en": "Interstitial space",
+      "role": "stroma",
+      "target_engine": "sam3",
+      "prompt": "connective tissue space between seminiferous tubules",
+      "description": "Tejido conectivo laxo que rodea los túbulos seminíferos, conteniendo vasos y células de Leydig.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#ec4899",
+      "label": "Espacio intersticial"
+    }
+  ],
+  "micro_structures": [
+    {
+      "key": "espermatogonia_a_clara",
+      "name": "Espermatogonia A clara",
+      "name_en": "Spermatogonium A pale",
+      "target_engine": "cellpose",
+      "prompt": "small round pale nucleus with finely granular chromatin at basal lamina",
+      "expected_diameter_px": 15,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.9,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#6366f1",
+      "label": "Espermatogonia A clara"
+    },
+    {
+      "key": "espermatogonia_a_oscura",
+      "name": "Espermatogonia A oscura",
+      "name_en": "Spermatogonium A dark",
+      "target_engine": "cellpose",
+      "prompt": "small dark round nucleus with central chromatin rarefaction at basal lamina",
+      "expected_diameter_px": 15,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.9,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#14b8a6",
+      "label": "Espermatogonia A oscura"
+    },
+    {
+      "key": "espermatogonia_b",
+      "name": "Espermatogonia B",
+      "name_en": "Spermatogonium B",
+      "target_engine": "cellpose",
+      "prompt": "small round nucleus with heterogeneous chromatin slightly detached from basal lamina",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.8,
+          0.9
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, ligeramente despegada de la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#f97316",
+      "label": "Espermatogonia B"
+    },
+    {
+      "key": "espermatocito_primario",
+      "name": "Espermatocito primario",
+      "name_en": "Primary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "large round nucleus with prominent filamentous chromatin in mid-epithelium",
+      "expected_diameter_px": 30,
+      "spatial_rules": {
+        "compartment": "intermedio",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.5,
+          0.8
+        ],
+        "rule_description": "Ubicado en las capas intermedias del epitelio seminífero, por encima de las espermatogonias."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#84cc16",
+      "label": "Espermatocito primario"
+    },
+    {
+      "key": "espermatocito_secundario",
+      "name": "Espermatocito secundario",
+      "name_en": "Secondary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "smaller spherical nucleus with pale granular chromatin",
+      "expected_diameter_px": 22,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.3,
+          0.5
+        ],
+        "rule_description": "Ubicado en las capas adluminales del epitelio seminífero, más cerca de la luz que los espermatocitos primarios."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#a855f7",
+      "label": "Espermatocito secundario"
+    },
+    {
+      "key": "espermatide_temprana",
+      "name": "Espermátide temprana",
+      "name_en": "Early spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small round nucleus with pale granular chromatin in adluminal layers",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.2,
+          0.4
+        ],
+        "rule_description": "Ubicada en las capas adluminales del epitelio seminífero, alojada en invaginaciones de las células de Sertoli."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#0ea5e9",
+      "label": "Espermátide temprana"
+    },
+    {
+      "key": "espermatide_tardia",
+      "name": "Espermátide tardía",
+      "name_en": "Late spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small elongated piriform dark condensed nucleus with flagellum towards lumen",
+      "expected_diameter_px": 12,
+      "spatial_rules": {
+        "compartment": "apical_adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.1,
+          0.2
+        ],
+        "rule_description": "Ubicada en la región apical del epitelio seminífero, con el flagelo proyectándose hacia la luz tubular."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#ef4444",
+      "label": "Espermátide tardía"
+    },
+    {
+      "key": "espermatozoide",
+      "name": "Espermatozoide",
+      "name_en": "Spermatozoon",
+      "target_engine": "cellpose",
+      "prompt": "small oval flattened very condensed dark nucleus in lumen",
+      "expected_diameter_px": 8,
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": [
+          "epitelio_seminifero",
+          "espacio_intersticial",
+          "pared_tubular",
+          "lamina_basal"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.1
+        ],
+        "rule_description": "Ubicado predominantemente en la luz tubular, liberado durante la espermiación."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#22c55e",
+      "label": "Espermatozoide"
+    },
+    {
+      "key": "celula_sertoli",
+      "name": "Célula de Sertoli",
+      "name_en": "Sertoli cell",
+      "target_engine": "cellpose",
+      "prompt": "large triangular or piriform nucleus with prominent nucleolus and lax chromatin in parabasal region",
+      "expected_diameter_px": 25,
+      "spatial_rules": {
+        "compartment": "parabasal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.7,
+          0.9
+        ],
+        "rule_description": "Núcleo ubicado habitualmente en la segunda hilera de núcleos del epitelio seminífero, extendiéndose desde la lámina basal hasta la luz."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#eab308",
+      "label": "Célula de Sertoli"
+    },
+    {
+      "key": "celula_peritubular",
+      "name": "Célula peritubular",
+      "name_en": "Peritubular myoid cell",
+      "target_engine": "cellpose",
+      "prompt": "elongated fusiform nucleus with condensed chromatin surrounding tubule",
+      "expected_diameter_px": 10,
+      "spatial_rules": {
+        "compartment": "parietal",
+        "parent_macro": "pared_tubular",
+        "forbidden_in": [
+          "epitelio_seminifero",
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Ubicada en la pared del túbulo seminífero, rodeando la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#d946ef",
+      "label": "Célula peritubular"
+    },
+    {
+      "key": "celula_leydig",
+      "name": "Célula de Leydig",
+      "name_en": "Leydig cell",
+      "target_engine": "cellpose",
+      "prompt": "large polygonal cell cluster with central nucleus and abundant eosinophilic cytoplasm in interstitial space",
+      "expected_diameter_px": 35,
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": [
+          "tubulo_seminifero",
+          "epitelio_seminifero",
+          "luz_tubular",
+          "pared_tubular",
+          "lamina_basal"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Localizada en el intersticio testicular, agrupada en cúmulos perivasculares entre los túbulos seminíferos."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#38bdf8",
+      "label": "Célula de Leydig"
+    }
+  ],
+  "spatial_rules": [
+    {
+      "micro_key": "espermatogonia_a_clara",
+      "micro_name": "Espermatogonia A clara",
+      "compartment": "basal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.9,
+        1.0
+      ],
+      "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+    },
+    {
+      "micro_key": "espermatogonia_a_oscura",
+      "micro_name": "Espermatogonia A oscura",
+      "compartment": "basal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.9,
+        1.0
+      ],
+      "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+    },
+    {
+      "micro_key": "espermatogonia_b",
+      "micro_name": "Espermatogonia B",
+      "compartment": "basal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.8,
+        0.9
+      ],
+      "rule_description": "Ubicada en la zona basal del epitelio seminífero, ligeramente despegada de la lámina basal."
+    },
+    {
+      "micro_key": "espermatocito_primario",
+      "micro_name": "Espermatocito primario",
+      "compartment": "intermedio",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.5,
+        0.8
+      ],
+      "rule_description": "Ubicado en las capas intermedias del epitelio seminífero, por encima de las espermatogonias."
+    },
+    {
+      "micro_key": "espermatocito_secundario",
+      "micro_name": "Espermatocito secundario",
+      "compartment": "adluminal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.3,
+        0.5
+      ],
+      "rule_description": "Ubicado en las capas adluminales del epitelio seminífero, más cerca de la luz que los espermatocitos primarios."
+    },
+    {
+      "micro_key": "espermatide_temprana",
+      "micro_name": "Espermátide temprana",
+      "compartment": "adluminal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.2,
+        0.4
+      ],
+      "rule_description": "Ubicada en las capas adluminales del epitelio seminífero, alojada en invaginaciones de las células de Sertoli."
+    },
+    {
+      "micro_key": "espermatide_tardia",
+      "micro_name": "Espermátide tardía",
+      "compartment": "apical_adluminal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.1,
+        0.2
+      ],
+      "rule_description": "Ubicada en la región apical del epitelio seminífero, con el flagelo proyectándose hacia la luz tubular."
+    },
+    {
+      "micro_key": "espermatozoide",
+      "micro_name": "Espermatozoide",
+      "compartment": "luminal",
+      "parent_macro": "luz_tubular",
+      "forbidden_in": [
+        "epitelio_seminifero",
+        "espacio_intersticial",
+        "pared_tubular",
+        "lamina_basal"
+      ],
+      "relative_radial_position": [
+        0.0,
+        0.1
+      ],
+      "rule_description": "Ubicado predominantemente en la luz tubular, liberado durante la espermiación."
+    },
+    {
+      "micro_key": "celula_sertoli",
+      "micro_name": "Célula de Sertoli",
+      "compartment": "parabasal",
+      "parent_macro": "epitelio_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial",
+        "pared_tubular"
+      ],
+      "relative_radial_position": [
+        0.7,
+        0.9
+      ],
+      "rule_description": "Núcleo ubicado habitualmente en la segunda hilera de núcleos del epitelio seminífero, extendiéndose desde la lámina basal hasta la luz."
+    },
+    {
+      "micro_key": "celula_peritubular",
+      "micro_name": "Célula peritubular",
+      "compartment": "parietal",
+      "parent_macro": "pared_tubular",
+      "forbidden_in": [
+        "epitelio_seminifero",
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": null,
+      "rule_description": "Ubicada en la pared del túbulo seminífero, rodeando la lámina basal."
+    },
+    {
+      "micro_key": "celula_leydig",
+      "micro_name": "Célula de Leydig",
+      "compartment": "interstitial",
+      "parent_macro": "espacio_intersticial",
+      "forbidden_in": [
+        "tubulo_seminifero",
+        "epitelio_seminifero",
+        "luz_tubular",
+        "pared_tubular",
+        "lamina_basal"
+      ],
+      "relative_radial_position": null,
+      "rule_description": "Localizada en el intersticio testicular, agrupada en cúmulos perivasculares entre los túbulos seminíferos."
+    }
+  ],
+  "structures": [
+    {
+      "key": "tubulo_seminifero",
+      "name": "Túbulo seminífero",
+      "name_en": "Seminiferous tubule",
+      "role": "compartment",
+      "target_engine": "sam3",
+      "prompt": "circular or oval seminiferous tubule cross section",
+      "description": "Estructura tubular principal del testículo, donde ocurre la espermatogénesis.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#e11d48",
+      "label": "Túbulo seminífero"
+    },
+    {
+      "key": "epitelio_seminifero",
+      "name": "Epitelio seminífero",
+      "name_en": "Seminiferous epithelium",
+      "role": "layer",
+      "target_engine": "sam3",
+      "prompt": "stratified epithelium lining seminiferous tubule",
+      "description": "Epitelio estratificado que contiene las células germinales y de Sertoli, extendiéndose desde la lámina basal hasta la luz.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#8b5cf6",
+      "label": "Epitelio seminífero"
+    },
+    {
+      "key": "pared_tubular",
+      "name": "Pared tubular",
+      "name_en": "Tubular wall",
+      "role": "boundary_outer",
+      "target_engine": "sam3",
+      "prompt": "thin fibrous wall surrounding seminiferous tubule",
+      "description": "Capa que delimita el túbulo seminífero, compuesta por lámina basal, células peritubulares y fibras colágenas.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#06b6d4",
+      "label": "Pared tubular"
+    },
+    {
+      "key": "lamina_basal",
+      "name": "Lámina basal",
+      "name_en": "Basal lamina",
+      "role": "boundary_inner",
+      "target_engine": "sam3",
+      "prompt": "thin eosinophilic basal lamina layer",
+      "description": "Capa basal que separa el epitelio seminífero de las células peritubulares y el intersticio.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#f59e0b",
+      "label": "Lámina basal"
+    },
+    {
+      "key": "luz_tubular",
+      "name": "Luz del túbulo",
+      "name_en": "Tubular lumen",
+      "role": "cavity",
+      "target_engine": "sam3",
+      "prompt": "empty central lumen space cavity",
+      "description": "Cavidad central del túbulo seminífero donde se liberan los espermatozoides maduros.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#10b981",
+      "label": "Luz del túbulo"
+    },
+    {
+      "key": "espacio_intersticial",
+      "name": "Espacio intersticial",
+      "name_en": "Interstitial space",
+      "role": "stroma",
+      "target_engine": "sam3",
+      "prompt": "connective tissue space between seminiferous tubules",
+      "description": "Tejido conectivo laxo que rodea los túbulos seminíferos, conteniendo vasos y células de Leydig.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#ec4899",
+      "label": "Espacio intersticial"
+    },
+    {
+      "key": "espermatogonia_a_clara",
+      "name": "Espermatogonia A clara",
+      "name_en": "Spermatogonium A pale",
+      "target_engine": "cellpose",
+      "prompt": "small round pale nucleus with finely granular chromatin at basal lamina",
+      "expected_diameter_px": 15,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.9,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#6366f1",
+      "label": "Espermatogonia A clara"
+    },
+    {
+      "key": "espermatogonia_a_oscura",
+      "name": "Espermatogonia A oscura",
+      "name_en": "Spermatogonium A dark",
+      "target_engine": "cellpose",
+      "prompt": "small dark round nucleus with central chromatin rarefaction at basal lamina",
+      "expected_diameter_px": 15,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.9,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#14b8a6",
+      "label": "Espermatogonia A oscura"
+    },
+    {
+      "key": "espermatogonia_b",
+      "name": "Espermatogonia B",
+      "name_en": "Spermatogonium B",
+      "target_engine": "cellpose",
+      "prompt": "small round nucleus with heterogeneous chromatin slightly detached from basal lamina",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.8,
+          0.9
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, ligeramente despegada de la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#f97316",
+      "label": "Espermatogonia B"
+    },
+    {
+      "key": "espermatocito_primario",
+      "name": "Espermatocito primario",
+      "name_en": "Primary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "large round nucleus with prominent filamentous chromatin in mid-epithelium",
+      "expected_diameter_px": 30,
+      "spatial_rules": {
+        "compartment": "intermedio",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.5,
+          0.8
+        ],
+        "rule_description": "Ubicado en las capas intermedias del epitelio seminífero, por encima de las espermatogonias."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#84cc16",
+      "label": "Espermatocito primario"
+    },
+    {
+      "key": "espermatocito_secundario",
+      "name": "Espermatocito secundario",
+      "name_en": "Secondary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "smaller spherical nucleus with pale granular chromatin",
+      "expected_diameter_px": 22,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.3,
+          0.5
+        ],
+        "rule_description": "Ubicado en las capas adluminales del epitelio seminífero, más cerca de la luz que los espermatocitos primarios."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#a855f7",
+      "label": "Espermatocito secundario"
+    },
+    {
+      "key": "espermatide_temprana",
+      "name": "Espermátide temprana",
+      "name_en": "Early spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small round nucleus with pale granular chromatin in adluminal layers",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.2,
+          0.4
+        ],
+        "rule_description": "Ubicada en las capas adluminales del epitelio seminífero, alojada en invaginaciones de las células de Sertoli."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#0ea5e9",
+      "label": "Espermátide temprana"
+    },
+    {
+      "key": "espermatide_tardia",
+      "name": "Espermátide tardía",
+      "name_en": "Late spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small elongated piriform dark condensed nucleus with flagellum towards lumen",
+      "expected_diameter_px": 12,
+      "spatial_rules": {
+        "compartment": "apical_adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.1,
+          0.2
+        ],
+        "rule_description": "Ubicada en la región apical del epitelio seminífero, con el flagelo proyectándose hacia la luz tubular."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#ef4444",
+      "label": "Espermátide tardía"
+    },
+    {
+      "key": "espermatozoide",
+      "name": "Espermatozoide",
+      "name_en": "Spermatozoon",
+      "target_engine": "cellpose",
+      "prompt": "small oval flattened very condensed dark nucleus in lumen",
+      "expected_diameter_px": 8,
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": [
+          "epitelio_seminifero",
+          "espacio_intersticial",
+          "pared_tubular",
+          "lamina_basal"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.1
+        ],
+        "rule_description": "Ubicado predominantemente en la luz tubular, liberado durante la espermiación."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#22c55e",
+      "label": "Espermatozoide"
+    },
+    {
+      "key": "celula_sertoli",
+      "name": "Célula de Sertoli",
+      "name_en": "Sertoli cell",
+      "target_engine": "cellpose",
+      "prompt": "large triangular or piriform nucleus with prominent nucleolus and lax chromatin in parabasal region",
+      "expected_diameter_px": 25,
+      "spatial_rules": {
+        "compartment": "parabasal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.7,
+          0.9
+        ],
+        "rule_description": "Núcleo ubicado habitualmente en la segunda hilera de núcleos del epitelio seminífero, extendiéndose desde la lámina basal hasta la luz."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#eab308",
+      "label": "Célula de Sertoli"
+    },
+    {
+      "key": "celula_peritubular",
+      "name": "Célula peritubular",
+      "name_en": "Peritubular myoid cell",
+      "target_engine": "cellpose",
+      "prompt": "elongated fusiform nucleus with condensed chromatin surrounding tubule",
+      "expected_diameter_px": 10,
+      "spatial_rules": {
+        "compartment": "parietal",
+        "parent_macro": "pared_tubular",
+        "forbidden_in": [
+          "epitelio_seminifero",
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Ubicada en la pared del túbulo seminífero, rodeando la lámina basal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#d946ef",
+      "label": "Célula peritubular"
+    },
+    {
+      "key": "celula_leydig",
+      "name": "Célula de Leydig",
+      "name_en": "Leydig cell",
+      "target_engine": "cellpose",
+      "prompt": "large polygonal cell cluster with central nucleus and abundant eosinophilic cytoplasm in interstitial space",
+      "expected_diameter_px": 35,
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": [
+          "tubulo_seminifero",
+          "epitelio_seminifero",
+          "luz_tubular",
+          "pared_tubular",
+          "lamina_basal"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Localizada en el intersticio testicular, agrupada en cúmulos perivasculares entre los túbulos seminíferos."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#38bdf8",
+      "label": "Célula de Leydig"
+    }
+  ],
+  "extracted_images": [
+    {
+      "filename": "af51e67a2f47_p1_img1.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img1.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img2.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img2.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img3.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img3.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img4.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img4.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img5.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img5.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img6.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img6.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img7.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img7.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img8.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img8.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img9.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img9.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img10.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img10.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img11.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img11.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img12.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img12.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img13.png",
+      "path": "/run/media/dracero/DiscoMecanico/AIProjects/Meta_SAM_V3/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img13.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    }
+  ],
+  "prompts": [
+    {
+      "key": "tubulo_seminifero",
+      "prompt": "circular or oval seminiferous tubule cross section",
+      "label": "Túbulo seminífero",
+      "color": "#e11d48",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "epitelio_seminifero",
+      "prompt": "stratified epithelium lining seminiferous tubule",
+      "label": "Epitelio seminífero",
+      "color": "#8b5cf6",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "pared_tubular",
+      "prompt": "thin fibrous wall surrounding seminiferous tubule",
+      "label": "Pared tubular",
+      "color": "#06b6d4",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "lamina_basal",
+      "prompt": "thin eosinophilic basal lamina layer",
+      "label": "Lámina basal",
+      "color": "#f59e0b",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "luz_tubular",
+      "prompt": "empty central lumen space cavity",
+      "label": "Luz del túbulo",
+      "color": "#10b981",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "espacio_intersticial",
+      "prompt": "connective tissue space between seminiferous tubules",
+      "label": "Espacio intersticial",
+      "color": "#ec4899",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "espermatogonia_a_clara",
+      "prompt": "small round pale nucleus with finely granular chromatin at basal lamina",
+      "label": "Espermatogonia A clara",
+      "color": "#6366f1",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.9,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+      }
+    },
+    {
+      "key": "espermatogonia_a_oscura",
+      "prompt": "small dark round nucleus with central chromatin rarefaction at basal lamina",
+      "label": "Espermatogonia A oscura",
+      "color": "#14b8a6",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.9,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, en contacto directo con la lámina basal."
+      }
+    },
+    {
+      "key": "espermatogonia_b",
+      "prompt": "small round nucleus with heterogeneous chromatin slightly detached from basal lamina",
+      "label": "Espermatogonia B",
+      "color": "#f97316",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.8,
+          0.9
+        ],
+        "rule_description": "Ubicada en la zona basal del epitelio seminífero, ligeramente despegada de la lámina basal."
+      }
+    },
+    {
+      "key": "espermatocito_primario",
+      "prompt": "large round nucleus with prominent filamentous chromatin in mid-epithelium",
+      "label": "Espermatocito primario",
+      "color": "#84cc16",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "intermedio",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.5,
+          0.8
+        ],
+        "rule_description": "Ubicado en las capas intermedias del epitelio seminífero, por encima de las espermatogonias."
+      }
+    },
+    {
+      "key": "espermatocito_secundario",
+      "prompt": "smaller spherical nucleus with pale granular chromatin",
+      "label": "Espermatocito secundario",
+      "color": "#a855f7",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.3,
+          0.5
+        ],
+        "rule_description": "Ubicado en las capas adluminales del epitelio seminífero, más cerca de la luz que los espermatocitos primarios."
+      }
+    },
+    {
+      "key": "espermatide_temprana",
+      "prompt": "small round nucleus with pale granular chromatin in adluminal layers",
+      "label": "Espermátide temprana",
+      "color": "#0ea5e9",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.2,
+          0.4
+        ],
+        "rule_description": "Ubicada en las capas adluminales del epitelio seminífero, alojada en invaginaciones de las células de Sertoli."
+      }
+    },
+    {
+      "key": "espermatide_tardia",
+      "prompt": "small elongated piriform dark condensed nucleus with flagellum towards lumen",
+      "label": "Espermátide tardía",
+      "color": "#ef4444",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "apical_adluminal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.1,
+          0.2
+        ],
+        "rule_description": "Ubicada en la región apical del epitelio seminífero, con el flagelo proyectándose hacia la luz tubular."
+      }
+    },
+    {
+      "key": "espermatozoide",
+      "prompt": "small oval flattened very condensed dark nucleus in lumen",
+      "label": "Espermatozoide",
+      "color": "#22c55e",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": [
+          "epitelio_seminifero",
+          "espacio_intersticial",
+          "pared_tubular",
+          "lamina_basal"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.1
+        ],
+        "rule_description": "Ubicado predominantemente en la luz tubular, liberado durante la espermiación."
+      }
+    },
+    {
+      "key": "celula_sertoli",
+      "prompt": "large triangular or piriform nucleus with prominent nucleolus and lax chromatin in parabasal region",
+      "label": "Célula de Sertoli",
+      "color": "#eab308",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "parabasal",
+        "parent_macro": "epitelio_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial",
+          "pared_tubular"
+        ],
+        "relative_radial_position": [
+          0.7,
+          0.9
+        ],
+        "rule_description": "Núcleo ubicado habitualmente en la segunda hilera de núcleos del epitelio seminífero, extendiéndose desde la lámina basal hasta la luz."
+      }
+    },
+    {
+      "key": "celula_peritubular",
+      "prompt": "elongated fusiform nucleus with condensed chromatin surrounding tubule",
+      "label": "Célula peritubular",
+      "color": "#d946ef",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "parietal",
+        "parent_macro": "pared_tubular",
+        "forbidden_in": [
+          "epitelio_seminifero",
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Ubicada en la pared del túbulo seminífero, rodeando la lámina basal."
+      }
+    },
+    {
+      "key": "celula_leydig",
+      "prompt": "large polygonal cell cluster with central nucleus and abundant eosinophilic cytoplasm in interstitial space",
+      "label": "Célula de Leydig",
+      "color": "#38bdf8",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": [
+          "tubulo_seminifero",
+          "epitelio_seminifero",
+          "luz_tubular",
+          "pared_tubular",
+          "lamina_basal"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Localizada en el intersticio testicular, agrupada en cúmulos perivasculares entre los túbulos seminíferos."
+      }
+    }
+  ],
+  "is_histology": true
+}

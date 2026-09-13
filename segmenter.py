@@ -90,6 +90,7 @@ def segmentar_imagen(
         "model": model_file,
         "quantize": 16,  # FP16 para inferencia optimizada en GPU
         "save": False,
+        "imgsz": 644,
     }
     predictor = SAM3SemanticPredictor(overrides=overrides)
 

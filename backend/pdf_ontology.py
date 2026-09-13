@@ -39,55 +39,148 @@ DEFAULT_COLORS = [
     "#d946ef", "#38bdf8", "#fb923c", "#4ade80", "#facc15",
 ]
 
-# System prompt for ontology extraction — domain-agnostic
+# System prompt for ontology extraction — domain-agnostic, multi-scale with spatial rules
 ONTOLOGY_SYSTEM_PROMPT = """\
-You are an expert computational histopathologist and ontology engineer. Your task is to analyze \
-academic histology/microscopy text and extract a structured ontology of distinct visual structures, \
-cell types, lumens, and tissue compartments.
+You are an expert computational histopathologist and spatial ontology engineer.
+Your task is to analyze academic histology, pathology, or microscopy texts (in any language, typically Spanish or English) and produce a structured, domain-agnostic Multi-Scale Histological & Spatial Ontology.
 
-RULES:
-1. For EVERY structure, provide a "prompt" field: a CONCISE English visual phrase (3-8 words max) \
-   optimized for the SAM 3 open-vocabulary segmentation model.
-   - Use direct visual nouns: "dark round cell nucleus", "tubular lumen cavity", "elongated spindle cell", "pale chromatin nucleus".
-   - Avoid long comparative sentences ("smaller than...", "often found in...").
-   - Focus on visual cues visible under H&E or brightfield microscopy (shape, staining intensity, chromatin texture).
-2. The "name" field should be the canonical name in the original language (Spanish).
-3. The "name_en" field is the direct English translation.
-4. The "parent" field references the key of the parent anatomical structure (or null).
-5. Generate a short "key" (snake_case, ASCII only).
-6. Return ONLY a valid JSON array — no markdown fences, no commentary.
+You must dissect the tissue into two complementary architectural scales and define the spatial topological rules between them:
 
-EXAMPLE OUTPUT:
-[
-  {
-    "key": "seminiferous_tubule",
-    "name": "Túbulo seminífero",
-    "name_en": "Seminiferous tubule",
-    "prompt": "circular tubule cross-section with lumen",
-    "parent": null
-  },
-  {
-    "key": "spermatogonia",
-    "name": "Espermatogonia",
-    "name_en": "Spermatogonium",
-    "prompt": "small dark round nucleus at basement membrane",
-    "parent": "seminiferous_tubule"
-  },
-  {
-    "key": "leydig_cell",
-    "name": "Célula de Leydig",
-    "name_en": "Leydig cell",
-    "prompt": "polygonal cell cluster in interstitial space",
-    "parent": null
-  }
-]
+1. MACRO STRUCTURES (Architectural landmarks & boundaries — targeted for SAM 3.1):
+   - Compartments, tubules, follicles, acini, glands, vessels, layers, basement membranes, lumen cavities, interstitium/stroma.
+   - SAM 3.1 excels at zero-shot boundary, cavity, and layer segmentation.
+   - Each macro structure must include:
+     * "key": snake_case identifier (e.g. "tubulo_seminifero", "luz_tubular", "membrana_basal", "espacio_intersticial", "foliculo_tiroideo", "coloide", "capsula_bowman", "espacio_urinario")
+     * "name": Canonical Spanish name
+     * "name_en": English name
+     * "role": One of ["boundary_outer", "boundary_inner", "cavity", "compartment", "layer", "stroma"]
+     * "target_engine": "sam3"
+     * "prompt": Direct visual English prompt for SAM 3 (3-8 words, direct visual nouns: e.g. "circular seminiferous tubule cross section", "empty central lumen space cavity", "thin eosinophilic basement membrane ring")
+     * "description": Short description of visual histological appearance.
+
+2. MICRO STRUCTURES (Cells, nuclei, and micro-entities — targeted for Cellpose-SAM):
+   - Specific cell types, nuclear morphology, or specialized micro-elements.
+   - Cellpose excels at dense cell/nuclei boundary segmentation using topological gradient flows.
+   - Each micro structure must include:
+     * "key": snake_case identifier (e.g. "espermatogonia", "espermatocito_primario", "espermatozoide", "celula_leydig", "celula_sertoli", "podocito", "celula_folicular")
+     * "name": Canonical Spanish name
+     * "name_en": English name
+     * "target_engine": "cellpose"
+     * "prompt": Visual English prompt for morphology (e.g. "small round dark nucleus at basement membrane", "elongated condensed sperm head with flagellum in lumen")
+     * "expected_diameter_px": Approximate nuclear/cellular diameter in standard 20x/40x microscopy (e.g. 15 to 40)
+     * "spatial_rules": Explicit spatial constraints and anatomical distribution rules:
+       - "compartment": The specific histological compartment (e.g. "basal", "adluminal", "luminal", "interstitial", "cortex", "medulla")
+       - "parent_macro": The key of the parent macro structure it belongs to
+       - "forbidden_in": Array of macro keys where this entity CANNOT physically exist (e.g. spermatogonia cannot be in ["luz_tubular", "espacio_intersticial"]; spermatozoa cannot be in ["membrana_basal", "espacio_intersticial"])
+       - "relative_radial_position": Array of [min, max] where 0.0 is center/lumen and 1.0 is the outer basement membrane (e.g. [0.85, 1.0] for basal cells, [0.0, 0.35] for luminal cells, or null if non-radial)
+       - "rule_description": Explicit validation rule in Spanish (e.g. "Debe situarse en la periferia adherida a la membrana basal; estrictamente prohibido en la luz tubular")
+
+3. ROOT METADATA:
+   - "tissue_name": The identified tissue or organ (e.g., "Testículo", "Tiroides", "Riñón", "Piel", "Hígado", etc.)
+   - "summary": Brief 1-2 sentence overview of the structural architecture.
+
+CRITICAL INSTRUCTIONS:
+- Generate this structure for ANY tissue or organ described in the text (testis, kidney, liver, brain, thyroid, intestine, bone, etc.).
+- NEVER make the system specific to only one organ; generalize based strictly on the provided text and figures.
+- Return ONLY valid JSON adhering to the specified schema — no markdown backticks, no commentary.
+
+EXAMPLE JSON OUTPUT:
+{
+  "tissue_name": "Testículo",
+  "summary": "Estructura tubular con túbulos seminíferos rodeados de membrana basal e intersticio con células de Leydig.",
+  "macro_structures": [
+    {
+      "key": "tubulo_seminifero",
+      "name": "Túbulo seminífero",
+      "name_en": "Seminiferous tubule",
+      "role": "compartment",
+      "target_engine": "sam3",
+      "prompt": "circular seminiferous tubule cross section",
+      "description": "Unidad funcional tubular delimitada por la lámina propia"
+    },
+    {
+      "key": "membrana_basal",
+      "name": "Membrana basal tubular",
+      "name_en": "Basement membrane",
+      "role": "boundary_outer",
+      "target_engine": "sam3",
+      "prompt": "thin basement membrane ring surrounding tubule",
+      "description": "Lámina basal que delimita el epitelio seminífero del intersticio"
+    },
+    {
+      "key": "luz_tubular",
+      "name": "Luz del túbulo",
+      "name_en": "Tubular lumen",
+      "role": "cavity",
+      "target_engine": "sam3",
+      "prompt": "empty central tubular lumen cavity",
+      "description": "Cavidad central donde se liberan los espermatozoides maduros"
+    },
+    {
+      "key": "espacio_intersticial",
+      "name": "Espacio intersticial",
+      "name_en": "Interstitial stroma",
+      "role": "stroma",
+      "target_engine": "sam3",
+      "prompt": "interstitial connective tissue between tubules",
+      "description": "Tejido conectivo laxo con vasos sanguíneos y células endocrinas"
+    }
+  ],
+  "micro_structures": [
+    {
+      "key": "espermatogonia",
+      "name": "Espermatogonia",
+      "name_en": "Spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "small dark round nucleus at basement membrane",
+      "expected_diameter_px": 20,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": ["luz_tubular", "espacio_intersticial"],
+        "relative_radial_position": [0.85, 1.0],
+        "rule_description": "Ubicada exclusivamente apoyada en la membrana basal en la periferia tubular; nunca en la luz central"
+      }
+    },
+    {
+      "key": "espermatozoide",
+      "name": "Espermatozoide",
+      "name_en": "Spermatozoon",
+      "target_engine": "cellpose",
+      "prompt": "small dense elongated condensed nucleus with flagellum",
+      "expected_diameter_px": 12,
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": ["membrana_basal", "espacio_intersticial"],
+        "relative_radial_position": [0.0, 0.3],
+        "rule_description": "Ubicado exclusivamente en la luz central adluminal; prohibido en la membrana basal"
+      }
+    },
+    {
+      "key": "celula_leydig",
+      "name": "Célula de Leydig",
+      "name_en": "Leydig cell",
+      "target_engine": "cellpose",
+      "prompt": "large polygonal cell cluster in interstitial space",
+      "expected_diameter_px": 28,
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": ["tubulo_seminifero", "luz_tubular"],
+        "relative_radial_position": null,
+        "rule_description": "Exclusiva del tejido conectivo intersticial fuera de los túbulos"
+      }
+    }
+  ]
+}
 """
 
 ONTOLOGY_USER_PROMPT_TEMPLATE = """\
-Analyze the following academic text (in Spanish) and extract ALL visually \
-distinct biological structures, cell types, tissue regions, or relevant \
-objects. For each one, generate a visual English prompt suitable for the \
-SAM 3 open-vocabulary segmentation model.
+Analyze the following academic text and figures.
+1. Identify the specific tissue/organ.
+2. Extract the MACRO structures (anatomical compartments, boundaries, lumens, layers) optimized for SAM 3.1 open-vocabulary segmentation.
+3. Extract the MICRO structures (cells, nuclei) optimized for Cellpose-SAM, and define explicit SPATIAL RULES (compartment, parent macro, forbidden zones, relative radial distribution) governing where each cell can and cannot physically appear.
 
 TEXT:
 {text}
@@ -465,6 +558,7 @@ def generate_ontology_with_gemini(
             logger.warning(f"Gemini text-only generation failed on '{model_name}': {e}")
 
     structures = []
+    detected_tissue = "Tejido Histológico"
     if raw_text:
         # Parse JSON — handle potential markdown fences
         if raw_text.startswith("```"):
@@ -473,20 +567,141 @@ def generate_ontology_with_gemini(
 
         try:
             parsed = json.loads(raw_text)
-            if isinstance(parsed, list):
-                structures = parsed
+            if isinstance(parsed, dict):
+                detected_tissue = parsed.get("tissue_name", "Tejido Histológico")
+                macro_items = parsed.get("macro_structures", [])
+                micro_items = parsed.get("micro_structures", [])
+
+                for s in macro_items:
+                    s["is_macro"] = True
+                    s.setdefault("target_engine", "sam3")
+                    s.setdefault("role", "compartment")
+                    s.setdefault("spatial_rules", {})
+                    s["tissue_name"] = detected_tissue
+
+                for s in micro_items:
+                    s["is_macro"] = False
+                    s.setdefault("target_engine", "cellpose")
+                    s.setdefault("role", "cell")
+                    if "spatial_rules" not in s or not isinstance(s["spatial_rules"], dict):
+                        s["spatial_rules"] = {}
+                    s["tissue_name"] = detected_tissue
+
+                structures = macro_items + micro_items
+
+            elif isinstance(parsed, list):
+                for s in parsed:
+                    is_macro = s.get("is_macro")
+                    if is_macro is None:
+                        key_lower = (str(s.get("key", "")) + " " + str(s.get("name", "")) + " " + str(s.get("prompt", ""))).lower()
+                        is_macro = any(w in key_lower for w in ["tubulo", "tubule", "lumen", "luz", "membrana", "membrane", "intersticio", "stroma", "capsula", "layer", "capa", "corteza", "medula", "foliculo", "acino"])
+                    s["is_macro"] = bool(is_macro)
+                    s.setdefault("target_engine", "sam3" if is_macro else "cellpose")
+                    s.setdefault("spatial_rules", {})
+                    s["tissue_name"] = detected_tissue
+                    structures.append(s)
         except Exception as parse_err:
             logger.warning(f"Failed to parse LLM JSON: {parse_err}. Raw text: {raw_text[:200]}")
 
     # Attempt 3: Heuristic extraction if LLM returned empty or failed
     if not structures:
-        logger.warning(f"LLM ontology generation returned no structures (last err: {last_err}). Using heuristic extraction.")
+        logger.warning(f"LLM ontology generation returned no structures (last err: {last_err}). Using heuristic multi-scale extraction.")
         structures = [
-            {"key": "cell_nucleus", "name": "Núcleo celular", "name_en": "Cell nucleus", "prompt": "dark round cell nucleus", "color": "#e11d48"},
-            {"key": "cytoplasm", "name": "Citoplasma", "name_en": "Cytoplasm", "prompt": "eosinophilic cell cytoplasm", "color": "#ec4899"},
-            {"key": "tissue_structure", "name": "Estructura tisular", "name_en": "Tissue structure", "prompt": "stained tissue structure", "color": "#8b5cf6"},
-            {"key": "connective_fiber", "name": "Fibras de estroma", "name_en": "Connective tissue fiber", "prompt": "connective tissue fiber collagen", "color": "#06b6d4"},
-            {"key": "lumen_space", "name": "Luz tubular o cavidad", "name_en": "Lumen space", "prompt": "empty cavity lumen", "color": "#10b981"},
+            # Macro structures (SAM 3.1)
+            {
+                "key": "luz_tubular",
+                "name": "Luz tubular o cavidad",
+                "name_en": "Tubular lumen cavity",
+                "prompt": "empty tubular lumen cavity central space",
+                "color": "#06b6d4",
+                "is_macro": True,
+                "role": "cavity",
+                "target_engine": "sam3",
+                "spatial_rules": {},
+                "tissue_name": "Tejido Histológico General"
+            },
+            {
+                "key": "membrana_basal",
+                "name": "Membrana basal o límite estructural",
+                "name_en": "Basement membrane boundary",
+                "prompt": "structural basement membrane boundary ring",
+                "color": "#8b5cf6",
+                "is_macro": True,
+                "role": "boundary_outer",
+                "target_engine": "sam3",
+                "spatial_rules": {},
+                "tissue_name": "Tejido Histológico General"
+            },
+            {
+                "key": "espacio_intersticial",
+                "name": "Estroma o tejido intersticial",
+                "name_en": "Interstitial stroma",
+                "prompt": "interstitial connective tissue fiber stroma",
+                "color": "#10b981",
+                "is_macro": True,
+                "role": "stroma",
+                "target_engine": "sam3",
+                "spatial_rules": {},
+                "tissue_name": "Tejido Histológico General"
+            },
+            # Micro structures (Cellpose-SAM + Spatial Rules)
+            {
+                "key": "celula_basal",
+                "name": "Célula basal (periferia)",
+                "name_en": "Basal cell nucleus",
+                "prompt": "round dark cell nucleus at basement membrane",
+                "color": "#e11d48",
+                "is_macro": False,
+                "role": "cell",
+                "target_engine": "cellpose",
+                "expected_diameter_px": 20,
+                "spatial_rules": {
+                    "compartment": "basal",
+                    "parent_macro": "membrana_basal",
+                    "forbidden_in": ["luz_tubular", "espacio_intersticial"],
+                    "relative_radial_position": [0.85, 1.0],
+                    "rule_description": "Ubicada adyacente a la membrana basal; estrictamente prohibida en la luz tubular o intersticio"
+                },
+                "tissue_name": "Tejido Histológico General"
+            },
+            {
+                "key": "elemento_adluminal",
+                "name": "Elemento adluminal / celular apical",
+                "name_en": "Adluminal cell element",
+                "prompt": "differentiated cellular element near lumen",
+                "color": "#f59e0b",
+                "is_macro": False,
+                "role": "cell",
+                "target_engine": "cellpose",
+                "expected_diameter_px": 14,
+                "spatial_rules": {
+                    "compartment": "luminal",
+                    "parent_macro": "luz_tubular",
+                    "forbidden_in": ["membrana_basal"],
+                    "relative_radial_position": [0.0, 0.4],
+                    "rule_description": "Ubicado en el polo apical o luz; prohibido en la lámina o membrana basal"
+                },
+                "tissue_name": "Tejido Histológico General"
+            },
+            {
+                "key": "celula_intersticial",
+                "name": "Célula intersticial / estromal",
+                "name_en": "Interstitial stroma cell",
+                "prompt": "spindle or polygonal interstitial cell nucleus",
+                "color": "#ec4899",
+                "is_macro": False,
+                "role": "cell",
+                "target_engine": "cellpose",
+                "expected_diameter_px": 26,
+                "spatial_rules": {
+                    "compartment": "interstitial",
+                    "parent_macro": "espacio_intersticial",
+                    "forbidden_in": ["luz_tubular"],
+                    "relative_radial_position": None,
+                    "rule_description": "Exclusiva del estroma exterior conectivo; prohibida en cavidades luminales"
+                },
+                "tissue_name": "Tejido Histológico General"
+            },
         ]
 
     # Assign colors and labels if missing
@@ -497,7 +712,7 @@ def generate_ontology_with_gemini(
         if "label" not in struct:
             struct["label"] = struct.get("name", struct.get("key", f"Clase {i + 1}"))
 
-    logger.info(f"Generated ontology with {len(structures)} structures")
+    logger.info(f"Generated ontology with {len(structures)} structures for tissue '{detected_tissue}'")
     return structures
 
 
@@ -572,25 +787,50 @@ def build_ontology_document(
     structures: List[Dict[str, Any]],
     extracted_images: List[Dict[str, Any]],
     domain_name: Optional[str] = None,
+    tissue_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Build a complete ontology document for storage."""
+    """Build a complete ontology document for storage with dual-scale macro/micro and spatial rules."""
     if domain_name is None:
         # Derive from filename
         base = Path(filename).stem
         domain_name = re.sub(r"[^a-zA-Z0-9_]", "_", base).lower()
 
+    detected_tissue = tissue_name
+    if not detected_tissue and structures:
+        for s in structures:
+            if s.get("tissue_name"):
+                detected_tissue = s["tissue_name"]
+                break
+
+    macro_structures = [s for s in structures if s.get("is_macro")]
+    micro_structures = [s for s in structures if not s.get("is_macro")]
+
     doc = {
         "domain": domain_name,
+        "tissue_name": detected_tissue or "Tejido Histológico General",
         "source_pdf": filename,
         "pdf_id": pdf_id,
+        "macro_structures": macro_structures,
+        "micro_structures": micro_structures,
+        "spatial_rules": [
+            {
+                "micro_key": s.get("key"),
+                "micro_name": s.get("name") or s.get("label"),
+                **s.get("spatial_rules", {})
+            }
+            for s in micro_structures if s.get("spatial_rules")
+        ],
         "structures": structures,
         "extracted_images": extracted_images,
         "prompts": [
             {
-                "key": s["key"],
-                "prompt": s["prompt"],
-                "label": s.get("label", s.get("name", s["key"])),
+                "key": s.get("key", f"class_{i + 1}"),
+                "prompt": s.get("prompt", s.get("name", s.get("key", f"structure {i + 1}"))),
+                "label": s.get("label", s.get("name", s.get("key", f"Clase {i + 1}"))),
                 "color": s.get("color", DEFAULT_COLORS[i % len(DEFAULT_COLORS)]),
+                "is_macro": s.get("is_macro", False),
+                "target_engine": s.get("target_engine", "sam3" if s.get("is_macro") else "cellpose"),
+                "spatial_rules": s.get("spatial_rules", {}),
             }
             for i, s in enumerate(structures)
         ],
@@ -620,20 +860,11 @@ def merge_ontology_structures(
     """
     Incrementally merge new structures into an existing ontology.
 
-    - Structures with the same ``key`` are updated (new prompt/name wins).
+    - Structures with the same ``key`` are updated (new prompt/name/rules win).
     - Structures with new keys are appended.
     - ``source_pdfs`` accumulates all PDF sources.
     - ``extracted_images`` from the new PDF are appended (deduped by filename).
-
-    Args:
-        existing_ontology: The currently saved ontology document.
-        new_structures: Structures generated from the new PDF.
-        new_pdf_id: pdf_id of the newly uploaded PDF.
-        new_filename: Filename of the new PDF.
-        new_images: Extracted images from the new PDF.
-
-    Returns:
-        The merged ontology document (not yet saved to disk).
+    - Preserves macro_structures, micro_structures, and spatial_rules.
     """
     # Build a lookup of existing structures by key
     existing_by_key: Dict[str, Dict[str, Any]] = {
@@ -653,6 +884,16 @@ def merge_ontology_structures(
             existing_by_key[key]["label"] = ns.get("label", ns.get("name", existing_by_key[key].get("label")))
             if "parent" in ns:
                 existing_by_key[key]["parent"] = ns["parent"]
+            if "is_macro" in ns:
+                existing_by_key[key]["is_macro"] = ns["is_macro"]
+            if "target_engine" in ns:
+                existing_by_key[key]["target_engine"] = ns["target_engine"]
+            if "role" in ns:
+                existing_by_key[key]["role"] = ns["role"]
+            if "spatial_rules" in ns:
+                existing_by_key[key]["spatial_rules"] = ns["spatial_rules"]
+            if "expected_diameter_px" in ns:
+                existing_by_key[key]["expected_diameter_px"] = ns["expected_diameter_px"]
             updated_count += 1
         else:
             # Assign a new color from the palette
@@ -691,6 +932,22 @@ def merge_ontology_structures(
 
     # Rebuild the ontology document
     existing_ontology["structures"] = merged_structures
+    existing_ontology["macro_structures"] = [s for s in merged_structures if s.get("is_macro")]
+    existing_ontology["micro_structures"] = [s for s in merged_structures if not s.get("is_macro")]
+    existing_ontology["spatial_rules"] = [
+        {
+            "micro_key": s.get("key"),
+            "micro_name": s.get("name") or s.get("label"),
+            **s.get("spatial_rules", {})
+        }
+        for s in merged_structures if not s.get("is_macro") and s.get("spatial_rules")
+    ]
+    if "tissue_name" not in existing_ontology or not existing_ontology["tissue_name"]:
+        for s in merged_structures:
+            if s.get("tissue_name"):
+                existing_ontology["tissue_name"] = s["tissue_name"]
+                break
+
     existing_ontology["source_pdfs"] = source_pdfs
     existing_ontology["extracted_images"] = existing_images
     # Keep the legacy source_pdf pointing to the latest
@@ -700,10 +957,13 @@ def merge_ontology_structures(
     # Regenerate prompts
     existing_ontology["prompts"] = [
         {
-            "key": s["key"],
-            "prompt": s["prompt"],
-            "label": s.get("label", s.get("name", s["key"])),
+            "key": s.get("key", f"class_{i + 1}"),
+            "prompt": s.get("prompt", s.get("name", s.get("key", f"structure {i + 1}"))),
+            "label": s.get("label", s.get("name", s.get("key", f"Clase {i + 1}"))),
             "color": s.get("color", DEFAULT_COLORS[i % len(DEFAULT_COLORS)]),
+            "is_macro": s.get("is_macro", False),
+            "target_engine": s.get("target_engine", "sam3" if s.get("is_macro") else "cellpose"),
+            "spatial_rules": s.get("spatial_rules", {}),
         }
         for i, s in enumerate(merged_structures)
     ]
@@ -754,20 +1014,34 @@ def list_ontologies() -> List[Dict[str, Any]]:
 def update_ontology_structures(
     name: str, structures: List[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
-    """Update the structures (and regenerate prompts) of a saved ontology."""
+    """Update the structures (and regenerate prompts and spatial rules) of a saved ontology."""
     ontology = load_ontology(name)
     if ontology is None:
         return None
 
     ontology["structures"] = structures
+    ontology["macro_structures"] = [s for s in structures if s.get("is_macro")]
+    ontology["micro_structures"] = [s for s in structures if not s.get("is_macro")]
+    ontology["spatial_rules"] = [
+        {
+            "micro_key": s.get("key"),
+            "micro_name": s.get("name") or s.get("label"),
+            **s.get("spatial_rules", {})
+        }
+        for s in structures if not s.get("is_macro") and s.get("spatial_rules")
+    ]
     ontology["is_histology"] = is_histology_ontology(ontology)
+
     # Regenerate prompts from updated structures
     ontology["prompts"] = [
         {
-            "key": s["key"],
-            "prompt": s["prompt"],
-            "label": s.get("label", s.get("name", s["key"])),
+            "key": s.get("key", f"class_{i + 1}"),
+            "prompt": s.get("prompt", s.get("name", s.get("key", f"structure {i + 1}"))),
+            "label": s.get("label", s.get("name", s.get("key", f"Clase {i + 1}"))),
             "color": s.get("color", DEFAULT_COLORS[i % len(DEFAULT_COLORS)]),
+            "is_macro": s.get("is_macro", False),
+            "target_engine": s.get("target_engine", "sam3" if s.get("is_macro") else "cellpose"),
+            "spatial_rules": s.get("spatial_rules", {}),
         }
         for i, s in enumerate(structures)
     ]
@@ -1004,4 +1278,99 @@ def delete_pdf_image(pdf_id: str, filename: str) -> bool:
             return True
 
     return False
+
+
+def validate_spatial_rules(
+    detections: List[Dict[str, Any]],
+    macro_annotations: List[Dict[str, Any]],
+    spatial_rules_lookup: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Validate cell/micro detections against segmented macro-structure boundaries.
+
+    Args:
+        detections: List of cell detections, each with 'box' [x1, y1, x2, y2] or 'bbox' or 'centroid'
+                    and 'class_key' / 'category_id' / 'label'.
+        macro_annotations: List of macro detections with 'class_key' / 'label' and 'segmentation' (polygon points).
+        spatial_rules_lookup: Dict mapping micro class_key -> spatial_rules dict.
+
+    Returns:
+        Summary dict with validated_count, violations_count, and detailed violations list.
+    """
+    import cv2
+    import numpy as np
+
+    # Build spatial index of macro polygons
+    macro_polys_by_key: Dict[str, List[np.ndarray]] = {}
+    for macro in macro_annotations:
+        m_key = str(macro.get("class_key") or macro.get("category_id") or macro.get("key") or macro.get("label") or "").strip().lower()
+        if not m_key:
+            continue
+        segs = macro.get("segmentation") or []
+        if isinstance(segs, list):
+            for poly in segs:
+                if isinstance(poly, list) and len(poly) >= 6:
+                    pts = np.array(poly, dtype=np.float32).reshape(-1, 2)
+                    macro_polys_by_key.setdefault(m_key, []).append(pts)
+
+    violations = []
+    valid_count = 0
+
+    for idx, det in enumerate(detections):
+        d_key = str(det.get("class_key") or det.get("category_id") or det.get("key") or det.get("label") or "").strip().lower()
+        rule = spatial_rules_lookup.get(d_key) or {}
+        if not rule:
+            # Check by matching substring
+            for rk, rv in spatial_rules_lookup.items():
+                if rk in d_key or d_key in rk:
+                    rule = rv
+                    break
+
+        forbidden = [str(k).strip().lower() for k in rule.get("forbidden_in", [])]
+
+        # Compute centroid
+        if "centroid" in det and isinstance(det["centroid"], (list, tuple)) and len(det["centroid"]) == 2:
+            cx, cy = float(det["centroid"][0]), float(det["centroid"][1])
+        elif "box" in det and isinstance(det["box"], (list, tuple)) and len(det["box"]) == 4:
+            x1, y1, x2, y2 = [float(v) for v in det["box"]]
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+        elif "bbox" in det and isinstance(det["bbox"], (list, tuple)) and len(det["bbox"]) == 4:
+            x, y, w, h = [float(v) for v in det["bbox"]]
+            cx, cy = x + w / 2.0, y + h / 2.0
+        else:
+            valid_count += 1
+            continue
+
+        det_violation = None
+
+        # Check forbidden regions: cell centroid inside forbidden macro polygon
+        for forb_key in forbidden:
+            if forb_key in macro_polys_by_key:
+                for poly_pts in macro_polys_by_key[forb_key]:
+                    dist = cv2.pointPolygonTest(poly_pts, (cx, cy), False)
+                    if dist >= 0:
+                        det_violation = {
+                            "detection_index": idx,
+                            "class_key": d_key,
+                            "label": det.get("label", d_key),
+                            "centroid": [round(cx, 1), round(cy, 1)],
+                            "violation_type": "forbidden_compartment",
+                            "forbidden_macro": forb_key,
+                            "reason": f"Célula '{det.get('label', d_key)}' detectada dentro de la macroestructura prohibida '{forb_key}' ({rule.get('rule_description', 'violación anatómica')})"
+                        }
+                        break
+            if det_violation:
+                break
+
+        if det_violation:
+            violations.append(det_violation)
+        else:
+            valid_count += 1
+
+    return {
+        "total_evaluated": len(detections),
+        "valid_count": valid_count,
+        "violations_count": len(violations),
+        "violations": violations,
+    }
 

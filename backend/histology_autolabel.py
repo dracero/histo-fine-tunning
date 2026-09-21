@@ -37,12 +37,16 @@ try:
         get_pathology_models_status,
         VirchowModelWrapper,
         UniModelWrapper,
+        extract_crops_from_detections,
     )
     from backend.pdf_ontology import list_ontologies, load_ontology
     from backend.roboflow_integration import build_coco_json, build_multi_image_coco, upload_dataset_to_roboflow
     from backend.gemini_vision import (
         detect_histological_macro_layers_gemini,
         validate_uncertain_detections_with_gemini,
+        analyze_tissue_macro_micro_ontology,
+        classify_cell_with_spatial_prior_gemini,
+        classify_cells_batch_gemini,
     )
 except ImportError:
     from cellpose_segmenter import run_cellpose_segmentation, is_cellpose_available
@@ -54,12 +58,16 @@ except ImportError:
         get_pathology_models_status,
         VirchowModelWrapper,
         UniModelWrapper,
+        extract_crops_from_detections,
     )
     from pdf_ontology import list_ontologies, load_ontology
     from roboflow_integration import build_coco_json, build_multi_image_coco, upload_dataset_to_roboflow
     from gemini_vision import (
         detect_histological_macro_layers_gemini,
         validate_uncertain_detections_with_gemini,
+        analyze_tissue_macro_micro_ontology,
+        classify_cell_with_spatial_prior_gemini,
+        classify_cells_batch_gemini,
     )
 
 logger = logging.getLogger("sam3-backend.autolabel")
@@ -261,6 +269,7 @@ class HistologyAutoLabeler:
 
         all_combined_detections: List[Dict[str, Any]] = []
         macro_layers: List[Dict[str, Any]] = []
+        spatial_map: Dict[str, List[str]] = {}
 
         macro_classes = [c for c in classes if c.get("is_macro", False)]
         cellular_classes = [c for c in classes if not c.get("is_macro", False)]
@@ -268,25 +277,58 @@ class HistologyAutoLabeler:
             cellular_classes = classes
 
         # =========================================================================
-        # LEVEL 1: Macro-Compartment & Tissue Layer Segmentation
+        # LEVEL 1: Dual-Scale Macro-Micro Analysis & Compartment Segmentation
         # =========================================================================
-        if include_macro_layers and macro_classes:
-            logger.info(f"Grounding {len(macro_classes)} macro-architectural classes with Gemini Vision & SAM 3.1...")
-            grounded: List[Dict[str, Any]] = []
+        grounded: List[Dict[str, Any]] = []
+        if include_macro_layers or use_gemini_validation:
+            logger.info(f"Analyzing Macro & Micro tissue architecture with Gemini Vision for '{domain_title}'...")
+            try:
+                gemini_analysis = analyze_tissue_macro_micro_ontology(
+                    image=img_rgb,
+                    organ_context=domain_title,
+                    base_ontology=classes,
+                )
+                if gemini_analysis.get("success"):
+                    if gemini_analysis.get("macro_layers"):
+                        grounded = gemini_analysis["macro_layers"]
+                    if gemini_analysis.get("spatial_map"):
+                        spatial_map = gemini_analysis["spatial_map"]
+
+                    # Enrich cellular classes with newly discovered cytological features
+                    discovered_cells = gemini_analysis.get("cellular_classes", [])
+                    if discovered_cells:
+                        existing_keys = {c.get("key") for c in cellular_classes if c.get("key")}
+                        for dc in discovered_cells:
+                            if dc.get("key") not in existing_keys:
+                                cellular_classes.append(dc)
+                                classes.append(dc)
+                                existing_keys.add(dc.get("key"))
+                            else:
+                                # Update prompt and cytological features if present
+                                for ec in cellular_classes:
+                                    if ec.get("key") == dc.get("key"):
+                                        if dc.get("cytological_features"):
+                                            ec["cytological_features"] = dc["cytological_features"]
+                                        if dc.get("spatial_zone"):
+                                            ec["spatial_zone"] = dc["spatial_zone"]
+            except Exception as gemini_err:
+                logger.warning(f"Gemini dual-scale analysis note: {gemini_err}")
+
+        # Fallback to standard macro layer grounding if dual-scale returned empty
+        if not grounded and include_macro_layers and macro_classes:
             try:
                 grounded = detect_histological_macro_layers_gemini(
                     image=img_rgb,
                     organ_context=domain_title,
                     ontology_structures=macro_classes,
                 )
-            except Exception as gemini_err:
-                logger.warning(f"Gemini macro grounding note: {gemini_err}")
-                grounded = []
+            except Exception as e:
+                logger.warning(f"Macro grounding fallback note: {e}")
 
+        if grounded:
             # Refine macro-layer polygon boundaries using SAM 3.1 or adaptive gradient contours
             img_np = np.array(img_rgb)
             gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-
             tubule_detections: List[Dict[str, Any]] = []
 
             for layer in grounded:
@@ -342,9 +384,8 @@ class HistologyAutoLabeler:
                     tubule_detections.append(layer)
 
             # Morphological Basement Membrane Derivation:
-            # If the ontology defines a basement membrane / tubular wall, derive it from tubule boundaries!
             boundary_classes = [
-                c for c in macro_classes
+                c for c in classes
                 if any(b_ind in str(c.get("key", "")).lower() for b_ind in ("basal", "membrana", "pared", "tunica_propria"))
                 or c.get("role") in ("boundary_inner", "boundary_outer")
             ]
@@ -363,7 +404,7 @@ class HistologyAutoLabeler:
             all_combined_detections.extend(macro_layers)
 
         # =========================================================================
-        # LEVEL 2: Cellular & Nuclear Instance Segmentation
+        # LEVEL 2: Cellular & Nuclear Instance Segmentation (Cellpose)
         # =========================================================================
         cp_model = cellpose_model or self.default_cellpose_model
         seg_res = run_cellpose_segmentation(
@@ -378,14 +419,12 @@ class HistologyAutoLabeler:
 
         classified_cell_detections: List[Dict[str, Any]] = []
         if raw_cell_detections:
-            # Spatial Layer Attribution Prior
-            # Assign cells to their containing anatomical layer as a strong biological prior
+            # Spatial Layer Attribution: Map each cell to its containing macro-compartment
             for cell_det in raw_cell_detections:
                 cbx, cby, cbw, cbh = cell_det.get("bbox", [0, 0, 1, 1])
                 cx, cy = cbx + cbw / 2.0, cby + cbh / 2.0
                 cell_det["containing_layer"] = None
 
-                # Test polygon inclusion first, then fallback to bounding box
                 for layer in macro_layers:
                     segs = layer.get("segmentation", [])
                     matched = False
@@ -404,53 +443,62 @@ class HistologyAutoLabeler:
                         if lx1 <= cx <= lx2 and ly1 <= cy <= ly2:
                             cell_det["containing_layer"] = layer.get("key")
 
-            # Quad-Foundation Ensemble Classification for cellular instances
-            classified_cell_detections, uncertain_indices = classify_with_ontology_ensemble(
-                image=img_rgb,
-                detections=raw_cell_detections,
-                ontology_classes=cellular_classes,
-                confidence_threshold=confidence_threshold,
-                uncertainty_threshold=uncertainty_threshold,
-                is_histology=True,
-            )
-
-            # Dynamic Spatial Layer Attribution based on Ontology Parent Graph
-            parent_children_map: Dict[str, List[Dict[str, Any]]] = {}
-            for c in cellular_classes:
-                p_key = str(c.get("parent", "") or "").strip()
-                if p_key and p_key not in ("none", "null", ""):
-                    parent_children_map.setdefault(p_key, []).append(c)
-
-            for det in classified_cell_detections:
-                layer_k = det.get("containing_layer")
-                if layer_k and layer_k in parent_children_map:
-                    valid_children = parent_children_map[layer_k]
-                    valid_child_keys = {c.get("key") for c in valid_children if c.get("key")}
-                    cur_key = det.get("class_key")
-                    if cur_key not in valid_child_keys and valid_children:
-                        best_child = valid_children[0]
-                        det["category_id"] = best_child.get("key")
-                        det["class_key"] = best_child.get("key")
-                        det["class_label"] = best_child.get("label", best_child.get("name", best_child.get("key")))
-                        det["color"] = best_child.get("color", "#8b5cf6")
-                        det["spatial_parent_aligned"] = layer_k
-
-            # Gemini Vision Validation on Ambiguous Instances (Image-by-Image cytological review)
-            if use_gemini_validation and uncertain_indices:
-                uncertain_subset = [classified_cell_detections[idx] for idx in uncertain_indices]
+            # =================================================================
+            # PRIMARY: Gemini Vision Batch Classification (0 GPU VRAM)
+            # Sends annotated image with numbered contours to Gemini for
+            # contextual classification of all cells in 1-2 API calls.
+            # =================================================================
+            gemini_success = False
+            if use_gemini_validation:
                 try:
-                    validated_subset = validate_uncertain_detections_with_gemini(
+                    classified_cell_detections, uncertain_indices = classify_cells_batch_gemini(
                         image=img_rgb,
-                        uncertain_detections=uncertain_subset,
+                        detections=raw_cell_detections,
                         ontology_classes=cellular_classes,
+                        spatial_map=spatial_map,
                         organ_context=domain_title,
                     )
-                    for local_idx, orig_idx in enumerate(uncertain_indices):
-                        if local_idx < len(validated_subset):
-                            classified_cell_detections[orig_idx] = validated_subset[local_idx]
-                    logger.info(f"Gemini Vision successfully validated {len(validated_subset)} uncertain instances.")
-                except Exception as val_err:
-                    logger.warning(f"Gemini uncertain detection validation notice: {val_err}")
+                    # Consider success if Gemini classified at least 50% of cells
+                    classified_count = len(raw_cell_detections) - len(uncertain_indices)
+                    if classified_count >= len(raw_cell_detections) * 0.5:
+                        gemini_success = True
+                        logger.info(
+                            f"Gemini Vision batch classified {classified_count}/{len(raw_cell_detections)} cells "
+                            f"({len(uncertain_indices)} uncertain)."
+                        )
+                except Exception as gemini_err:
+                    logger.warning(f"Gemini Vision batch classification failed, falling back to ensemble: {gemini_err}")
+
+            # =================================================================
+            # FALLBACK: Quad-Foundation Ensemble (if Gemini unavailable/failed)
+            # Uses CONCH 512d + Virchow2 1280d + UNI 1024d + Lunit DINO 384d
+            # =================================================================
+            if not gemini_success:
+                logger.info("Using Quad-Foundation Ensemble classification (fallback).")
+                classified_cell_detections, uncertain_indices = classify_with_ontology_ensemble(
+                    image=img_rgb,
+                    detections=raw_cell_detections,
+                    ontology_classes=cellular_classes,
+                    confidence_threshold=confidence_threshold,
+                    uncertainty_threshold=uncertainty_threshold,
+                    is_histology=True,
+                )
+
+            # Spatial Constraint Enforcement via Spatial Map / Ontology Parent Graph
+            for det in classified_cell_detections:
+                layer_k = det.get("containing_layer")
+                if layer_k and layer_k in spatial_map:
+                    allowed_keys = set(spatial_map[layer_k])
+                    cur_key = det.get("class_key")
+                    if cur_key not in allowed_keys:
+                        matched_c = next((c for c in cellular_classes if c.get("key") in allowed_keys), None)
+                        if matched_c:
+                            det["category_id"] = matched_c.get("key")
+                            det["class_key"] = matched_c.get("key")
+                            det["class_label"] = matched_c.get("name", matched_c.get("label", matched_c.get("key")))
+                            det["color"] = matched_c.get("color", "#8b5cf6")
+                            det["spatial_parent_aligned"] = layer_k
+                            det["classification_uncertain"] = True
 
             all_combined_detections.extend(classified_cell_detections)
 

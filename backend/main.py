@@ -175,6 +175,22 @@ from cellpose_segmenter import (
     offload_cellpose_to_cpu,
 )
 
+# Import Gemini Vision & Key Manager
+try:
+    from backend.gemini_vision import (
+        key_manager,
+        GEMINI_MODEL,
+        suggest_cell_prototype_gemini,
+        classify_cells_batch_gemini,
+    )
+except ImportError:
+    from gemini_vision import (
+        key_manager,
+        GEMINI_MODEL,
+        suggest_cell_prototype_gemini,
+        classify_cells_batch_gemini,
+    )
+
 # Import FAISS Semantic Similarity Labeler for Histology
 from faiss_similarity_labeler import FAISSSimilarityLabeler
 try:
@@ -1211,11 +1227,10 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
       - domain_name: str (optional, auto-derived from filename if omitted)
       - merge_into_ontology: str (optional, name of existing ontology to merge into)
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not gemini_key:
+    if not key_manager.get_all_keys():
         raise HTTPException(
             status_code=500,
-            detail="GEMINI_API_KEY no está configurada en .env"
+            detail="No hay API Keys de Google / Gemini configuradas en .env (GOOGLE_API_KEYS o GEMINI_API_KEY)"
         )
 
     pdf_id = payload.get("pdf_id", "unknown")
@@ -1232,8 +1247,8 @@ async def generate_ontology(payload: Dict[str, Any] = Body(...)) -> Dict[str, An
     try:
         structures = generate_ontology_with_gemini(
             extracted_text=text,
-            api_key=gemini_key,
-            model_name="gemini-2.5-flash",
+            api_key=None,
+            model_name=GEMINI_MODEL,
             pdf_id=pdf_id,
         )
 
@@ -1720,6 +1735,87 @@ async def classify_virchow_prototypes_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/classify-gemini")
+async def classify_gemini_endpoint(
+    image: UploadFile = File(...),
+    detections: str = Form(...),
+    classes: Optional[str] = Form(None),
+    ontology_name: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Direct Gemini Vision batch classification of existing segmented cells.
+    Renders numbered cell contours on the image and uses Gemini Vision to classify all instances in 1-2 calls.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        try:
+            detections_list = json.loads(detections) if isinstance(detections, str) else detections
+        except Exception as json_err:
+            raise HTTPException(status_code=400, detail=f"Formato JSON inválido para detections: {json_err}")
+
+        if not isinstance(detections_list, list):
+            raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
+
+        candidate_classes = []
+        if classes and classes.strip():
+            try:
+                candidate_classes = json.loads(classes)
+            except Exception as parse_err:
+                logger.warning(f"Failed to parse candidate classes: {parse_err}")
+
+        # If ontology is active, pull cellular structures from ontology
+        ont_doc = None
+        if ontology_name and ontology_name.strip():
+            ont_doc = load_ontology(ontology_name.strip())
+            if ont_doc and "structures" in ont_doc and len(ont_doc["structures"]) > 0:
+                cellular = filter_cellular_candidate_classes(ont_doc["structures"])
+                if cellular:
+                    candidate_classes = cellular
+
+        # If candidate classes are available, filter to keep valid cellular classes
+        if candidate_classes:
+            filtered = filter_cellular_candidate_classes(candidate_classes)
+            if filtered:
+                candidate_classes = filtered
+
+        # Fallback to default histology classes if none provided
+        if not candidate_classes:
+            candidate_classes = [
+                {"key": "espermatogonia", "name": "Espermatogonia", "label": "Espermatogonia", "color": "#ef4444"},
+                {"key": "espermatocito", "name": "Espermatocito", "label": "Espermatocito", "color": "#10b981"},
+                {"key": "espermatide", "name": "Espermátide", "label": "Espermátide", "color": "#06b6d4"},
+                {"key": "sertoli", "name": "Célula de Sertoli", "label": "Célula de Sertoli", "color": "#3b82f6"},
+                {"key": "leydig", "name": "Célula de Leydig", "label": "Célula de Leydig", "color": "#f59e0b"},
+            ]
+
+        # Spatial map from ontology if available
+        spatial_map = None
+        if ont_doc and "spatial_map" in ont_doc:
+            spatial_map = ont_doc.get("spatial_map")
+
+        classified, uncertain_idxs = classify_cells_batch_gemini(
+            image=pil_image,
+            detections=detections_list,
+            ontology_classes=candidate_classes,
+            spatial_map=spatial_map,
+            organ_context=ontology_name or "histología",
+        )
+
+        return {
+            "success": True,
+            "total_classified": len(classified),
+            "detections": classified,
+            "uncertain_indices": uncertain_idxs,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Gemini Vision batch classification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/classify-dino")
 async def classify_dino_endpoint(
     image: UploadFile = File(...),
@@ -1806,7 +1902,8 @@ async def similarity_build_index(
     """
     global _similarity_labeler, _similarity_image_hash
 
-    prepare_engine_vram("autolabel")
+    # Free Cellpose VRAM so Foundation Models (Virchow2/UNI/CONCH) run at 100% speed on CUDA
+    offload_cellpose_to_cpu()
 
     try:
         contents = await image.read()
@@ -1820,10 +1917,20 @@ async def similarity_build_index(
         if not isinstance(detections_list, list):
             raise HTTPException(status_code=400, detail="detections must be a JSON array.")
 
-        # Build or rebuild the labeler
+        # Build or rebuild the labeler, preserving valid prototypes if present
+        old_prototypes = {}
+        if _similarity_labeler is not None and hasattr(_similarity_labeler, "_prototypes"):
+            old_prototypes = dict(_similarity_labeler._prototypes)
+
         _similarity_labeler = FAISSSimilarityLabeler(primary_model=model)
         result = _similarity_labeler.build_index(pil_image, detections_list)
         _similarity_image_hash = _get_image_hash(contents)
+
+        if old_prototypes:
+            for p_lbl, p_obj in old_prototypes.items():
+                val_idxs = [i for i in p_obj.detection_indices if 0 <= i < len(detections_list)]
+                if val_idxs:
+                    _similarity_labeler.add_prototype(p_lbl, p_obj.color, val_idxs)
 
         return result
 
@@ -1909,6 +2016,8 @@ async def similarity_add_prototype(
         raise HTTPException(status_code=400, detail=f"Invalid detection_indices: {e}")
 
     result = _similarity_labeler.add_prototype(label.strip(), color.strip(), indices)
+    if not result.get("success", False):
+        raise HTTPException(status_code=400, detail=result.get("error", "Error al registrar el prototipo."))
     return result
 
 
@@ -1942,6 +2051,8 @@ async def similarity_propagate_label(
     label: str = Form(...),
     detections: str = Form(...),
     threshold: float = Form(0.80),
+    color: Optional[str] = Form(None),
+    detection_index: Optional[int] = Form(None),
 ) -> Dict[str, Any]:
     """
     Propagate a single prototype's label to all similar detections.
@@ -1959,13 +2070,22 @@ async def similarity_propagate_label(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {e}")
 
+    clean_label = label.strip()
+
+    # Fallback auto-registration if prototype is not found but detection_index is provided
+    if _similarity_labeler.get_prototype(clean_label) is None and detection_index is not None:
+        if 0 <= detection_index < _similarity_labeler._num_detections:
+            proto_color = color.strip() if color else "#e11d48"
+            logger.info(f"Auto-registering prototype '{clean_label}' with detection #{detection_index}")
+            _similarity_labeler.add_prototype(clean_label, proto_color, [detection_index])
+
     try:
         updated, num_labeled = _similarity_labeler.propagate_label(
-            label.strip(), detections_list, threshold=threshold
+            clean_label, detections_list, threshold=threshold
         )
         return {
             "success": True,
-            "label": label.strip(),
+            "label": clean_label,
             "num_labeled": num_labeled,
             "detections": updated,
         }
@@ -2022,6 +2142,56 @@ async def similarity_auto_cluster(
         }
     except Exception as e:
         logger.error(f"Auto-cluster error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================== Gemini & Similarity Assistant Endpoints ========================
+
+@app.get("/api/gemini/status")
+def gemini_keys_status() -> Dict[str, Any]:
+    """Return the Gemini API Key Pool status, model, and active keys count."""
+    return {
+        "success": True,
+        **key_manager.get_status(),
+    }
+
+
+@app.post("/api/similarity/gemini-suggest-prototype")
+async def similarity_gemini_suggest_prototype(
+    detection_index: int = Form(...),
+    organ_context: str = Form("testículo / espermatogénesis"),
+) -> Dict[str, Any]:
+    """
+    Ask Gemini 3.5 Flash to inspect the high-resolution crop of the selected cell
+    and suggest its cytological name, color, and reasoning.
+    """
+    global _similarity_labeler
+
+    if _similarity_labeler is None:
+        raise HTTPException(
+            status_code=400,
+            detail="El índice FAISS no está construido. Haz clic primero en '1. Indexar Detecciones'."
+        )
+
+    crop = _similarity_labeler.get_crop(detection_index)
+    if crop is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se encontró el recorte citológico para la célula #{detection_index}."
+        )
+
+    try:
+        suggestion = suggest_cell_prototype_gemini(
+            crop=crop,
+            organ_context=organ_context,
+        )
+        return {
+            "success": True,
+            "detection_index": detection_index,
+            **suggestion,
+        }
+    except Exception as e:
+        logger.error(f"Error sugiriendo prototipo con Gemini: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2210,6 +2380,37 @@ async def autolabel_endpoint(
     except Exception as e:
         logger.error(f"Autolabel error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/tissue/analyze-pipeline")
+async def tissue_analyze_pipeline_endpoint(
+    image: UploadFile = File(...),
+    ontology_name: Optional[str] = Form(None),
+    raw_ontology: Optional[str] = Form(None),
+    cellpose_model: str = Form("cpsam"),
+    cell_diameter: Optional[float] = Form(None),
+    confidence_threshold: float = Form(0.50),
+    use_gemini_validation: bool = Form(True),
+    include_macro_layers: bool = Form(True),
+) -> Dict[str, Any]:
+    """
+    Unified Endpoint for Full Histology Pipeline:
+    1. Gemini Multimodal Macro & Micro Spatial Ontology Analysis.
+    2. Cellpose Cellular & Nuclear Instance Segmentation.
+    3. Virchow 2 ViT-Huge 1280d Cytological Morphological Classification & Gemini Validation.
+    """
+    return await autolabel_endpoint(
+        image=image,
+        ontology_name=ontology_name,
+        raw_ontology=raw_ontology,
+        cellpose_model=cellpose_model,
+        cell_diameter=cell_diameter,
+        confidence_threshold=confidence_threshold,
+        uncertainty_threshold=0.30,
+        use_gemini_validation=use_gemini_validation,
+        include_macro_layers=include_macro_layers,
+        min_area=15,
+    )
 
 
 @app.post("/api/autolabel-batch")

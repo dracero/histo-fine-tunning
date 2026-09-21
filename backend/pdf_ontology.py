@@ -438,30 +438,31 @@ def _find_image_caption(page_text: str, page_num: int, img_index: int) -> Option
 
 def generate_ontology_with_gemini(
     extracted_text: str,
-    api_key: str,
-    model_name: str = "gemini-2.5-flash",
-    max_text_chars: int = 80000,
+    api_key: Optional[str] = None,
+    model_name: Optional[str] = None,
+    max_text_chars: int = 35000,
     pdf_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Send extracted PDF text (and optional page images) to Gemini and get back a structured ontology.
+    Send extracted PDF text (and optional page images) to Gemini 3.5 Flash and get back a structured ontology.
+    Uses automatic key rotation across GOOGLE_API_KEYS if api_key is None.
 
     Args:
         extracted_text: Full text extracted from PDF.
-        api_key: Gemini API key.
-        model_name: Gemini model to use.
-        max_text_chars: Max characters to send (to stay within context limits).
+        api_key: Optional Gemini API key (defaults to key_manager rotation pool).
+        model_name: Gemini model to use (defaults to GEMINI_MODEL / 'gemini-3.5-flash').
+        max_text_chars: Max characters to send (optimized to 35,000 for fast responses).
         pdf_id: Optional PDF ID to load page images if text is very short/scanned.
 
     Returns:
         List of ontology structure dicts.
     """
     try:
-        from google import genai
+        from backend.gemini_vision import generate_gemini_content, GEMINI_MODEL
     except ImportError:
-        raise ImportError(
-            "google-genai is required. Install with: pip install google-genai"
-        )
+        from gemini_vision import generate_gemini_content, GEMINI_MODEL
+
+    effective_model = model_name or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
 
     # Truncate if very long
     text_for_llm = extracted_text[:max_text_chars]
@@ -469,8 +470,6 @@ def generate_ontology_with_gemini(
         logger.info(
             f"Text truncated from {len(extracted_text)} to {max_text_chars} chars for LLM"
         )
-
-    client = genai.Client(api_key=api_key)
 
     user_prompt = ONTOLOGY_USER_PROMPT_TEMPLATE.format(
         text=text_for_llm if text_for_llm.strip() else "(Documento escaneado / sin texto extraído directamente. Analizar imágenes adjuntas.)"
@@ -489,8 +488,8 @@ def generate_ontology_with_gemini(
             )
             # Filter non-image auxiliary files
             img_files = [f for f in img_files if f.name not in ("metadata.json", "extracted_text.txt")]
-            # Sample up to 8 representative images to avoid latency / token overload
-            max_gemini_images = 8
+            # Sample up to 3 representative images to ensure fast latency with Gemini 3.5 Flash (<30s)
+            max_gemini_images = 3
             if len(img_files) > max_gemini_images:
                 step = len(img_files) / max_gemini_images
                 selected_files = [img_files[int(i * step)] for i in range(max_gemini_images)]
@@ -503,8 +502,8 @@ def generate_ontology_with_gemini(
                     pil_im = Image.open(img_path)
                     if pil_im.mode != "RGB":
                         pil_im = pil_im.convert("RGB")
-                    # Resize large images to save bandwidth / token cost
-                    max_dim = 1024
+                    # Resize large images to 768px max dim for optimal speed/quality trade-off
+                    max_dim = 768
                     if max(pil_im.size) > max_dim:
                         ratio = max_dim / max(pil_im.size)
                         new_size = (int(pil_im.width * ratio), int(pil_im.height * ratio))
@@ -522,40 +521,38 @@ def generate_ontology_with_gemini(
 
     # Attempt 1: Multimodal with attached images
     try:
-        logger.info(f"Attempting Gemini ontology generation with model '{model_name}' (multimodal)...")
-        response = client.models.generate_content(
-            model=model_name,
+        logger.info(f"Attempting Gemini ontology generation with model '{effective_model}' (multimodal)...")
+        response = generate_gemini_content(
             contents=contents,
-            config={
-                "system_instruction": ONTOLOGY_SYSTEM_PROMPT,
-                "temperature": 0.2,
-                "response_mime_type": "application/json",
-            },
+            system_instruction=ONTOLOGY_SYSTEM_PROMPT,
+            temperature=0.2,
+            response_mime_type="application/json",
+            api_key=api_key or None,
+            preferred_model=effective_model,
         )
         if response and response.text:
             raw_text = response.text.strip()
     except Exception as e:
         last_err = e
-        logger.warning(f"Gemini multimodal generation failed on '{model_name}': {e}")
+        logger.warning(f"Gemini multimodal generation failed on '{effective_model}': {e}")
 
     # Attempt 2: Text-only payload if multimodal failed
     if not raw_text:
         try:
-            logger.info(f"Attempting Gemini ontology generation with model '{model_name}' (text-only)...")
-            response = client.models.generate_content(
-                model=model_name,
+            logger.info(f"Attempting Gemini ontology generation with model '{effective_model}' (text-only)...")
+            response = generate_gemini_content(
                 contents=[user_prompt],
-                config={
-                    "system_instruction": ONTOLOGY_SYSTEM_PROMPT,
-                    "temperature": 0.2,
-                    "response_mime_type": "application/json",
-                },
+                system_instruction=ONTOLOGY_SYSTEM_PROMPT,
+                temperature=0.2,
+                response_mime_type="application/json",
+                api_key=api_key or None,
+                preferred_model=effective_model,
             )
             if response and response.text:
                 raw_text = response.text.strip()
         except Exception as e:
             last_err = e
-            logger.warning(f"Gemini text-only generation failed on '{model_name}': {e}")
+            logger.warning(f"Gemini text-only generation failed on '{effective_model}': {e}")
 
     structures = []
     detected_tissue = "Tejido Histológico"

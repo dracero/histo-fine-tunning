@@ -14,9 +14,11 @@ No LLM (Gemini/GPT) is used at any stage.  Classification is purely based on
 visual embedding distance.
 """
 
+import difflib
 import gc
 import logging
 import time
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -121,6 +123,14 @@ class FAISSSimilarityLabeler:
         self._dim: int = 0
         self._num_detections: int = 0
         self._prototypes: Dict[str, Prototype] = {}  # label -> Prototype
+        self._crops: List[Image.Image] = []
+        self._detections: List[Dict[str, Any]] = []
+
+    def get_crop(self, detection_index: int) -> Optional[Image.Image]:
+        """Return the extracted PIL crop for a given detection index, if available."""
+        if 0 <= detection_index < len(self._crops):
+            return self._crops[detection_index]
+        return None
 
     # ------------------------------------------------------------------
     # Index construction
@@ -167,6 +177,8 @@ class FAISSSimilarityLabeler:
         self._embeddings = embeddings_np
         self._dim = embeddings_np.shape[1]
         self._num_detections = embeddings_np.shape[0]
+        self._crops = crops
+        self._detections = detections
 
         # 4. Build FAISS IndexFlatIP (cosine sim on L2-normed vectors)
         self._index = faiss.IndexFlatIP(self._dim)
@@ -195,6 +207,47 @@ class FAISSSimilarityLabeler:
     # Prototype management
     # ------------------------------------------------------------------
 
+    def _normalize_str(self, s: str) -> str:
+        """Strip accents, lower-case and normalize whitespace for resilient matching."""
+        if not s:
+            return ""
+        s_norm = unicodedata.normalize("NFKD", s)
+        s_clean = "".join(c for c in s_norm if not unicodedata.combining(c))
+        return " ".join(s_clean.strip().lower().split())
+
+    def get_prototype(self, label: str) -> Optional[Prototype]:
+        """
+        Lookup prototype with resilient multi-stage matching:
+        1. Exact match
+        2. Normalized match (case-insensitive, diacritic-insensitive, trimmed whitespace)
+        3. Fuzzy match (difflib) for minor typos (e.g. 'espermatogonai' -> 'Espermatogonia A Clara')
+        """
+        if not label:
+            return None
+
+        # 1. Exact match
+        if label in self._prototypes:
+            return self._prototypes[label]
+
+        # 2. Normalized match
+        target_norm = self._normalize_str(label)
+        norm_map = {self._normalize_str(k): k for k in self._prototypes.keys()}
+        if target_norm in norm_map:
+            return self._prototypes[norm_map[target_norm]]
+
+        # 3. Fuzzy match for typos
+        candidates = list(norm_map.keys())
+        if candidates:
+            close = difflib.get_close_matches(target_norm, candidates, n=1, cutoff=0.72)
+            if close:
+                matched_key = norm_map[close[0]]
+                logger.info(
+                    f"Fuzzy matched prototype query '{label}' -> registered '{matched_key}'"
+                )
+                return self._prototypes[matched_key]
+
+        return None
+
     def add_prototype(
         self,
         label: str,
@@ -216,15 +269,25 @@ class FAISSSimilarityLabeler:
             if 0 <= i < self._num_detections
         ]
         if not valid_indices:
-            return {"success": False, "error": "No valid detection indices provided."}
+            return {
+                "success": False,
+                "error": f"No valid detection indices provided. Index has {self._num_detections} detections (received {detection_indices}).",
+            }
 
-        if label in self._prototypes:
-            proto = self._prototypes[label]
-            proto.detection_indices.extend(valid_indices)
+        clean_label = label.strip()
+        existing_proto = self.get_prototype(clean_label)
+
+        if existing_proto is not None:
+            proto = existing_proto
+            # Avoid duplicate indices
+            current_set = set(proto.detection_indices)
+            new_indices = [i for i in valid_indices if i not in current_set]
+            proto.detection_indices.extend(new_indices)
             proto.color = color  # allow colour update
+            self._prototypes[clean_label] = proto
         else:
-            proto = Prototype(label=label, color=color, detection_indices=list(valid_indices))
-            self._prototypes[label] = proto
+            proto = Prototype(label=clean_label, color=color, detection_indices=list(valid_indices))
+            self._prototypes[clean_label] = proto
 
         # Recompute centroid as the L2-normalised mean of all prototype embeddings
         proto_embeddings = self._embeddings[proto.detection_indices]  # (K, D)
@@ -233,32 +296,45 @@ class FAISSSimilarityLabeler:
         proto.centroid = centroid
 
         logger.info(
-            f"Prototype '{label}': {len(proto.detection_indices)} examples, "
+            f"Prototype '{clean_label}': {len(proto.detection_indices)} examples, "
             f"centroid norm={np.linalg.norm(proto.centroid):.4f}"
         )
 
         return {
             "success": True,
-            "label": label,
+            "label": clean_label,
             "color": color,
             "num_examples": len(proto.detection_indices),
         }
 
     def remove_prototype(self, label: str) -> bool:
         """Remove a registered prototype by label."""
-        return self._prototypes.pop(label, None) is not None
+        clean_label = label.strip()
+        proto = self.get_prototype(clean_label)
+        if proto is not None:
+            keys_to_remove = [k for k, p in self._prototypes.items() if p.label == proto.label or k == clean_label]
+            removed = False
+            for k in keys_to_remove:
+                if self._prototypes.pop(k, None) is not None:
+                    removed = True
+            return removed
+        return self._prototypes.pop(clean_label, None) is not None
 
     def list_prototypes(self) -> List[Dict[str, Any]]:
         """Return metadata for all registered prototypes."""
-        return [
-            {
+        seen_labels = set()
+        res = []
+        for p in self._prototypes.values():
+            if p.label in seen_labels:
+                continue
+            seen_labels.add(p.label)
+            res.append({
                 "label": p.label,
                 "color": p.color,
                 "num_examples": len(p.detection_indices),
                 "detection_indices": p.detection_indices,
-            }
-            for p in self._prototypes.values()
-        ]
+            })
+        return res
 
     # ------------------------------------------------------------------
     # Similarity search
@@ -285,9 +361,18 @@ class FAISSSimilarityLabeler:
         """
         self._require_index()
 
-        proto = self._prototypes.get(label)
+        proto = self.get_prototype(label.strip())
         if proto is None or proto.centroid is None:
-            raise ValueError(f"Prototype '{label}' not found.  Register it first with add_prototype().")
+            available = list({p.label for p in self._prototypes.values()})
+            if available:
+                raise ValueError(
+                    f"Prototype '{label}' not found. Clases registradas disponibles: {available}. "
+                    f"Verifica el nombre o regístralo primero con 'Registrar Prototipo'."
+                )
+            raise ValueError(
+                f"Prototype '{label}' not found. No hay ninguna clase registrada aún. "
+                f"Selecciona una célula y haz clic en 'Registrar Prototipo' primero."
+            )
 
         # FAISS search -- query is the prototype centroid (1, D)
         query = proto.centroid.reshape(1, -1).astype(np.float32)
@@ -316,7 +401,7 @@ class FAISSSimilarityLabeler:
             matches = matches[:top_k]
 
         return SimilarityResult(
-            prototype_label=label,
+            prototype_label=proto.label,
             prototype_color=proto.color,
             matches=matches,
         )
@@ -376,8 +461,11 @@ class FAISSSimilarityLabeler:
 
         Returns (detections, num_labeled).
         """
-        result = self.search_similar(label, threshold=threshold)
-        proto = self._prototypes[label]
+        clean_label = label.strip()
+        result = self.search_similar(clean_label, threshold=threshold)
+        proto = self.get_prototype(clean_label)
+        if proto is None:
+            proto = self._prototypes.get(clean_label) or self._prototypes[list(self._prototypes.keys())[0]]
 
         num_labeled = 0
         for m in result.matches:

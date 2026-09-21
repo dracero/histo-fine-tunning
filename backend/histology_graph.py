@@ -42,7 +42,7 @@ except ImportError:
     END = "__end__"
 
 try:
-    from backend.gemini_vision import _get_gemini_client
+    from backend.gemini_vision import _get_gemini_client, generate_gemini_content, GEMINI_MODEL
     from backend.pathology_models import (
         classify_detections_with_conch,
         classify_with_virchow_prototypes,
@@ -56,7 +56,7 @@ try:
     )
     from backend.pdf_ontology import list_ontologies, load_ontology
 except ImportError:
-    from gemini_vision import _get_gemini_client
+    from gemini_vision import _get_gemini_client, generate_gemini_content, GEMINI_MODEL
     from pathology_models import (
         classify_detections_with_conch,
         classify_with_virchow_prototypes,
@@ -310,10 +310,9 @@ Return ONLY valid JSON matching this structure:
 }}
 """
 
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
+            response = generate_gemini_content(
                 contents=[prompt_text, preview],
-                config={"response_mime_type": "application/json"},
+                response_mime_type="application/json",
             )
 
             res_text = response.text or "{}"
@@ -699,10 +698,9 @@ Return ONLY valid JSON.
 """
                 contents_payload.append(footer_instruction)
 
-                response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                response = generate_gemini_content(
                     contents=contents_payload,
-                    config={"response_mime_type": "application/json"},
+                    response_mime_type="application/json",
                 )
 
                 decisions = json.loads(response.text or "[]")

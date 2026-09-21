@@ -131,6 +131,14 @@ class ConchModelWrapper:
         if not self.is_loaded or self.model is None or self.preprocess is None:
             raise RuntimeError("CONCH model is not available.")
 
+        if torch.cuda.is_available() and self.device.type != "cuda":
+            try:
+                self.model = self.model.to("cuda")
+                self.device = torch.device("cuda")
+                logger.info("Restored CONCH model to CUDA.")
+            except Exception as e:
+                logger.warning(f"Could not restore CONCH to CUDA: {e}")
+
         dev_type = "cuda" if self.device.type == "cuda" else "cpu"
         all_embeddings = []
         for i in range(0, len(crops), batch_size):
@@ -226,6 +234,14 @@ class UniModelWrapper:
             self.load()
         if not self.is_loaded or self.model is None or self.transform is None:
             raise RuntimeError("UNI model is not available.")
+
+        if torch.cuda.is_available() and self.device.type != "cuda":
+            try:
+                self.model = self.model.to("cuda")
+                self.device = torch.device("cuda")
+                logger.info("Restored UNI model to CUDA.")
+            except Exception as e:
+                logger.warning(f"Could not restore UNI to CUDA: {e}")
 
         dev_type = "cuda" if self.device.type == "cuda" else "cpu"
         all_embeddings = []
@@ -339,6 +355,14 @@ class VirchowModelWrapper:
             self.load()
         if not self.is_loaded or self.model is None or self.transform is None:
             raise RuntimeError(f"Virchow model ({self.model_id}) is not available.")
+
+        if torch.cuda.is_available() and self.device.type != "cuda":
+            try:
+                self.model = self.model.to("cuda").half()
+                self.device = torch.device("cuda")
+                logger.info("Restored Virchow model to CUDA (half precision).")
+            except Exception as e:
+                logger.warning(f"Could not restore Virchow to CUDA: {e}")
 
         dev_type = "cuda" if self.device.type == "cuda" else "cpu"
         all_embeddings = []

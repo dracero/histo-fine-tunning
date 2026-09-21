@@ -37,6 +37,9 @@
 						<span class="model-pill" id="virchow-pill" title="Paige AI Virchow2 ViT-Huge (1280d)">
 							<span class="dot" id="virchow-dot"></span> Virchow2 (1280d)
 						</span>
+						<span class="model-pill active" id="gemini-keys-pill" style="border-color: rgba(14,165,233,0.4); background: rgba(14,165,233,0.08); cursor: pointer;" title="Google Gemini 3.5 Flash | Rotación de API Keys (GOOGLE_API_KEYS) ante 429/403">
+							<span class="dot green" id="gemini-keys-dot"></span> 🔑 <strong id="gemini-keys-badge" style="color: #38bdf8;">Gemini 3.5 (Rotación Auto)</strong>
+						</span>
 						<span class="model-pill active" id="ont-pill" style="border-color: rgba(6,182,212,0.4); background: rgba(6,182,212,0.1); cursor: pointer;" title="Ontología activa. Click para ver ontología e imágenes del PDF.">
 							<span class="dot green"></span> 🧬 <strong id="ont-pill-name" style="color: var(--accent-cyan); font-weight: 700;">Cargando...</strong>
 						</span>
@@ -145,6 +148,9 @@
 											🪄 Auto
 										</button>
 									</div>
+									<button type="button" id="sidebar-pipeline-integral-btn" class="btn-action" style="width: 100%; margin-top: 0.35rem; background: linear-gradient(135deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%); color: white; font-weight: 700; font-size: 0.76rem; padding: 0.5rem; border-radius: 6px; border: none; box-shadow: 0 2px 10px rgba(6,182,212,0.3); display: flex; align-items: center; justify-content: center; gap: 0.4rem; cursor: pointer;" title="Flujo completo: 1) Gemini analiza Macro y Micro ontología espacial, 2) Cellpose segmenta células, 3) Virchow 2 + Gemini clasifican con precisión">
+										✨ Pipeline Macro/Micro + Cellpose + Virchow
+									</button>
 								</div>
 								<!-- Prompt suggestion tags -->
 								<div class="prompt-tags" id="prompt-tags-container" style="display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem;">
@@ -195,6 +201,9 @@
 									🧬 Cargar Células de la Ontología (PDF)
 								</button>
 							</div>
+							<button type="button" id="classify-gemini-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.48rem 0.75rem; background: linear-gradient(135deg, #0284c7 0%, #3b82f6 50%, #8b5cf6 100%); color: #ffffff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(59,130,246,0.35); display: flex; align-items: center; justify-content: center; gap: 0.4rem;" title="Etiquetar todas las células segmentadas usando Gemini Vision en una sola llamada">
+								✨ Etiquetar con Gemini Vision (Batch)
+							</button>
 							<button type="button" id="classify-conch-btn" class="btn-action" style="margin-top: 0.35rem; font-size: 0.78rem; padding: 0.45rem 0.75rem; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(13,148,136,0.35);" title="Ensamble cuádruple de patología: Virchow 2 (1280d) + UNI (1024d) + CONCH (512d) + Lunit DINO (384d)">
 								🧬 Auto-Clasificar (Virchow + UNI + CONCH + DINO)
 							</button>
@@ -382,78 +391,87 @@
 						<div class="panel-box" style="margin-bottom: 0.85rem; border-left: 3px solid #8b5cf6; background: rgba(139, 92, 246, 0.04);">
 							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
 								<h3 class="section-title-sm" style="margin: 0; color: #c084fc; display: flex; align-items: center; gap: 0.35rem;">
-									🧬 Motor FAISS Histología
+									🧬 Motor FAISS & Virchow 2
 								</h3>
 								<span id="faiss-index-status-badge" class="badge" style="background: rgba(139,92,246,0.15); color: #c084fc; border: 1px solid rgba(139,92,246,0.3); font-size: 0.68rem;">
 									⚪ Sin Indexar
 								</span>
 							</div>
 							<p style="font-size: 0.72rem; color: var(--text-muted); margin: 0 0 0.6rem 0; line-height: 1.35;">
-								Extrae embeddings morfológicos de alta dimensión (Virchow2 1280d / UNI 1024d) y encuentra todas las células idénticas por similaridad coseno directa (sin LLMs).
+								Extrae embeddings morfológicos de alta dimensión (Virchow 2 1280d) para buscar y etiquetar células idénticas en milisegundos.
 							</p>
 
 							<div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.6rem;">
 								<label style="font-size: 0.72rem; color: var(--text-muted); white-space: nowrap;">Modelo:</label>
 								<select id="faiss-model-select" class="form-input-sm" style="flex: 1; font-size: 0.72rem; padding: 0.25rem 0.4rem; background: var(--bg-tertiary); color: var(--text-main);">
-									<option value="virchow" selected>Virchow 2 (1280d · Óptimo para espermatogénesis y subtipos)</option>
-									<option value="uni">UNI (1024d · Balance celular y tisular)</option>
+									<option value="virchow" selected>Virchow 2 (1280d · Recomendado para Espermatogénesis)</option>
+									<option value="uni">UNI (1024d · Balance celular general)</option>
 									<option value="conch">CONCH (512d · Rápido zero-shot)</option>
 								</select>
 							</div>
 
-							<button type="button" id="faiss-tab-build-btn" class="btn-action btn-primary-action" style="width: 100%; font-size: 0.76rem; padding: 0.45rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #fff; font-weight: 600; border: none; box-shadow: 0 2px 10px rgba(168,85,247,0.35);">
-								⚡ Indexar Detecciones de Imagen Activa
+							<button type="button" id="faiss-tab-build-btn" class="btn-action btn-primary-action" style="width: 100%; font-size: 0.78rem; padding: 0.5rem; background: linear-gradient(135deg, #6366f1, #a855f7); color: #fff; font-weight: 700; border: none; box-shadow: 0 2px 10px rgba(168,85,247,0.35); border-radius: 6px; cursor: pointer;">
+								⚡ Paso 1: Indexar Células de Imagen Activa
 							</button>
+							<div style="font-size: 0.67rem; color: var(--text-muted); margin-top: 0.3rem; text-align: center; line-height: 1.25;">
+								Genera los vectores de características en GPU para permitir el matching morfológico.
+							</div>
 						</div>
 
 						<!-- 2. Active Prototype Cell Marker -->
 						<div class="panel-box" style="margin-bottom: 0.85rem;">
 							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
 								<h3 class="section-title-sm" style="margin: 0; display: flex; align-items: center; gap: 0.35rem;">
-									🎯 Célula Prototipo
+									🎯 Célula Prototipo (Ejemplo)
 								</h3>
-								<button type="button" id="faiss-toggle-proto-mode-btn" class="btn-small btn-outline" style="font-size: 0.68rem; padding: 0.2rem 0.45rem; color: #c084fc; border-color: rgba(192,132,252,0.4);">
-									👆 Activar Selección
+								<button type="button" id="faiss-toggle-proto-mode-btn" class="btn-small btn-outline" style="font-size: 0.72rem; padding: 0.25rem 0.55rem; color: #c084fc; border-color: rgba(192,132,252,0.4); font-weight: 600;">
+									👆 Paso 2: Activar Selección
 								</button>
 							</div>
 
 							<div id="faiss-no-selection-hint" style="padding: 0.65rem; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 8px; margin-bottom: 0.6rem;">
 								<p style="font-size: 0.72rem; color: var(--text-muted); margin: 0;">
-									Haz clic en cualquier célula en el visor para seleccionarla como prototipo.
+									Haz clic en <strong>'👆 Paso 2: Activar Selección'</strong> y luego toca cualquier célula en el visor (ej. una espermatogonia).
 								</p>
 							</div>
 
-							<div id="faiss-selected-cell-box" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; margin-bottom: 0.6rem;">
-								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+							<div id="faiss-selected-cell-box" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.65rem; margin-bottom: 0.6rem;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
 									<span id="faiss-cell-id-text" style="font-size: 0.75rem; font-weight: 600; color: var(--accent-cyan);">Célula seleccionada</span>
 									<span id="faiss-cell-current-class" class="badge" style="font-size: 0.65rem;">Sin clasificar</span>
 								</div>
+
+								<!-- Gemini 3.5 Prototype Suggestion Button -->
+								<button type="button" id="faiss-gemini-suggest-btn" class="btn-action" style="width: 100%; font-size: 0.75rem; padding: 0.45rem; background: linear-gradient(135deg, #0284c7, #06b6d4); color: #fff; font-weight: 700; border: none; border-radius: 6px; margin-bottom: 0.4rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; cursor: pointer; box-shadow: 0 2px 8px rgba(6,182,212,0.25);">
+									✨ Paso 3: Identificar con Gemini 3.5 (Sugerir Nombre y Color)
+								</button>
+								<div id="faiss-gemini-reasoning-box" style="display: none; font-size: 0.68rem; color: #38bdf8; background: rgba(2,132,199,0.1); border: 1px solid rgba(2,132,199,0.25); border-radius: 6px; padding: 0.4rem 0.5rem; margin-bottom: 0.45rem; line-height: 1.35;"></div>
 								
 								<div style="display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.45rem;">
-									<input type="text" id="faiss-proto-label-input" placeholder="Nombre (ej: Espermatogonia A Clara)" class="form-input-sm" style="flex: 1; font-size: 0.75rem; padding: 0.3rem 0.5rem; background: var(--bg-tertiary);" />
-									<input type="color" id="faiss-proto-color-input" value="#e11d48" style="width: 32px; height: 28px; border: 1px solid var(--border-color); border-radius: 4px; background: transparent; cursor: pointer; padding: 1px;" title="Color de la clase" />
+									<input type="text" id="faiss-proto-label-input" placeholder="Nombre de clase (ej: Espermatogonia A Clara)" class="form-input-sm" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary);" />
+									<input type="color" id="faiss-proto-color-input" value="#e11d48" style="width: 32px; height: 30px; border: 1px solid var(--border-color); border-radius: 4px; background: transparent; cursor: pointer; padding: 1px;" title="Color asignado a esta clase" />
 								</div>
 
 								<!-- Quick Histology Chips (Dynamic from Ontology / Classes) -->
-								<div style="margin-bottom: 0.5rem;" id="faiss-chips-container">
-									<span style="font-size: 0.65rem; color: var(--text-muted);">Clases del tejido / sugerencias:</span>
+								<div style="margin-bottom: 0.55rem;" id="faiss-chips-container">
+									<span style="font-size: 0.65rem; color: var(--text-muted);">Sugerencias rápidas (clic para aplicar):</span>
 									<div id="faiss-chips-list" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;">
-										<button type="button" class="faiss-chip-btn" data-label="Célula Epitelial" data-color="#3b82f6">Epitelio</button>
-										<button type="button" class="faiss-chip-btn" data-label="Célula Endotelial" data-color="#06b6d4">Endotelio</button>
-										<button type="button" class="faiss-chip-btn" data-label="Célula Muscular Lisa" data-color="#ec4899">Músculo Liso</button>
-										<button type="button" class="faiss-chip-btn" data-label="Fibroblasto / Estroma" data-color="#8b5cf6">Estroma</button>
 										<button type="button" class="faiss-chip-btn" data-label="Espermatogonia A Clara" data-color="#e11d48">Esp. A Clara</button>
+										<button type="button" class="faiss-chip-btn" data-label="Espermatogonia A Oscura" data-color="#be123c">Esp. A Oscura</button>
+										<button type="button" class="faiss-chip-btn" data-label="Espermatogonia B" data-color="#fb7185">Esp. B</button>
 										<button type="button" class="faiss-chip-btn" data-label="Espermatocito Primario" data-color="#059669">Esp. Primario</button>
-										<button type="button" class="faiss-chip-btn" data-label="Espermatozoide" data-color="#f59e0b">Espermatozoide</button>
+										<button type="button" class="faiss-chip-btn" data-label="Célula de Sertoli" data-color="#3b82f6">Sertoli</button>
+										<button type="button" class="faiss-chip-btn" data-label="Célula de Leydig" data-color="#f59e0b">Leydig</button>
+										<button type="button" class="faiss-chip-btn" data-label="Espermatozoide" data-color="#8b5cf6">Espermatozoide</button>
 									</div>
 								</div>
 
 								<div style="display: flex; gap: 0.4rem;">
-									<button type="button" id="faiss-add-proto-btn" class="btn-small btn-primary-action" style="flex: 1; font-size: 0.72rem; padding: 0.35rem 0.5rem; background: #6366f1;">
-										➕ Registrar Prototipo
+									<button type="button" id="faiss-add-proto-btn" class="btn-small btn-primary-action" style="flex: 1; font-size: 0.74rem; padding: 0.4rem 0.5rem; background: #6366f1; font-weight: 700;">
+										➕ Paso 4: Registrar Prototipo
 									</button>
-									<button type="button" id="faiss-search-proto-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.72rem; padding: 0.35rem 0.5rem; color: #c084fc; border-color: rgba(192,132,252,0.4);">
-										🔍 Buscar Similares
+									<button type="button" id="faiss-search-proto-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.74rem; padding: 0.4rem 0.5rem; color: #c084fc; border-color: rgba(192,132,252,0.4); font-weight: 600;">
+										🔍 Paso 5: Probar Similitud
 									</button>
 								</div>
 							</div>
@@ -475,8 +493,8 @@
 									</div>
 								</div>
 
-								<button type="button" id="faiss-propagate-btn" class="btn-action btn-green" style="width: 100%; font-size: 0.75rem; padding: 0.45rem; display: none;">
-									🏷️ Propagar Etiqueta a Células Similares
+								<button type="button" id="faiss-propagate-btn" class="btn-action btn-green" style="width: 100%; font-size: 0.78rem; padding: 0.5rem; font-weight: 700; display: none;">
+									🚀 Paso 6: Propagar Etiqueta a Células Similares
 								</button>
 							</div>
 						</div>
@@ -484,28 +502,28 @@
 						<!-- 3. Registered Prototypes Multi-Centroid Registry -->
 						<div class="panel-box" style="margin-bottom: 0.85rem;">
 							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-								<h3 class="section-title-sm" style="margin: 0;">📋 Clases y Prototipos</h3>
+								<h3 class="section-title-sm" style="margin: 0;">📋 Clases y Prototipos Registrados</h3>
 								<span id="faiss-proto-count-badge" class="badge" style="font-size: 0.65rem;">0 clases</span>
 							</div>
 							<div id="faiss-prototypes-list" style="max-height: 220px; overflow-y: auto; margin-bottom: 0.6rem;">
-								<p class="empty-hint" style="font-size: 0.72rem;">No hay clases registradas aún.</p>
+								<p class="empty-hint" style="font-size: 0.72rem;">No hay clases registradas aún. Selecciona una célula para comenzar.</p>
 							</div>
-							<button type="button" id="faiss-propagate-all-btn" class="btn-action btn-primary-action" style="width: 100%; font-size: 0.75rem; padding: 0.45rem; background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 600; border: none; display: none;">
-								🚀 Propagar Todas las Clases (Winner-Takes-All)
+							<button type="button" id="faiss-propagate-all-btn" class="btn-action btn-primary-action" style="width: 100%; font-size: 0.78rem; padding: 0.5rem; background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-weight: 700; border: none; display: none;">
+								🌐 Paso 7: Propagar Todos los Prototipos a Toda la Lámina
 							</button>
 						</div>
 
 						<!-- 4. Unsupervised K-Means Auto-Cluster -->
 						<div class="panel-box">
-							<h3 class="section-title-sm" style="margin: 0 0 0.35rem 0;">🧩 Clustering No Supervisado (K-Means)</h3>
+							<h3 class="section-title-sm" style="margin: 0 0 0.35rem 0;">🧩 Agrupamiento Automático (K-Means)</h3>
 							<p style="font-size: 0.68rem; color: var(--text-muted); margin: 0 0 0.5rem 0; line-height: 1.35;">
 								Agrupa morfológicamente todas las células con embeddings FAISS sin necesidad de prototipos previos.
 							</p>
 							<div style="display: flex; gap: 0.4rem; align-items: center;">
 								<label style="font-size: 0.72rem; color: var(--text-muted);">Grupos (K):</label>
 								<input type="number" id="faiss-clusters-input" min="2" max="15" value="5" class="form-input-sm" style="width: 50px; font-size: 0.72rem; padding: 0.2rem 0.3rem;" />
-								<button type="button" id="faiss-run-cluster-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.72rem; padding: 0.3rem 0.5rem; color: #7c3aed; border-color: rgba(124,58,237,0.4);">
-									Ejecutar K-Means
+								<button type="button" id="faiss-run-cluster-btn" class="btn-small btn-outline" style="flex: 1; font-size: 0.74rem; padding: 0.35rem 0.5rem; color: #7c3aed; border-color: rgba(124,58,237,0.4); font-weight: 600;">
+									⚡ Ejecutar K-Means
 								</button>
 							</div>
 						</div>
@@ -541,6 +559,12 @@
 							<button type="button" id="faiss-auto-cluster-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; color: #7c3aed; border-color: rgba(124,58,237,0.4);" title="Clustering automático k-means sobre embeddings (sugiere grupos sin prototipos)">
 								🧩 Auto-Cluster
 							</button>
+							<button type="button" id="viewer-classify-gemini-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #0284c7, #8b5cf6); color: #ffffff; border: none; font-weight: 700; box-shadow: 0 2px 8px rgba(139,92,246,0.35);" title="Etiquetar las células segmentadas usando Gemini Vision en batch (1 sola llamada)">
+								✨ Etiquetar Gemini
+							</button>
+							<button type="button" id="run-pipeline-integral-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #10b981, #06b6d4); color: #ffffff; border: none; font-weight: 700; box-shadow: 0 2px 8px rgba(6,182,212,0.35);" title="Flujo completo: 1) Gemini analiza Macro y Micro ontología espacial, 2) Cellpose segmenta células, 3) Virchow 2 + Gemini clasifican con precisión">
+								✨ Pipeline Integral
+							</button>
 							<button type="button" id="validate-spatial-btn" class="btn-small btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; color: #10b981; border-color: rgba(16,185,129,0.4); font-weight: 600;" title="Validar que las células detectadas respeten las restricciones espaciales de la ontología anatómica (ej: no espermatozoides en membrana basal)">
 								📐 Validar Espacial
 							</button>
@@ -552,6 +576,10 @@
 							<label class="toggle-container">
 								<input type="checkbox" id="toggle-boxes" />
 								<span class="toggle-label">Boxes</span>
+							</label>
+							<label class="toggle-container">
+								<input type="checkbox" id="toggle-labels" checked />
+								<span class="toggle-label">Etiquetas</span>
 							</label>
 							<span class="separator">|</span>
 							<span id="detections-counter" class="counter-badge">0 detecciones</span>
@@ -1077,6 +1105,7 @@
 	const viewerControls = document.getElementById("viewer-controls");
 	const togglePolygons = document.getElementById("toggle-polygons");
 	const toggleBoxes = document.getElementById("toggle-boxes");
+	const toggleLabels = document.getElementById("toggle-labels");
 
 	const selectionToolbar = document.getElementById("selection-toolbar");
 	const selectionCount = document.getElementById("selection-count");
@@ -1635,6 +1664,103 @@
 		}, 3500);
 	}
 
+	// ======================= PIPELINE INTEGRAL (GEMINI MACRO/MICRO + CELLPOSE + VIRCHOW 2) =======================
+	const runPipelineIntegralBtn = document.getElementById("run-pipeline-integral-btn");
+	const sidebarPipelineIntegralBtn = document.getElementById("sidebar-pipeline-integral-btn");
+
+	runPipelineIntegralBtn?.addEventListener("click", () => {
+		executeTissuePipeline(activeImageKey);
+	});
+	sidebarPipelineIntegralBtn?.addEventListener("click", () => {
+		executeTissuePipeline(activeImageKey);
+	});
+
+	async function executeTissuePipeline(targetKey = null) {
+		const key = targetKey || activeImageKey;
+		if (!key) {
+			alert("Por favor selecciona o sube una imagen histológica primero.");
+			return;
+		}
+
+		const data = imageStore.get(key);
+		if (!data) return;
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+
+		const cpModel = currentCellposeModel || "cpsam";
+		statusText.textContent = `🧬 [1/3] Gemini Vision analizando macro & micro ontología espacial en ${data.filename}...`;
+
+		try {
+			const formData = new FormData();
+			formData.append("image", data.file);
+			formData.append("cellpose_model", cpModel);
+			formData.append("confidence_threshold", thresholdSlider ? thresholdSlider.value : "0.50");
+			formData.append("include_macro_layers", "true");
+			formData.append("use_gemini_validation", "true");
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			// Call backend unified pipeline
+			const response = await fetch(`${API_URL}/tissue/analyze-pipeline`, {
+				method: "POST",
+				body: formData
+			});
+
+			if (!response.ok) {
+				const err = await response.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${response.status}`);
+			}
+
+			const result = await response.json();
+
+			data.groups = result.groups || [];
+			data.width = result.width || data.width;
+			data.height = result.height || data.height;
+			data.annotated = true;
+
+			// Register discovered classes in classRegistry
+			for (const group of data.groups) {
+				if (!classRegistry.find(c => c.key === group.key)) {
+					classRegistry.push({
+						id: classIdCounter++,
+						name: group.label,
+						color: group.color,
+						key: group.key,
+					});
+				}
+			}
+
+			renderGallery();
+			updateExportStats();
+
+			if (key === activeImageKey) {
+				viewerControls.style.display = "flex";
+				selectedDetections.clear();
+				updateSelectionToolbar();
+				renderOverlay();
+				updateClassesList();
+			}
+
+			// Automatically build FAISS index for Virchow embeddings
+			await buildFaissIndex();
+
+			statusText.textContent = `✅ Pipeline Integral completado: ${result.macro_layers_count || 0} macro-compartimentos y ${result.cells_count || 0} células etiquetadas con precisión.`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 4500);
+
+		} catch (error) {
+			console.error(`Error en Pipeline Integral:`, error);
+			alert(`⚠️ Error en Pipeline Integral: ${error.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+	window.executeTissuePipeline = executeTissuePipeline;
+
 	// ======================= THRESHOLD =======================
 	thresholdSlider.addEventListener("input", (e) => {
 		thresholdVal.textContent = parseFloat(e.target.value).toFixed(2);
@@ -1647,6 +1773,7 @@
 	// ======================= TOGGLE VISIBILITY =======================
 	togglePolygons.addEventListener("change", renderOverlay);
 	toggleBoxes.addEventListener("change", renderOverlay);
+	toggleLabels?.addEventListener("change", renderOverlay);
 
 	// ======================= RENDER OVERLAY =======================
 	function renderOverlay() {
@@ -1665,6 +1792,7 @@
 		const threshold = parseFloat(thresholdSlider.value);
 		const showPolygons = togglePolygons.checked;
 		const showBoxes = toggleBoxes.checked;
+		const showLabels = toggleLabels ? toggleLabels.checked : true;
 		let totalCount = 0;
 
 		data.groups.forEach(group => {
@@ -1734,6 +1862,34 @@
 					rect.dataset.detId = detId;
 					addDetectionListeners(rect, group, det, detIdx, color, label);
 					overlaySvg.appendChild(rect);
+				}
+
+				// Draw text label directly over cell if labels toggle is active
+				if (showLabels) {
+					let lx, ly;
+					if (det.box) {
+						lx = (det.box[0] + det.box[2]) / 2;
+						ly = Math.max(12, det.box[1] - 3);
+					} else if (det.bbox) {
+						lx = det.bbox[0] + det.bbox[2] / 2;
+						ly = Math.max(12, det.bbox[1] - 3);
+					}
+					if (lx !== undefined && ly !== undefined) {
+						const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+						txt.setAttribute("x", lx);
+						txt.setAttribute("y", ly);
+						txt.setAttribute("text-anchor", "middle");
+						txt.style.fill = color;
+						txt.style.fontSize = "10px";
+						txt.style.fontWeight = "700";
+						txt.style.paintOrder = "stroke";
+						txt.style.stroke = "#000000";
+						txt.style.strokeWidth = "2.5px";
+						txt.style.strokeLinejoin = "round";
+						txt.style.pointerEvents = "none";
+						txt.textContent = label;
+						overlaySvg.appendChild(txt);
+					}
 				}
 			});
 		});
@@ -3187,6 +3343,162 @@
 		}, 3500);
 	}
 
+	// --- Gemini Vision Batch Cell Classification ---
+	const classifyGeminiBtn = document.getElementById("classify-gemini-btn");
+	const viewerClassifyGeminiBtn = document.getElementById("viewer-classify-gemini-btn");
+
+	async function runGeminiClassification(targetKey = null) {
+		const key = targetKey || activeImageKey;
+		if (!key) {
+			alert("Por favor selecciona o sube una imagen con células segmentadas primero.");
+			return;
+		}
+
+		const data = imageStore.get(key);
+		if (!data) return;
+
+		let allDets = [];
+		(data.groups || []).forEach((g) => {
+			if (g.detections) {
+				g.detections.forEach((d) => {
+					allDets.push({
+						...d,
+						id: d.id,
+						bbox: d.bbox,
+						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+						segmentation: d.segmentation || [],
+						score: d.score !== undefined ? d.score : 0.95,
+						class_key: g.key,
+						label: g.label,
+						color: g.color,
+					});
+				});
+			}
+		});
+
+		if (allDets.length === 0) {
+			alert("No hay células segmentadas en esta imagen. Primero segmenta con Cellpose o usa el Pipeline Integral.");
+			return;
+		}
+
+		statusIdle.style.display = "none";
+		statusRunning.style.display = "flex";
+		statusText.textContent = `✨ Gemini Vision: Clasificando ${allDets.length} células en batch...`;
+
+		try {
+			let imageFile = data.file;
+			if (!(imageFile instanceof File || imageFile instanceof Blob) && data.dataUrl) {
+				const arr = data.dataUrl.split(",");
+				const mime = arr[0].match(/:(.*?);/)[1];
+				const bstr = atob(arr[1]);
+				let n = bstr.length;
+				const u8arr = new Uint8Array(n);
+				while (n--) u8arr[n] = bstr.charCodeAt(n);
+				imageFile = new File([u8arr], data.filename || "image.png", { type: mime });
+			}
+
+			let candidateClasses = classRegistry.map(c => ({
+				key: c.key,
+				name: c.name,
+				label: c.name,
+				prompt: c.prompt || c.name,
+				color: c.color,
+			}));
+
+			const formData = new FormData();
+			formData.append("image", imageFile);
+			formData.append("detections", JSON.stringify(allDets));
+			if (candidateClasses.length > 0) {
+				formData.append("classes", JSON.stringify(candidateClasses));
+			}
+			if (window._activeOntologyName) {
+				formData.append("ontology_name", window._activeOntologyName);
+			}
+
+			const res = await fetch(`${API_URL}/classify-gemini`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `Error HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			const classified = result.detections || [];
+			if (classified.length > 0) {
+				const groupsMap = new Map();
+				for (let i = 0; i < classified.length; i++) {
+					const det = classified[i];
+					const origDet = allDets[i] || {};
+
+					det.segmentation = det.segmentation || origDet.segmentation || [];
+					det.box = det.box || origDet.box;
+					det.bbox = det.bbox || origDet.bbox;
+					det.score = det.score !== undefined ? det.score : (origDet.score || 0.95);
+
+					const groupKey = det.class_key || det.category_id || "clase_1";
+					const groupLabel = det.class_label || det.label || groupKey;
+					const groupColor = det.color || getClassColor(groupKey);
+					det.color = groupColor;
+					det.label = groupLabel;
+					det.class_label = groupLabel;
+
+					if (!groupsMap.has(groupKey)) {
+						groupsMap.set(groupKey, {
+							key: groupKey,
+							label: groupLabel,
+							color: groupColor,
+							detections: [],
+						});
+					}
+					groupsMap.get(groupKey).detections.push(det);
+
+					const existingClass = classRegistry.find(c => c.key === groupKey);
+					if (!existingClass) {
+						classRegistry.push({
+							id: classIdCounter++,
+							name: groupLabel,
+							color: groupColor,
+							key: groupKey,
+							prompt: groupLabel,
+						});
+					} else {
+						existingClass.name = groupLabel;
+						existingClass.color = groupColor;
+					}
+				}
+				data.groups = Array.from(groupsMap.values());
+				data.annotated = true;
+				renderGallery();
+				updateExportStats();
+
+				if (key === activeImageKey) {
+					viewerControls.style.display = "flex";
+					selectedDetections.clear();
+					updateSelectionToolbar();
+					renderOverlay();
+					updateClassesList();
+				}
+
+				statusText.textContent = `✅ Gemini Vision clasificó con éxito ${classified.length} células en batch!`;
+				setTimeout(() => {
+					statusRunning.style.display = "none";
+					statusIdle.style.display = "flex";
+				}, 3500);
+			}
+		} catch (err) {
+			console.error("Error clasificando con Gemini:", err);
+			alert(`⚠️ Error en clasificación con Gemini: ${err.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		}
+	}
+
+	classifyGeminiBtn?.addEventListener("click", () => runGeminiClassification());
+	viewerClassifyGeminiBtn?.addEventListener("click", () => runGeminiClassification());
+
 	classifyConchBtn?.addEventListener("click", () => runConchClassification());
 	toggleConchClassifyBtn?.addEventListener("click", () => runConchClassification());
 
@@ -3536,6 +3848,8 @@
 	let _faissProtoDets = new Set();   // detIds registered as exemplar prototypes
 	let _faissSelectedCellDetId = null;
 	let _faissSelectedCellFlatIdx = null;
+	let _lastSearchedProtoLabel = null;
+	let _lastSearchedProtoColor = null;
 	let _isPrototypeModeActive = false;
 
 	// UI Elements
@@ -3552,6 +3866,8 @@
 	const faissCellCurrentClass = document.getElementById("faiss-cell-current-class");
 	const faissProtoLabelInput = document.getElementById("faiss-proto-label-input");
 	const faissProtoColorInput = document.getElementById("faiss-proto-color-input");
+	const faissGeminiSuggestBtn = document.getElementById("faiss-gemini-suggest-btn");
+	const faissGeminiReasoningBox = document.getElementById("faiss-gemini-reasoning-box");
 	const faissAddProtoBtn = document.getElementById("faiss-add-proto-btn");
 	const faissSearchProtoBtn = document.getElementById("faiss-search-proto-btn");
 	const faissThresholdSlider = document.getElementById("faiss-threshold-slider");
@@ -3732,6 +4048,82 @@
 	window.selectFaissPrototypeCell = selectFaissPrototypeCell;
 	window.onDetectionSelectedForFaiss = selectFaissPrototypeCell;
 
+	// 3b. Suggest Prototype with Gemini 3.5
+	async function suggestPrototypeWithGemini() {
+		if (_faissSelectedCellFlatIdx === null) {
+			alert("⚠️ Selecciona primero una célula en el visor (Paso 2).");
+			return;
+		}
+
+		if (!_faissIndexBuilt) {
+			const ok = await buildFaissIndex();
+			if (!ok) return;
+		}
+
+		const btn = faissGeminiSuggestBtn;
+		const originalText = btn ? btn.innerHTML : "";
+
+		try {
+			if (btn) {
+				btn.disabled = true;
+				btn.innerHTML = `⏳ Analizando célula #${_faissSelectedCellFlatIdx} con Gemini 3.5...`;
+			}
+			statusRunning.style.display = "flex";
+			statusIdle.style.display = "none";
+			statusText.textContent = `🧬 Gemini 3.5 analizando morfología citológica de la célula #${_faissSelectedCellFlatIdx}...`;
+
+			const formData = new FormData();
+			formData.append("detection_index", _faissSelectedCellFlatIdx.toString());
+			formData.append("organ_context", "testículo / túbulos seminíferos / espermatogénesis");
+
+			const res = await fetch(`${API_URL}/similarity/gemini-suggest-prototype`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `HTTP ${res.status}`);
+			}
+
+			const data = await res.json();
+			if (data.label && faissProtoLabelInput) {
+				faissProtoLabelInput.value = data.label;
+			}
+			if (data.color && faissProtoColorInput) {
+				faissProtoColorInput.value = data.color;
+			}
+
+			if (faissGeminiReasoningBox) {
+				faissGeminiReasoningBox.style.display = "block";
+				faissGeminiReasoningBox.innerHTML = `
+					<strong>✨ Gemini 3.5:</strong> ${data.label} <span style="opacity: 0.85;">(${(data.confidence * 100).toFixed(0)}% conf)</span><br/>
+					<span style="font-size: 0.65rem; color: #cbd5e1;">${data.reasoning || ""}</span>
+				`;
+			}
+
+			statusText.textContent = `✔ Gemini 3.5 identificó: '${data.label}'`;
+			setTimeout(() => {
+				statusRunning.style.display = "none";
+				statusIdle.style.display = "flex";
+			}, 3000);
+
+			// Update key status pill after API request
+			updateGeminiKeysStatus();
+
+		} catch (err) {
+			console.error("Error al sugerir prototipo con Gemini:", err);
+			alert(`⚠️ Error al consultar Gemini 3.5: ${err.message}`);
+			statusRunning.style.display = "none";
+			statusIdle.style.display = "flex";
+		} finally {
+			if (btn) {
+				btn.disabled = false;
+				btn.innerHTML = originalText;
+			}
+		}
+	}
+
 	// 4. Register Prototype
 	async function registerActiveCellAsPrototype() {
 		if (!_faissIndexBuilt) {
@@ -3770,6 +4162,9 @@
 			}
 
 			const result = await res.json();
+			if (!result.success) {
+				throw new Error(result.error || "No se pudo registrar el prototipo.");
+			}
 			_faissProtoDets.add(_faissSelectedCellDetId);
 
 			// Register class in global classRegistry if not present
@@ -3788,14 +4183,15 @@
 			renderOverlay();
 			await refreshFaissPrototypes();
 
-			statusText.textContent = `🎯 Prototipo registrado: '${label}' (${result.num_prototypes} ejemplo${result.num_prototypes > 1 ? "s" : ""}).`;
+			const numEx = result.num_examples || result.num_prototypes || 1;
+			statusText.textContent = `🎯 Prototipo registrado: '${result.label || label}' (${numEx} ejemplo${numEx > 1 ? "s" : ""}).`;
 			setTimeout(() => {
 				statusRunning.style.display = "none";
 				statusIdle.style.display = "flex";
 			}, 2500);
 
 			// Automatically search for similar cells
-			await runFaissSearchForCell(_faissSelectedCellDetId, label);
+			await runFaissSearchForCell(_faissSelectedCellDetId, result.label || label);
 		} catch (err) {
 			console.error("Error al registrar prototipo:", err);
 			alert(`⚠️ Error al registrar prototipo: ${err.message}`);
@@ -3865,6 +4261,8 @@
 			if (faissPropagateBtn) {
 				faissPropagateBtn.style.display = matches.length > 0 ? "block" : "none";
 				const targetLabel = label || (faissProtoLabelInput ? faissProtoLabelInput.value.trim() : "esta clase");
+				_lastSearchedProtoLabel = targetLabel;
+				_lastSearchedProtoColor = faissProtoColorInput ? faissProtoColorInput.value : "#e11d48";
 				faissPropagateBtn.textContent = `🏷️ Propagar '${targetLabel}' a las ${matches.length} similares`;
 			}
 
@@ -3885,19 +4283,39 @@
 	window.runFaissSearchForCell = runFaissSearchForCell;
 
 	// 6. Propagate Label to Matches
-	async function propagateActivePrototypeLabel() {
+	async function propagateActivePrototypeLabel(targetLabel = null, targetColor = null) {
 		if (!_faissIndexBuilt) return;
-		const label = faissProtoLabelInput ? faissProtoLabelInput.value.trim() : "";
+		const label = (targetLabel || _lastSearchedProtoLabel || (faissProtoLabelInput ? faissProtoLabelInput.value.trim() : "")).trim();
 		if (!label) {
 			alert("Ingresa un nombre de clase para propagar.");
 			return;
 		}
 
-		const color = faissProtoColorInput ? faissProtoColorInput.value : "#e11d48";
+		const color = targetColor || _lastSearchedProtoColor || (faissProtoColorInput ? faissProtoColorInput.value : "#e11d48");
 		const threshold = faissThresholdSlider ? parseFloat(faissThresholdSlider.value) : 0.80;
 
 		const { flatDets } = getActiveImageFlatDetections();
 		if (flatDets.length === 0) return;
+
+		// Pre-register prototype if not yet registered but a cell is selected
+		const isRegistered = _faissPrototypes.some(p => p.label.toLowerCase() === label.toLowerCase());
+		if (!isRegistered && _faissSelectedCellFlatIdx !== null) {
+			try {
+				const protoFormData = new FormData();
+				protoFormData.append("label", label);
+				protoFormData.append("color", color);
+				protoFormData.append("detection_indices", JSON.stringify([_faissSelectedCellFlatIdx]));
+				const addRes = await fetch(`${API_URL}/similarity/add-prototype`, {
+					method: "POST",
+					body: protoFormData,
+				});
+				if (addRes.ok) {
+					await refreshFaissPrototypes();
+				}
+			} catch (e) {
+				console.warn("Could not pre-register prototype before propagation:", e);
+			}
+		}
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
@@ -3908,6 +4326,10 @@
 			formData.append("label", label);
 			formData.append("detections", JSON.stringify(flatDets));
 			formData.append("threshold", threshold.toString());
+			if (color) formData.append("color", color);
+			if (_faissSelectedCellFlatIdx !== null) {
+				formData.append("detection_index", _faissSelectedCellFlatIdx.toString());
+			}
 
 			const res = await fetch(`${API_URL}/similarity/propagate-label`, {
 				method: "POST",
@@ -3928,7 +4350,7 @@
 			if (faissSearchResultBox) faissSearchResultBox.style.display = "none";
 			if (faissPropagateBtn) faissPropagateBtn.style.display = "none";
 
-			statusText.textContent = `✅ Etiqueta '${label}' asignada a ${result.num_labeled} células.`;
+			statusText.textContent = `✅ Etiqueta '${result.label || label}' asignada a ${result.num_labeled} células.`;
 			setTimeout(() => {
 				statusRunning.style.display = "none";
 				statusIdle.style.display = "flex";
@@ -4061,7 +4483,7 @@
 					<div style="display: flex; align-items: center; gap: 0.4rem; overflow: hidden;">
 						<span style="width: 12px; height: 12px; border-radius: 3px; background: ${proto.color}; flex-shrink: 0;"></span>
 						<span style="font-size: 0.75rem; font-weight: 600; color: #f1f5f9; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" title="${proto.label}">${proto.label}</span>
-						<span class="badge" style="font-size: 0.62rem; padding: 1px 4px; background: rgba(255,255,255,0.06); color: var(--text-muted);">${proto.num_prototypes} célula${proto.num_prototypes > 1 ? "s" : ""}</span>
+						<span class="badge" style="font-size: 0.62rem; padding: 1px 4px; background: rgba(255,255,255,0.06); color: var(--text-muted);">${proto.num_examples || proto.num_prototypes || 1} célula${(proto.num_examples || proto.num_prototypes || 1) > 1 ? "s" : ""}</span>
 					</div>
 					<div style="display: flex; gap: 0.25rem; flex-shrink: 0;">
 						<button type="button" class="btn-small btn-outline proto-search-btn" style="font-size: 0.65rem; padding: 0.15rem 0.35rem; color: #c084fc; border-color: rgba(192,132,252,0.4);" title="Buscar células similares a ${proto.label}">🔍</button>
@@ -4079,7 +4501,7 @@
 				item.querySelector(".proto-propagate-btn")?.addEventListener("click", () => {
 					if (faissProtoLabelInput) faissProtoLabelInput.value = proto.label;
 					if (faissProtoColorInput) faissProtoColorInput.value = proto.color;
-					propagateActivePrototypeLabel();
+					propagateActivePrototypeLabel(proto.label, proto.color);
 				});
 
 				item.querySelector(".proto-del-btn")?.addEventListener("click", async () => {
@@ -4166,6 +4588,10 @@
 
 	faissTabBuildBtn?.addEventListener("click", async () => {
 		await buildFaissIndex();
+	});
+
+	faissGeminiSuggestBtn?.addEventListener("click", async () => {
+		await suggestPrototypeWithGemini();
 	});
 
 	faissAddProtoBtn?.addEventListener("click", async () => {
@@ -4419,9 +4845,9 @@
 					images_count: ontologyPayload.images?.length || 0,
 				});
 
-				// Use AbortController with 120s timeout to prevent silent hangs
+				// Use AbortController with 300s timeout for large multimodal histology ontologies
 				const controller = new AbortController();
-				const timeoutId = setTimeout(() => controller.abort(), 120000);
+				const timeoutId = setTimeout(() => controller.abort(), 300000);
 
 				const ontRes = await fetch(`${API_URL}/generate-ontology`, {
 					method: "POST",
@@ -4481,8 +4907,8 @@
 				}
 			} catch (ontErr) {
 				if (ontErr.name === "AbortError") {
-					console.error("[PDF] Ontology generation timed out (120s)");
-					alert("⚠️ La generación de ontología tardó más de 2 minutos. Intentá de nuevo con el botón 'Generar Ontología con IA'.");
+					console.error("[PDF] Ontology generation timed out (300s)");
+					alert("⚠️ La generación de ontología tardó más del límite esperado. Intentá de nuevo con el botón 'Generar Ontología con IA'.");
 				} else {
 					console.error("[PDF] Ontology generation exception:", ontErr);
 					alert("⚠️ Error de conexión al generar ontología: " + ontErr.message);
@@ -4566,7 +4992,7 @@
 			console.log("[PDF] Manual generate-ontology, merge_into:", mergeTarget || "(new)");
 
 			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), 120000);
+			const timeoutId = setTimeout(() => controller.abort(), 300000);
 
 			const res = await fetch(`${API_URL}/generate-ontology`, {
 				method: "POST",
@@ -4592,7 +5018,7 @@
 
 		} catch (e) {
 			if (e.name === "AbortError") {
-				alert("⚠️ La generación de ontología tardó más de 2 minutos. Intentá de nuevo.");
+				alert("⚠️ La generación de ontología tardó más del límite esperado. Intentá de nuevo.");
 			} else {
 				alert("Error: " + e.message);
 			}
@@ -5644,12 +6070,34 @@
 		}
 	}
 
+	// Gemini API Keys Pool Status Tracker
+	async function updateGeminiKeysStatus() {
+		try {
+			const res = await fetch(`${API_URL}/gemini/status`);
+			if (!res.ok) return;
+			const data = await res.json();
+			const pill = document.getElementById("gemini-keys-pill");
+			const badge = document.getElementById("gemini-keys-badge");
+			const dot = document.getElementById("gemini-keys-dot");
+			if (badge && pill) {
+				badge.textContent = `Gemini 3.5: ${data.active_keys}/${data.total_keys} Keys`;
+				pill.title = `Google Gemini 3.5 Flash | ${data.total_keys} keys configuradas en GOOGLE_API_KEYS con rotación automática ante 429/403 (${data.active_keys} activas).`;
+				if (dot) {
+					dot.className = data.active_keys > 0 ? "dot green" : "dot red";
+				}
+			}
+		} catch (e) {
+			console.warn("[Gemini] updateGeminiKeysStatus error:", e);
+		}
+	}
+
 	// Robust retry: the backend takes ~10s to load SAM 3 on startup.
 	(async function retryLoadOntologies() {
 		const delays = [500, 1500, 3000, 5000, 8000, 12000, 18000, 25000];
 		for (const delay of delays) {
 			console.log("[ONT] Attempting to load ontologies...");
 			const ok = await loadSavedOntologies(true);
+			updateGeminiKeysStatus();
 			if (ok) {
 				console.log("[ONT] ✅ Ontologies loaded successfully!");
 				return;

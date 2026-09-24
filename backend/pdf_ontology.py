@@ -462,7 +462,7 @@ def generate_ontology_with_gemini(
     except ImportError:
         from gemini_vision import generate_gemini_content, GEMINI_MODEL
 
-    effective_model = model_name or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+    effective_model = model_name or os.environ.get("GEMINI_MODEL", GEMINI_MODEL)
 
     # Truncate if very long
     text_for_llm = extracted_text[:max_text_chars]
@@ -1370,4 +1370,347 @@ def validate_spatial_rules(
         "violations_count": len(violations),
         "violations": violations,
     }
+
+
+def derive_spatial_map_and_rules(
+    ontology_doc: Optional[Dict[str, Any]]
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]]]:
+    """
+    Parses ontology structures and spatial rules to build comprehensive topological lookup maps:
+    1. spatial_rules_lookup: micro_key -> {compartment, parent_macro, forbidden_in, relative_radial_position, rule_description, name, color}
+    2. spatial_map: compartment/macro -> list of allowed micro_keys
+    3. forbidden_map: compartment/macro -> list of strictly forbidden micro_keys
+
+    Includes biological fallbacks for testicular and general tissue architecture if partial ontology.
+    """
+    spatial_rules_lookup: Dict[str, Dict[str, Any]] = {}
+    spatial_map: Dict[str, List[str]] = {}
+    forbidden_map: Dict[str, List[str]] = {}
+
+    if not ontology_doc:
+        return _apply_testicular_fallbacks(spatial_rules_lookup, spatial_map, forbidden_map)
+
+    # 1. Parse root-level spatial_rules list if present
+    raw_rules = ontology_doc.get("spatial_rules", [])
+    if isinstance(raw_rules, list):
+        for r in raw_rules:
+            if not isinstance(r, dict):
+                continue
+            key = str(r.get("micro_key") or r.get("key") or "").strip().lower()
+            if key:
+                spatial_rules_lookup[key] = {
+                    "compartment": str(r.get("compartment", "")).strip().lower(),
+                    "parent_macro": str(r.get("parent_macro", "")).strip().lower(),
+                    "forbidden_in": [str(x).strip().lower() for x in r.get("forbidden_in", []) if x],
+                    "relative_radial_position": r.get("relative_radial_position"),
+                    "rule_description": str(r.get("rule_description", "")).strip(),
+                    "name": str(r.get("micro_name") or r.get("name", key)).strip(),
+                }
+
+    # 2. Parse micro_structures and general structures
+    structures_pool = []
+    if isinstance(ontology_doc.get("micro_structures"), list):
+        structures_pool.extend(ontology_doc["micro_structures"])
+    if isinstance(ontology_doc.get("structures"), list):
+        structures_pool.extend([s for s in ontology_doc["structures"] if not s.get("is_macro")])
+
+    for s in structures_pool:
+        if not isinstance(s, dict):
+            continue
+        key = str(s.get("key") or s.get("id") or "").strip().lower()
+        if not key:
+            continue
+
+        s_rules = s.get("spatial_rules") or {}
+        if not isinstance(s_rules, dict):
+            s_rules = {}
+
+        existing = spatial_rules_lookup.get(key, {})
+        compartment = str(s_rules.get("compartment") or s.get("spatial_zone") or existing.get("compartment", "")).strip().lower()
+        parent_macro = str(s_rules.get("parent_macro") or s.get("parent_compartment") or existing.get("parent_macro", "")).strip().lower()
+        
+        forbidden_raw = s_rules.get("forbidden_in") or existing.get("forbidden_in") or []
+        forbidden_in = [str(x).strip().lower() for x in forbidden_raw if x]
+        radial = s_rules.get("relative_radial_position") or existing.get("relative_radial_position")
+        rule_desc = str(s_rules.get("rule_description") or existing.get("rule_description", "")).strip()
+
+        spatial_rules_lookup[key] = {
+            "compartment": compartment,
+            "parent_macro": parent_macro,
+            "forbidden_in": forbidden_in,
+            "relative_radial_position": radial,
+            "rule_description": rule_desc,
+            "name": str(s.get("name") or s.get("label") or existing.get("name", key)),
+            "color": str(s.get("color") or existing.get("color", "#8b5cf6")),
+            "prompt": str(s.get("prompt") or s.get("cytological_features", "")),
+        }
+
+    # 3. Populate spatial_map (allowed) and forbidden_map
+    for key, rule in spatial_rules_lookup.items():
+        p_macro = rule.get("parent_macro", "")
+        comp = rule.get("compartment", "")
+        forb_list = rule.get("forbidden_in", [])
+
+        # Allowed in parent macro
+        if p_macro:
+            spatial_map.setdefault(p_macro, [])
+            if key not in spatial_map[p_macro]:
+                spatial_map[p_macro].append(key)
+
+        # Allowed in specific compartment
+        if comp:
+            spatial_map.setdefault(comp, [])
+            if key not in spatial_map[comp]:
+                spatial_map[comp].append(key)
+
+        # Prohibited in forbidden_in macro/compartments
+        for forb in forb_list:
+            if forb:
+                forbidden_map.setdefault(forb, [])
+                if key not in forbidden_map[forb]:
+                    forbidden_map[forb].append(key)
+
+    # 4. Check if testicular fallbacks are needed to ensure complete protection
+    return _apply_testicular_fallbacks(spatial_rules_lookup, spatial_map, forbidden_map)
+
+
+def _apply_testicular_fallbacks(
+    spatial_rules_lookup: Dict[str, Dict[str, Any]],
+    spatial_map: Dict[str, List[str]],
+    forbidden_map: Dict[str, List[str]],
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]]]:
+    """Ensures absolute architectural constraints for testicular tissues."""
+    testis_germ_cells = [
+        "espermatogonia_a_clara", "espermatogonia_a_oscura", "espermatogonia_b",
+        "espermatocito_primario", "espermatocito_secundario",
+        "espermatide_temprana", "espermatide_tardia", "espermatozoide",
+        "celula_sertoli", "sertoli", "espermatogonia", "espermatocito", "espermatide"
+    ]
+    interstitial_cells = ["celula_leydig", "leydig", "celula_intersticial", "celula_peritubular"]
+
+    # 1. Tubule must strictly forbid Leydig cells
+    tubule_aliases = ["tubulo_seminifero", "tubulo", "tubule", "epitelio_germinal", "seminiferous_tubule"]
+    for t_alias in tubule_aliases:
+        forbidden_map.setdefault(t_alias, [])
+        for lc in ["celula_leydig", "leydig", "celula_intersticial"]:
+            if lc not in forbidden_map[t_alias]:
+                forbidden_map[t_alias].append(lc)
+
+    # 2. Interstitial space must strictly forbid all germ cells and Sertoli
+    interstitial_aliases = ["espacio_intersticial", "intersticio", "interstitium", "interstitial_space", "estroma_intersticial"]
+    for i_alias in interstitial_aliases:
+        forbidden_map.setdefault(i_alias, [])
+        spatial_map.setdefault(i_alias, [])
+        for gc in testis_germ_cells:
+            if gc not in forbidden_map[i_alias]:
+                forbidden_map[i_alias].append(gc)
+        for ic in interstitial_cells:
+            if ic not in spatial_map[i_alias]:
+                spatial_map[i_alias].append(ic)
+
+    # 3. Lumen must forbid spermatogonia, spermatocytes, Sertoli, and Leydig
+    lumen_aliases = ["luz_tubular", "luz", "lumen", "tubular_lumen"]
+    for l_alias in lumen_aliases:
+        forbidden_map.setdefault(l_alias, [])
+        spatial_map.setdefault(l_alias, [])
+        for non_luminal in [
+            "espermatogonia_a_clara", "espermatogonia_a_oscura", "espermatogonia_b",
+            "espermatocito_primario", "espermatocito_secundario", "celula_sertoli",
+            "celula_leydig", "leydig", "celula_peritubular"
+        ]:
+            if non_luminal not in forbidden_map[l_alias]:
+                forbidden_map[l_alias].append(non_luminal)
+        for lum in ["espermatozoide", "espermatide_tardia", "espermatide"]:
+            if lum not in spatial_map[l_alias]:
+                spatial_map[l_alias].append(lum)
+
+    return spatial_rules_lookup, spatial_map, forbidden_map
+
+
+def enforce_spatial_rules_on_detections(
+    detections: List[Dict[str, Any]],
+    spatial_rules_lookup: Dict[str, Dict[str, Any]],
+    spatial_map: Dict[str, List[str]],
+    forbidden_map: Dict[str, List[str]],
+    macro_annotations: Optional[List[Dict[str, Any]]] = None,
+    class_meta: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Tuple[List[Dict[str, Any]], int, List[Dict[str, Any]]]:
+    """
+    Enforces topological constraints on segmented cells. If a cell classification violates
+    anatomical boundaries (e.g. Leydig cell inside seminiferous tubule or spermatogonia in
+    interstitial space), it reassigns it to the most biologically valid class for that layer.
+
+    Returns:
+        (updated_detections, corrections_count, corrections_log)
+    """
+    import cv2
+    import numpy as np
+
+    # Build spatial index of macro polygons if provided
+    macro_polys_by_key: Dict[str, List[np.ndarray]] = {}
+    if macro_annotations:
+        for macro in macro_annotations:
+            m_key = str(macro.get("class_key") or macro.get("category_id") or macro.get("key") or macro.get("label") or "").strip().lower()
+            if not m_key:
+                continue
+            segs = macro.get("segmentation") or []
+            if isinstance(segs, list):
+                for poly in segs:
+                    if isinstance(poly, list) and len(poly) >= 6:
+                        pts = np.array(poly, dtype=np.float32).reshape(-1, 2)
+                        macro_polys_by_key.setdefault(m_key, []).append(pts)
+
+    meta_lookup = class_meta or {}
+    corrections_log: List[Dict[str, Any]] = []
+    corrections_count = 0
+
+    for idx, det in enumerate(detections):
+        d_key = str(det.get("class_key") or det.get("category_id") or "").strip().lower()
+        if not d_key or d_key == "unclassified":
+            continue
+
+        # 1. Determine cell centroid
+        cx, cy = 0.0, 0.0
+        has_centroid = False
+        if "centroid" in det and isinstance(det["centroid"], (list, tuple)) and len(det["centroid"]) == 2:
+            cx, cy = float(det["centroid"][0]), float(det["centroid"][1])
+            has_centroid = True
+        elif "bbox" in det and isinstance(det["bbox"], (list, tuple)) and len(det["bbox"]) == 4:
+            x, y, w, h = [float(v) for v in det["bbox"]]
+            cx, cy = x + w / 2.0, y + h / 2.0
+            has_centroid = True
+        elif "box" in det and isinstance(det["box"], (list, tuple)) and len(det["box"]) == 4:
+            x1, y1, x2, y2 = [float(v) for v in det["box"]]
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            has_centroid = True
+
+        # 2. Determine containing anatomical compartment
+        comp = str(det.get("containing_layer") or det.get("compartment") or "").strip().lower()
+
+        # If geometric macro polygons exist and centroid is available, check polygon containment
+        if macro_polys_by_key and has_centroid:
+            # Order of evaluation: lumen (inner cavity) -> basement membrane -> tubule -> interstitium
+            matched_macro = None
+            if "luz_tubular" in macro_polys_by_key:
+                for poly in macro_polys_by_key["luz_tubular"]:
+                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
+                        matched_macro = "luz_tubular"
+                        break
+
+            if not matched_macro and "membrana_basal" in macro_polys_by_key:
+                for poly in macro_polys_by_key["membrana_basal"]:
+                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
+                        matched_macro = "membrana_basal"
+                        break
+
+            if not matched_macro and "tubulo_seminifero" in macro_polys_by_key:
+                for poly in macro_polys_by_key["tubulo_seminifero"]:
+                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
+                        matched_macro = "tubulo_seminifero"
+                        break
+
+            if not matched_macro and "espacio_intersticial" in macro_polys_by_key:
+                for poly in macro_polys_by_key["espacio_intersticial"]:
+                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
+                        matched_macro = "espacio_intersticial"
+                        break
+
+            if matched_macro:
+                comp = matched_macro
+                det["containing_layer"] = comp
+                det["compartment"] = comp
+
+        if not comp:
+            continue
+
+        # 3. Check for anatomical rule violation
+        rule = spatial_rules_lookup.get(d_key, {})
+        forbidden_in = rule.get("forbidden_in", [])
+        forbidden_in_comp = forbidden_map.get(comp, [])
+
+        is_violated = (
+            comp in forbidden_in
+            or d_key in forbidden_in_comp
+            or any(f in comp for f in forbidden_in)
+            or any(k in d_key for k in forbidden_in_comp)
+        )
+
+        if is_violated:
+            # Reassign to an allowed class in this compartment
+            replacement_key = None
+            allowed_in_comp = spatial_map.get(comp, [])
+
+            if "interstic" in comp:
+                # In interstitium: prioritize Leydig or peritubular
+                for pref in ["celula_leydig", "leydig", "celula_peritubular", "celula_intersticial"]:
+                    if pref in allowed_in_comp or pref in meta_lookup:
+                        replacement_key = pref
+                        break
+                if not replacement_key:
+                    replacement_key = "celula_leydig"
+
+            elif "luz" in comp or "lumen" in comp:
+                # In lumen: prioritize spermatozoa or late spermatid
+                for pref in ["espermatozoide", "espermatide_tardia", "espermatide"]:
+                    if pref in allowed_in_comp or pref in meta_lookup:
+                        replacement_key = pref
+                        break
+                if not replacement_key:
+                    replacement_key = "espermatozoide"
+
+            elif "basal" in comp or "membrana" in comp:
+                # At boundary/basal: prioritize spermatogonia or Sertoli
+                for pref in ["espermatogonia_a_clara", "espermatogonia_a_oscura", "celula_sertoli", "celula_peritubular"]:
+                    if pref in allowed_in_comp or pref in meta_lookup:
+                        replacement_key = pref
+                        break
+                if not replacement_key:
+                    replacement_key = "espermatogonia_a_clara"
+
+            elif "tubulo" in comp or "tubule" in comp:
+                # Inside tubule: if Leydig, reassign to basal germ cell or intermediate spermatocyte
+                for pref in ["espermatogonia_a_clara", "espermatocito_primario", "celula_sertoli"]:
+                    if pref in allowed_in_comp or pref in meta_lookup:
+                        replacement_key = pref
+                        break
+                if not replacement_key:
+                    replacement_key = "espermatogonia_a_clara"
+
+            if replacement_key and replacement_key != d_key:
+                target_meta = meta_lookup.get(replacement_key) or spatial_rules_lookup.get(replacement_key, {})
+                rep_name = target_meta.get("name") or target_meta.get("label") or replacement_key.replace("_", " ").title()
+                rep_color = target_meta.get("color") or "#10b981"
+                orig_label = det.get("label") or d_key
+
+                reason = (
+                    f"Violación ontológica: '{orig_label}' prohibida en '{comp}'. "
+                    f"Reasignada automáticamente a '{rep_name}' ({rule.get('rule_description', 'estrato válido')})."
+                )
+
+                det["original_class_key"] = d_key
+                det["original_label"] = orig_label
+                det["class_key"] = replacement_key
+                det["category_id"] = replacement_key
+                det["label"] = rep_name
+                det["class_label"] = rep_name
+                det["color"] = rep_color
+                det["spatial_corrected"] = True
+                det["spatial_compartment"] = comp
+                det["correction_reason"] = reason
+
+                # Append to cytological reasoning
+                prev_reason = det.get("cytological_reasoning") or det.get("reasoning") or ""
+                det["cytological_reasoning"] = f"[{comp.upper()}] {prev_reason} | ⚡ {reason}".strip()
+
+                corrections_count += 1
+                corrections_log.append({
+                    "detection_index": idx,
+                    "original_class": d_key,
+                    "corrected_class": replacement_key,
+                    "compartment": comp,
+                    "reason": reason,
+                })
+
+    return detections, corrections_count, corrections_log
+
 

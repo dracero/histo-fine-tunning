@@ -6,7 +6,7 @@ Architecture:
 2. ImageLabelDetectorNode (Gemini Vision OCR & Figure Grounding): Detects embedded visual labels, letter codes (e.g. A, B, S, L), arrows, and legend keys in histological figures.
 3. SegmentationCropperNode (Deterministic PyTorch / OpenCV / Cellpose / SAM3): Extracts cell/nuclei ROIs, patches, and morphological descriptors.
 4. FoundationMatcherNode (CONCH & Virchow 2 PyTorch Workers): Computes zero-shot vision-language similarities and ViT-H 1280d morphological embeddings.
-5. FinalClassifierNode (Gemini 3.1 / 2.5 Flash): Synthesizes foundation model scores, morphological metrics, spatial figure labels, and ontology constraints to output validated annotations.
+5. FinalClassifierNode (Gemini 3.5 Flash): Synthesizes foundation model scores, morphological metrics, spatial figure labels, and ontology constraints to output validated annotations.
 """
 
 import io
@@ -546,7 +546,7 @@ def foundation_matcher_node(state: HistologyGraphState) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Node 5: Final Classifier & Synthesis Agent (Gemini 3.1 / 2.5 Flash Multimodal)
+# Node 5: Final Classifier & Synthesis Agent (Gemini 3.5 Flash Multimodal)
 # ---------------------------------------------------------------------------
 
 def final_classifier_node(state: HistologyGraphState) -> Dict[str, Any]:

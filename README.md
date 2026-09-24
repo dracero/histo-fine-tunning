@@ -89,7 +89,7 @@ graph LR
   * **Renderizado de respaldo automático (150 DPI)**: Si el PDF contiene figuras vectoriales o compuestas, renderiza vistas completas de alta resolución para que ninguna lámina quede excluida.
 * **Ingeniería de Ontologías con Gemini IA**:
   * Diseña jerarquías biológicas canónicas en español y en inglés con descripciones y *prompts visuales optimizados* para el vocabulario de SAM 3.
-  * **Sistema de resiliencia**: Extracción multimodal (visión de micrografías + texto) con reintento automático en texto plano mediante `gemini-2.5-flash` para garantizar la generación consistente de la ontología.
+  * **Sistema de resiliencia**: Extracción multimodal (visión de micrografías + texto) con rotación automática de claves mediante `gemini-3.5-flash` para garantizar la generación consistente de la ontología.
   * **Aislamiento de dominios**: Cada documento crea su propia ontología temática con soporte para fusión incremental opcional (*merge*).
 * **Gestor CRUD de Imágenes de Atlas**:
   * Galería interactiva con visor modal y zoom de alta resolución.

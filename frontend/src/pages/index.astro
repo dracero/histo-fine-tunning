@@ -586,6 +586,42 @@
 						</div>
 					</div>
 
+					<!-- Interactive Correction Toolbar (Human-in-the-Loop) -->
+					<div class="correction-toolbar" id="correction-toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 0.4rem 0.75rem; margin-top: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+						<div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+							<span style="font-size: 0.75rem; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 0.25rem;">
+								🛠️ Corrección Interactiva:
+							</span>
+							
+							<button type="button" id="tool-box-mode" class="btn-small" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4);" title="Modo Caja SAM: Arrastra un recuadro para que SAM segmente la estructura exacta">
+								🟦 Caja SAM
+							</button>
+
+							<button type="button" id="tool-click-mode" class="btn-small" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.4);" title="Modo Clic SAM: Haz clic directamente sobre una célula u objeto para segmentarlo">
+								👆 Clic SAM
+							</button>
+
+							<button type="button" id="tool-draw-mode" class="btn-small" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4);" title="Dibujo Manual: Haz clic para agregar vértices y delimitar un polígono a mano">
+								✏️ Polígono
+							</button>
+
+							<button type="button" id="finish-polygon-btn" class="btn-small" style="display: none; font-size: 0.75rem; padding: 0.25rem 0.65rem; background: #22c55e; color: #fff; font-weight: 700;" title="Cerrar y guardar el polígono actual">
+								✓ Finalizar Polígono (0 pts)
+							</button>
+
+							<button type="button" id="tool-eraser-mode" class="btn-small" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.4);" title="Modo Borrador: Haz clic sobre cualquier detección para eliminarla">
+								🧹 Borrador
+							</button>
+						</div>
+
+						<div style="display: flex; align-items: center; gap: 0.4rem;">
+							<span style="font-size: 0.72rem; color: #94a3b8;">Clase a asignar:</span>
+							<select id="correction-class-select" class="form-input-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem; background: #1e293b; color: #f1f5f9; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; max-width: 170px;" title="Clase asignada a las nuevas detecciones interactivas">
+							</select>
+							<span id="active-tool-status" style="font-size: 0.72rem; color: #38bdf8; font-style: italic; margin-left: 0.3rem;"></span>
+						</div>
+					</div>
+
 					<!-- Selection toolbar -->
 					<div class="selection-toolbar" id="selection-toolbar" style="display: none;">
 						<span id="selection-count">0 seleccionadas</span>
@@ -1070,10 +1106,12 @@
 	// Detection editing state
 	let selectedDetections = new Set();  // "groupKey:detIndex" identifiers
 
-	// Interactive mode states
-	let isClickMode = false;
-	let isDrawMode = false;
+	// Interactive mode states: null | 'box' | 'click' | 'polygon' | 'eraser'
+	let activeInteractiveTool = null;
 	let currentPolygonPoints = [];
+	let isDraggingBox = false;
+	let startBoxX = 0;
+	let startBoxY = 0;
 
 	// Global class registry (shared across images)
 	// { id, name, color, key }
@@ -1126,10 +1164,13 @@
 
 	const classesList = document.getElementById("classes-list");
 	const addClassBtn = document.getElementById("add-class-btn");
-	const newClassInput = document.getElementById("new-class-input");
-	const toggleClickMode = document.getElementById("toggle-click-mode");
-	const toggleDrawMode = document.getElementById("toggle-draw-mode");
+	const toolBoxMode = document.getElementById("tool-box-mode");
+	const toolClickMode = document.getElementById("tool-click-mode");
+	const toolDrawMode = document.getElementById("tool-draw-mode");
 	const finishPolygonBtn = document.getElementById("finish-polygon-btn");
+	const toolEraserMode = document.getElementById("tool-eraser-mode");
+	const correctionClassSelect = document.getElementById("correction-class-select");
+	const activeToolStatus = document.getElementById("active-tool-status");
 
 	const exportCocoBtn = document.getElementById("export-coco-btn");
 	const uploadRoboflowBtn = document.getElementById("rf-upload-btn") || document.getElementById("upload-roboflow-btn");
@@ -1897,7 +1938,7 @@
 		detectionsCounter.textContent = `${totalCount} detecciones`;
 
 		// Render live drawing polygon points if in drawing mode
-		if (isDrawMode && currentPolygonPoints.length > 0) {
+		if (activeInteractiveTool === 'polygon' && currentPolygonPoints.length > 0) {
 			const ptsString = currentPolygonPoints.map(p => `${p[0]},${p[1]}`).join(" ");
 
 			// Draw temporary polygon outline
@@ -1953,9 +1994,13 @@
 				tooltipCoords.textContent = `${Math.round(x1)},${Math.round(y1)} → ${Math.round(x2)},${Math.round(y2)}`;
 			}
 			if (tooltipReason) {
-				const reasoningText = det.gemini_reasoning || det.agent_reasoning;
-				if (reasoningText) {
-					tooltipReason.textContent = `💡 ${reasoningText}`;
+				const comp = det.spatial_compartment || det.containing_layer || det.compartment;
+				const compBadge = comp ? `[${comp.toUpperCase()}] ` : "";
+				const reasoningText = det.cytological_reasoning || det.gemini_reasoning || det.agent_reasoning || "";
+				const corrBadge = det.spatial_corrected ? ` · ⚡ Corregida de '${det.original_class_key || "prev"}'` : "";
+
+				if (reasoningText || compBadge) {
+					tooltipReason.textContent = `💡 ${compBadge}${reasoningText}${corrBadge}`;
 					tooltipReason.style.display = "block";
 				} else {
 					tooltipReason.style.display = "none";
@@ -1969,9 +2014,21 @@
 		});
 		el.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
 
-		// Click to select
+		// Click to select or erase
 		el.addEventListener("click", (e) => {
 			e.stopPropagation();
+			if (activeInteractiveTool === 'eraser') {
+				det._deleted = true;
+				if (typeof selectedDetections !== "undefined") {
+					selectedDetections.delete(detId);
+				}
+				tooltip.style.display = "none";
+				updateSelectionToolbar();
+				renderOverlay();
+				updateClassesList();
+				updateExportStats();
+				return;
+			}
 			if (e.shiftKey) {
 				// Multi-select
 				if (selectedDetections.has(detId)) selectedDetections.delete(detId);
@@ -2037,6 +2094,9 @@
 			opt.textContent = cls.name;
 			reassignSelect.appendChild(opt);
 		});
+		if (typeof updateCorrectionClassDropdown === "function") {
+			updateCorrectionClassDropdown();
+		}
 	}
 
 	deleteSelectedBtn.addEventListener("click", () => { deleteSelectedDetections(); });
@@ -2064,8 +2124,25 @@
 		if (e.key === "Escape") {
 			selectedDetections.clear();
 			updateSelectionToolbar();
+			if (typeof setActiveInteractiveTool === "function" && activeInteractiveTool) {
+				setActiveInteractiveTool(null);
+			}
 			renderOverlay();
 			contextMenu.style.display = "none";
+		}
+		// Quick correction tool hotkeys (when not editing text inputs)
+		if (document.activeElement.tagName !== "INPUT" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			if (typeof setActiveInteractiveTool === "function") {
+				if (e.key === "b" || e.key === "B") {
+					setActiveInteractiveTool("box");
+				} else if (e.key === "c" || e.key === "C") {
+					setActiveInteractiveTool("click");
+				} else if (e.key === "p" || e.key === "P") {
+					setActiveInteractiveTool("polygon");
+				} else if (e.key === "x" || e.key === "X") {
+					setActiveInteractiveTool("eraser");
+				}
+			}
 		}
 		// Ctrl+A = select all visible
 		if (e.key === "a" && (e.ctrlKey || e.metaKey) && document.activeElement.tagName !== "INPUT") {
@@ -2336,6 +2413,9 @@
 		});
 
 		updateFaissSuggestionChips();
+		if (typeof updateCorrectionClassDropdown === "function") {
+			updateCorrectionClassDropdown();
+		}
 	}
 
 	function updateFaissSuggestionChips() {
@@ -2394,68 +2474,152 @@
 		});
 	}
 
-	// Interactive Click Mode (SAM 3)
-	if (toggleClickMode) {
-		toggleClickMode.addEventListener("click", () => {
-			isClickMode = !isClickMode;
-			if (isClickMode) {
-				resetDrawMode();
-				isClickMode = true;
-				toggleClickMode.style.background = "#22c55e";
-				toggleClickMode.textContent = "👆 Modo Click (ACTIVO)";
-				displayImage.style.cursor = "crosshair";
-			} else {
-				toggleClickMode.style.background = "";
-				toggleClickMode.textContent = "👆 Modo Click (SAM 3)";
-				displayImage.style.cursor = "default";
-			}
+	// ======================= INTERACTIVE CORRECTION TOOLS (HUMAN-IN-THE-LOOP) =======================
+
+	function updateCorrectionClassDropdown() {
+		if (!correctionClassSelect) return;
+		const currentVal = correctionClassSelect.value;
+		correctionClassSelect.innerHTML = "";
+		if (classRegistry.length === 0) {
+			const opt = document.createElement("option");
+			opt.value = "Estructura";
+			opt.textContent = "Estructura";
+			correctionClassSelect.appendChild(opt);
+			return;
+		}
+		classRegistry.forEach(cls => {
+			const opt = document.createElement("option");
+			opt.value = cls.name;
+			opt.dataset.key = cls.key;
+			opt.textContent = cls.name;
+			correctionClassSelect.appendChild(opt);
 		});
+		if (currentVal && Array.from(correctionClassSelect.options).some(o => o.value === currentVal)) {
+			correctionClassSelect.value = currentVal;
+		}
 	}
 
-	// Interactive Manual Draw Polygon Mode
-	if (toggleDrawMode) {
-		toggleDrawMode.addEventListener("click", () => {
-			isDrawMode = !isDrawMode;
-			if (isDrawMode) {
-				isClickMode = false;
-				if (toggleClickMode) {
-					toggleClickMode.style.background = "";
-					toggleClickMode.textContent = "👆 Modo Click (SAM 3)";
-				}
-				toggleDrawMode.style.background = "#f59e0b";
-				toggleDrawMode.style.color = "#000";
-				toggleDrawMode.textContent = "✏️ Dibujando Polígono...";
-				if (finishPolygonBtn) {
-					finishPolygonBtn.style.display = "inline-block";
-					finishPolygonBtn.textContent = "✓ Finalizar Polígono (0 pts)";
-				}
-				displayImage.style.cursor = "crosshair";
-			} else {
-				resetDrawMode();
-			}
-		});
-	}
+	function setActiveInteractiveTool(toolName) {
+		if (activeInteractiveTool === toolName) {
+			activeInteractiveTool = null; // Toggle off
+		} else {
+			activeInteractiveTool = toolName;
+		}
 
-	if (finishPolygonBtn) {
-		finishPolygonBtn.addEventListener("click", () => {
-			finishPolygonDrawing();
-		});
-	}
-
-	function resetDrawMode() {
-		isDrawMode = false;
 		currentPolygonPoints = [];
-		if (toggleDrawMode) {
-			toggleDrawMode.style.background = "";
-			toggleDrawMode.style.color = "";
-			toggleDrawMode.textContent = "✏️ Dibujar Polígono";
+		isDraggingBox = false;
+		const tempBox = document.getElementById("temp-box-drag");
+		if (tempBox) tempBox.remove();
+
+		// Update button visual styles
+		if (toolBoxMode) {
+			const isActive = (activeInteractiveTool === 'box');
+			toolBoxMode.style.background = isActive ? "#0284c7" : "rgba(56,189,248,0.15)";
+			toolBoxMode.style.color = isActive ? "#ffffff" : "#38bdf8";
+			toolBoxMode.style.borderColor = isActive ? "#38bdf8" : "rgba(56,189,248,0.4)";
+			toolBoxMode.style.fontWeight = isActive ? "700" : "600";
+		}
+		if (toolClickMode) {
+			const isActive = (activeInteractiveTool === 'click');
+			toolClickMode.style.background = isActive ? "#16a34a" : "rgba(34,197,94,0.15)";
+			toolClickMode.style.color = isActive ? "#ffffff" : "#22c55e";
+			toolClickMode.style.borderColor = isActive ? "#22c55e" : "rgba(34,197,94,0.4)";
+			toolClickMode.style.fontWeight = isActive ? "700" : "600";
+		}
+		if (toolDrawMode) {
+			const isActive = (activeInteractiveTool === 'polygon');
+			toolDrawMode.style.background = isActive ? "#d97706" : "rgba(245,158,11,0.15)";
+			toolDrawMode.style.color = isActive ? "#ffffff" : "#fbbf24";
+			toolDrawMode.style.borderColor = isActive ? "#fbbf24" : "rgba(245,158,11,0.4)";
+			toolDrawMode.style.fontWeight = isActive ? "700" : "600";
 		}
 		if (finishPolygonBtn) {
-			finishPolygonBtn.style.display = "none";
-			finishPolygonBtn.textContent = "✓ Finalizar Polígono";
+			finishPolygonBtn.style.display = (activeInteractiveTool === 'polygon') ? "inline-block" : "none";
+			finishPolygonBtn.textContent = "✓ Finalizar Polígono (0 pts)";
 		}
-		displayImage.style.cursor = "default";
+		if (toolEraserMode) {
+			const isActive = (activeInteractiveTool === 'eraser');
+			toolEraserMode.style.background = isActive ? "#dc2626" : "rgba(239,68,68,0.15)";
+			toolEraserMode.style.color = isActive ? "#ffffff" : "#f87171";
+			toolEraserMode.style.borderColor = isActive ? "#f87171" : "rgba(239,68,68,0.4)";
+			toolEraserMode.style.fontWeight = isActive ? "700" : "600";
+		}
+
+		// Cursor & Status bar
+		if (activeToolStatus) {
+			if (activeInteractiveTool === 'box') {
+				activeToolStatus.textContent = "🟦 Arrastra un recuadro sobre la imagen";
+				displayImage.style.cursor = "crosshair";
+			} else if (activeInteractiveTool === 'click') {
+				activeToolStatus.textContent = "👆 Haz clic sobre una célula u objeto";
+				displayImage.style.cursor = "crosshair";
+			} else if (activeInteractiveTool === 'polygon') {
+				activeToolStatus.textContent = "✏️ Clic para vértices, doble clic para cerrar";
+				displayImage.style.cursor = "crosshair";
+			} else if (activeInteractiveTool === 'eraser') {
+				activeToolStatus.textContent = "🧹 Haz clic en cualquier detección para borrarla";
+				displayImage.style.cursor = "not-allowed";
+			} else {
+				activeToolStatus.textContent = "";
+				displayImage.style.cursor = "default";
+			}
+		}
+
 		renderOverlay();
+	}
+
+	if (toolBoxMode) toolBoxMode.addEventListener("click", () => setActiveInteractiveTool('box'));
+	if (toolClickMode) toolClickMode.addEventListener("click", () => setActiveInteractiveTool('click'));
+	if (toolDrawMode) toolDrawMode.addEventListener("click", () => setActiveInteractiveTool('polygon'));
+	if (toolEraserMode) toolEraserMode.addEventListener("click", () => setActiveInteractiveTool('eraser'));
+	if (finishPolygonBtn) finishPolygonBtn.addEventListener("click", () => finishPolygonDrawing());
+
+	function addDetectionToActiveImage(targetClass, detData) {
+		if (!activeImageKey) return;
+		const activeData = imageStore.get(activeImageKey);
+		if (!activeData) return;
+
+		let matchedCls = classRegistry.find(c => c.name.toLowerCase() === targetClass.toLowerCase() || c.key === targetClass);
+		if (!matchedCls) {
+			const colors = ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#60a5fa", "#fb923c", "#c084fc", "#2dd4bf"];
+			const color = colors[classRegistry.length % colors.length];
+			const newKey = `clase_custom_${classIdCounter}`;
+			matchedCls = { id: classIdCounter++, name: targetClass, color: color, key: newKey };
+			classRegistry.push(matchedCls);
+			updateClassesList();
+			updateReassignDropdown();
+		}
+
+		let group = activeData.groups.find(g => g.label.toLowerCase() === matchedCls.name.toLowerCase() || g.key === matchedCls.key);
+		if (!group) {
+			group = {
+				key: matchedCls.key,
+				prompt: matchedCls.name,
+				label: matchedCls.name,
+				color: matchedCls.color,
+				detections: [],
+				count: 0
+			};
+			activeData.groups.push(group);
+		}
+
+		if (!detData.box && detData.bbox) {
+			const [bx, by, bw, bh] = detData.bbox;
+			detData.box = [bx, by, bx + bw, by + bh];
+		}
+		if (detData.score === undefined) {
+			detData.score = detData.confidence || 0.95;
+		}
+		detData.class_id = matchedCls.id;
+
+		group.detections.push(detData);
+		group.count = group.detections.length;
+		activeData.annotated = true;
+
+		renderOverlay();
+		updateClassesList();
+		updateExportStats();
+		renderGallery();
 	}
 
 	function finishPolygonDrawing() {
@@ -2467,10 +2631,10 @@
 		const activeData = imageStore.get(activeImageKey);
 		if (!activeData) return;
 
-		let defaultClass = classRegistry.length > 0 ? classRegistry[classRegistry.length - 1].name : "Limón";
-		const promptInput = prompt(`Finalizar polígono personalizado de ${currentPolygonPoints.length} vértices.\n\nIngresa la clase u objeto (ej: Limón):`, defaultClass);
-		if (promptInput === null) return;
-		const targetClass = promptInput.trim() ? promptInput.trim() : defaultClass;
+		let targetClass = (correctionClassSelect && correctionClassSelect.value) ? correctionClassSelect.value.trim() : "";
+		if (!targetClass) {
+			targetClass = classRegistry.length > 0 ? classRegistry[classRegistry.length - 1].name : "Estructura";
+		}
 
 		let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 		const flatPoly = [];
@@ -2485,64 +2649,155 @@
 		const bbox = [Math.round(minX), Math.round(minY), Math.round(maxX - minX), Math.round(maxY - minY)];
 		const box = [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
 
-		// Find or create class in classRegistry
-		let matchedCls = classRegistry.find(c => c.name.toLowerCase() === targetClass.toLowerCase());
-		if (!matchedCls) {
-			const colors = ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#60a5fa", "#fb923c", "#c084fc", "#2dd4bf"];
-			const color = colors[classRegistry.length % colors.length];
-			const newKey = `clase_custom_${classIdCounter}`;
-			matchedCls = { id: classIdCounter++, name: targetClass, color: color, key: newKey };
-			classRegistry.push(matchedCls);
-			updateClassesList();
-			updateReassignDropdown();
-		}
-
-		// Find or create detection group
-		let group = activeData.groups.find(g => g.label.toLowerCase() === targetClass.toLowerCase() || g.key === matchedCls.key);
-		if (!group) {
-			group = {
-				key: matchedCls.key,
-				prompt: targetClass,
-				label: matchedCls.name,
-				color: matchedCls.color,
-				detections: [],
-				count: 0
-			};
-			activeData.groups.push(group);
-		}
-
 		const newDet = {
-			class_id: matchedCls.id,
 			score: 1.0,
 			bbox: bbox,
 			box: box,
 			segmentation: [flatPoly]
 		};
 
-		group.detections.push(newDet);
-		group.count = group.detections.length;
-		activeData.annotated = true;
-
-		resetDrawMode();
-		updateClassesList();
-		updateExportStats();
-		renderGallery();
+		addDetectionToActiveImage(targetClass, newDet);
+		currentPolygonPoints = [];
+		setActiveInteractiveTool(null);
 	}
 
-	// Canvas interactions (Click SAM 3 mode & Draw Polygon mode)
+	// Canvas mouse event handlers for Box, Click, and Polygon modes
+	displayImage.addEventListener("mousedown", (e) => {
+		if (!activeImageKey || activeInteractiveTool !== 'box') return;
+		const activeData = imageStore.get(activeImageKey);
+		if (!activeData) return;
+
+		const rect = displayImage.getBoundingClientRect();
+		const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+		const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+		startBoxX = Math.round(relX * activeData.width);
+		startBoxY = Math.round(relY * activeData.height);
+		isDraggingBox = true;
+
+		// Create temporary SVG drag rectangle
+		let tempBox = document.getElementById("temp-box-drag");
+		if (!tempBox) {
+			tempBox = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+			tempBox.setAttribute("id", "temp-box-drag");
+			tempBox.style.fill = "rgba(56, 189, 248, 0.2)";
+			tempBox.style.stroke = "#38bdf8";
+			tempBox.style.strokeWidth = "2.5";
+			tempBox.style.strokeDasharray = "5 3";
+			overlaySvg.appendChild(tempBox);
+		}
+		tempBox.setAttribute("x", startBoxX.toString());
+		tempBox.setAttribute("y", startBoxY.toString());
+		tempBox.setAttribute("width", "0");
+		tempBox.setAttribute("height", "0");
+	});
+
+	window.addEventListener("mousemove", (e) => {
+		if (!isDraggingBox || activeInteractiveTool !== 'box' || !activeImageKey) return;
+		const activeData = imageStore.get(activeImageKey);
+		if (!activeData) return;
+
+		const rect = displayImage.getBoundingClientRect();
+		const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+		const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+		const curX = Math.round(relX * activeData.width);
+		const curY = Math.round(relY * activeData.height);
+
+		const tempBox = document.getElementById("temp-box-drag");
+		if (tempBox) {
+			const x = Math.min(startBoxX, curX);
+			const y = Math.min(startBoxY, curY);
+			const w = Math.abs(curX - startBoxX);
+			const h = Math.abs(curY - startBoxY);
+			tempBox.setAttribute("x", x.toString());
+			tempBox.setAttribute("y", y.toString());
+			tempBox.setAttribute("width", w.toString());
+			tempBox.setAttribute("height", h.toString());
+		}
+	});
+
+	window.addEventListener("mouseup", async (e) => {
+		if (!isDraggingBox || activeInteractiveTool !== 'box' || !activeImageKey) return;
+		isDraggingBox = false;
+
+		const tempBox = document.getElementById("temp-box-drag");
+		if (tempBox) tempBox.remove();
+
+		const activeData = imageStore.get(activeImageKey);
+		if (!activeData || !activeData.file) return;
+
+		const rect = displayImage.getBoundingClientRect();
+		const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+		const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+		const endX = Math.round(relX * activeData.width);
+		const endY = Math.round(relY * activeData.height);
+
+		const x1 = Math.min(startBoxX, endX);
+		const y1 = Math.min(startBoxY, endY);
+		const x2 = Math.max(startBoxX, endX);
+		const y2 = Math.max(startBoxY, endY);
+
+		if (Math.abs(x2 - x1) < 8 || Math.abs(y2 - y1) < 8) return;
+
+		let targetClass = (correctionClassSelect && correctionClassSelect.value) ? correctionClassSelect.value.trim() : "";
+		if (!targetClass) {
+			targetClass = classRegistry.length > 0 ? classRegistry[0].name : "Estructura";
+		}
+
+		if (progressArea && progressFill && progressTextEl) {
+			progressArea.style.display = "block";
+			progressFill.style.width = "40%";
+			progressTextEl.textContent = `Segmentando caja SAM '${targetClass}' [${x1},${y1} → ${x2},${y2}]...`;
+		}
+
+		try {
+			const formData = new FormData();
+			formData.append("image", activeData.file);
+			formData.append("x1", x1.toString());
+			formData.append("y1", y1.toString());
+			formData.append("x2", x2.toString());
+			formData.append("y2", y2.toString());
+			formData.append("prompt", targetClass);
+			formData.append("umbral", "0.05");
+
+			const resp = await fetch(`${API_URL}/segment-box`, {
+				method: "POST",
+				body: formData
+			});
+
+			if (!resp.ok) {
+				const err = await resp.json();
+				throw new Error(err.detail || "Error en segment-box");
+			}
+
+			const res = await resp.json();
+			if (res.success && res.detection) {
+				addDetectionToActiveImage(targetClass, res.detection);
+				if (progressFill && progressTextEl) {
+					progressFill.style.width = "100%";
+					progressTextEl.textContent = `✓ Estructura '${targetClass}' segmentada con éxito`;
+					setTimeout(() => { progressArea.style.display = "none"; }, 2500);
+				}
+			}
+		} catch (err) {
+			console.error("Error en segment-box:", err);
+			if (progressTextEl) progressTextEl.textContent = `Error: ${err.message}`;
+		}
+	});
+
+	// Canvas Click: Handle Clic SAM and Draw Polygon modes
 	displayImage.addEventListener("click", async (e) => {
 		if (!activeImageKey) return;
 		const activeData = imageStore.get(activeImageKey);
 		if (!activeData) return;
 
 		const rect = displayImage.getBoundingClientRect();
-		const relX = (e.clientX - rect.left) / rect.width;
-		const relY = (e.clientY - rect.top) / rect.height;
+		const relX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+		const relY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
 		const pixelX = Math.round(relX * activeData.width);
 		const pixelY = Math.round(relY * activeData.height);
 
-		// 1. Manual Draw Polygon Mode
-		if (isDrawMode) {
+		// 1. Polygon Drawing Mode
+		if (activeInteractiveTool === 'polygon') {
 			currentPolygonPoints.push([pixelX, pixelY]);
 			if (finishPolygonBtn) {
 				finishPolygonBtn.textContent = `✓ Finalizar Polígono (${currentPolygonPoints.length} pts)`;
@@ -2551,18 +2806,20 @@
 			return;
 		}
 
-		// 2. Click SAM 3 Segmentation Mode
-		if (isClickMode) {
-			if (!activeData.file) { alert("Archivo de imagen no encontrado."); return; }
+		// 2. Click SAM Mode
+		if (activeInteractiveTool === 'click') {
+			if (!activeData.file) return;
 
-			let defaultClass = classRegistry.length > 0 ? classRegistry[classRegistry.length - 1].name : "Limón";
-			const promptInput = prompt(`Segmentar objeto con SAM 3 en (${pixelX}, ${pixelY}).\n\nIngresa la clase u objeto (ej: Limón):`, defaultClass);
-			if (promptInput === null) return;
-			const targetClass = promptInput.trim() ? promptInput.trim() : defaultClass;
+			let targetClass = (correctionClassSelect && correctionClassSelect.value) ? correctionClassSelect.value.trim() : "";
+			if (!targetClass) {
+				targetClass = classRegistry.length > 0 ? classRegistry[0].name : "Célula";
+			}
 
-			progressArea.style.display = "block";
-			progressFill.style.width = "40%";
-			progressTextEl.textContent = `Segmentando '${targetClass}' en (${pixelX}, ${pixelY})...`;
+			if (progressArea && progressFill && progressTextEl) {
+				progressArea.style.display = "block";
+				progressFill.style.width = "40%";
+				progressTextEl.textContent = `Segmentando '${targetClass}' en (${pixelX}, ${pixelY})...`;
+			}
 
 			try {
 				const formData = new FormData();
@@ -2584,54 +2841,23 @@
 
 				const res = await resp.json();
 				if (res.success && res.detection) {
-					let matchedCls = classRegistry.find(c => c.name.toLowerCase() === targetClass.toLowerCase());
-					if (!matchedCls) {
-						const colors = ["#f472b6", "#a78bfa", "#34d399", "#fbbf24", "#60a5fa", "#fb923c", "#c084fc", "#2dd4bf"];
-						const color = colors[classRegistry.length % colors.length];
-						const newKey = `clase_custom_${classIdCounter}`;
-						matchedCls = { id: classIdCounter++, name: targetClass, color: color, key: newKey };
-						classRegistry.push(matchedCls);
-						updateClassesList();
-						updateReassignDropdown();
+					addDetectionToActiveImage(targetClass, res.detection);
+					if (progressFill && progressTextEl) {
+						progressFill.style.width = "100%";
+						progressTextEl.textContent = `✓ Objeto '${targetClass}' segmentado y agregado`;
+						setTimeout(() => { progressArea.style.display = "none"; }, 2500);
 					}
-
-					let group = activeData.groups.find(g => g.label.toLowerCase() === targetClass.toLowerCase() || g.key === matchedCls.key);
-					if (!group) {
-						group = {
-							key: matchedCls.key,
-							prompt: targetClass,
-							label: matchedCls.name,
-							color: matchedCls.color,
-							detections: [],
-							count: 0
-						};
-						activeData.groups.push(group);
-					}
-
-					group.detections.push(res.detection);
-					group.count = group.detections.length;
-					activeData.annotated = true;
-
-					progressFill.style.width = "100%";
-					progressTextEl.textContent = `✓ Objeto '${targetClass}' segmentado y agregado`;
-
-					renderOverlay();
-					updateClassesList();
-					updateExportStats();
-					renderGallery();
-					setTimeout(() => { progressArea.style.display = "none"; }, 3000);
 				}
-
 			} catch (err) {
-				alert(`Error al segmentar: ${err.message}`);
-				progressTextEl.textContent = `Error: ${err.message}`;
+				console.error("Error al segmentar punto:", err);
+				if (progressTextEl) progressTextEl.textContent = `Error: ${err.message}`;
 			}
 		}
 	});
 
 	// Double-click to finish polygon in draw mode
 	displayImage.addEventListener("dblclick", (e) => {
-		if (isDrawMode && currentPolygonPoints.length >= 3) {
+		if (activeInteractiveTool === 'polygon' && currentPolygonPoints.length >= 3) {
 			e.preventDefault();
 			finishPolygonDrawing();
 		}
@@ -3357,33 +3583,67 @@
 		const data = imageStore.get(key);
 		if (!data) return;
 
-		let allDets = [];
+		let cellDets = [];
+		let macroDets = [];
+		const existingMacroGroups = [];
+		const knownMacroKeys = new Set([
+			"tubulo_seminifero", "tubulo", "tubule", "membrana_basal",
+			"luz_tubular", "luz", "lumen", "espacio_intersticial", "intersticio"
+		]);
+
 		(data.groups || []).forEach((g) => {
-			if (g.detections) {
-				g.detections.forEach((d) => {
-					allDets.push({
-						...d,
-						id: d.id,
-						bbox: d.bbox,
-						box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
-						segmentation: d.segmentation || [],
-						score: d.score !== undefined ? d.score : 0.95,
-						class_key: g.key,
-						label: g.label,
-						color: g.color,
-					});
-				});
+			const isGroupMacro = Boolean(
+				g.is_macro ||
+				g.role === "compartment" ||
+				g.role === "boundary_outer" ||
+				g.role === "cavity" ||
+				g.role === "stroma" ||
+				knownMacroKeys.has(String(g.key || "").toLowerCase())
+			);
+
+			if (isGroupMacro) {
+				existingMacroGroups.push(g);
 			}
+
+			(g.detections || []).forEach((d) => {
+				const isDetMacro = isGroupMacro || Boolean(
+					d.is_macro ||
+					d.role === "compartment" ||
+					d.role === "boundary_outer" ||
+					d.role === "cavity" ||
+					d.role === "stroma" ||
+					knownMacroKeys.has(String(d.class_key || g.key || "").toLowerCase())
+				);
+
+				const formatted = {
+					...d,
+					id: d.id,
+					bbox: d.bbox,
+					box: d.box || (d.bbox ? [d.bbox[0], d.bbox[1], d.bbox[0] + d.bbox[2], d.bbox[1] + d.bbox[3]] : null),
+					segmentation: d.segmentation || [],
+					score: d.score !== undefined ? d.score : 0.95,
+					class_key: g.key,
+					label: g.label,
+					color: g.color,
+					is_macro: isDetMacro,
+				};
+
+				if (isDetMacro) {
+					macroDets.push(formatted);
+				} else {
+					cellDets.push(formatted);
+				}
+			});
 		});
 
-		if (allDets.length === 0) {
+		if (cellDets.length === 0) {
 			alert("No hay células segmentadas en esta imagen. Primero segmenta con Cellpose o usa el Pipeline Integral.");
 			return;
 		}
 
 		statusIdle.style.display = "none";
 		statusRunning.style.display = "flex";
-		statusText.textContent = `✨ Gemini Vision: Clasificando ${allDets.length} células en batch...`;
+		statusText.textContent = `✨ Gemini Vision: Clasificando ${cellDets.length} células en batch (con respeto ontológico espacial)...`;
 
 		try {
 			let imageFile = data.file;
@@ -3407,7 +3667,10 @@
 
 			const formData = new FormData();
 			formData.append("image", imageFile);
-			formData.append("detections", JSON.stringify(allDets));
+			formData.append("detections", JSON.stringify(cellDets));
+			if (macroDets.length > 0) {
+				formData.append("macro_annotations", JSON.stringify(macroDets));
+			}
 			if (candidateClasses.length > 0) {
 				formData.append("classes", JSON.stringify(candidateClasses));
 			}
@@ -3429,9 +3692,18 @@
 			const classified = result.detections || [];
 			if (classified.length > 0) {
 				const groupsMap = new Map();
+
+				// Preserve existing macro groups intact
+				for (const mg of existingMacroGroups) {
+					groupsMap.set(mg.key, {
+						...mg,
+						detections: mg.detections || [],
+					});
+				}
+
 				for (let i = 0; i < classified.length; i++) {
 					const det = classified[i];
-					const origDet = allDets[i] || {};
+					const origDet = cellDets[i] || {};
 
 					det.segmentation = det.segmentation || origDet.segmentation || [];
 					det.box = det.box || origDet.box;
@@ -3482,7 +3754,10 @@
 					updateClassesList();
 				}
 
-				statusText.textContent = `✅ Gemini Vision clasificó con éxito ${classified.length} células en batch!`;
+				const corrMsg = (result.spatial_corrections_count && result.spatial_corrections_count > 0)
+					? ` (${result.spatial_corrections_count} correcciones de ontología espacial aplicadas)`
+					: " (100% coherencia espacial)";
+				statusText.textContent = `✅ Gemini Vision clasificó ${classified.length} células en batch${corrMsg}!`;
 				setTimeout(() => {
 					statusRunning.style.display = "none";
 					statusIdle.style.display = "flex";

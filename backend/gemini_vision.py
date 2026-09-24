@@ -34,13 +34,13 @@ DEFAULT_COLORS = [
 ]
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
-FALLBACK_MODEL = os.environ.get("FALLBACK_MODEL", "gemini-3.5-flash-lite")
 
 
 class GeminiKeyManager:
     """
-    Thread-safe manager for Google GenAI API keys with automatic round-robin rotation
-    and cooldown handling upon 429 (rate-limit) or 403 (quota/forbidden) errors.
+    Thread-safe manager for Google GenAI API keys with automatic round-robin rotation,
+    prioritization of healthy keys, and cooldown handling upon 429, 403, 404, 402, 503,
+    and network/write/read timeouts.
     """
 
     def __init__(self):
@@ -54,23 +54,23 @@ class GeminiKeyManager:
         # 1. GOOGLE_API_KEYS (comma-separated list from .env)
         raw_google = os.environ.get("GOOGLE_API_KEYS", "")
         if raw_google:
-            for k in raw_google.split(","):
-                k_clean = k.strip()
+            for k in raw_google.replace("\n", ",").split(","):
+                k_clean = k.strip().strip("\"'")
                 if k_clean and k_clean not in keys:
                     keys.append(k_clean)
         # 2. GEMINI_API_KEYS (comma-separated fallback)
         raw_gemini = os.environ.get("GEMINI_API_KEYS", "")
         if raw_gemini:
-            for k in raw_gemini.split(","):
-                k_clean = k.strip()
+            for k in raw_gemini.replace("\n", ",").split(","):
+                k_clean = k.strip().strip("\"'")
                 if k_clean and k_clean not in keys:
                     keys.append(k_clean)
         # 3. GEMINI_API_KEY (single key)
-        single_gemini = os.environ.get("GEMINI_API_KEY", "").strip()
+        single_gemini = os.environ.get("GEMINI_API_KEY", "").strip().strip("\"'")
         if single_gemini and single_gemini not in keys:
             keys.append(single_gemini)
         # 4. GOOGLE_API_KEY (single key)
-        single_google = os.environ.get("GOOGLE_API_KEY", "").strip()
+        single_google = os.environ.get("GOOGLE_API_KEY", "").strip().strip("\"'")
         if single_google and single_google not in keys:
             keys.append(single_google)
         return keys
@@ -92,7 +92,7 @@ class GeminiKeyManager:
             self._cooldowns[key] = time.time() + duration_sec
             self._failure_counts[key] = self._failure_counts.get(key, 0) + 1
             key_preview = key[:8] + "..." + key[-4:] if len(key) > 12 else "key"
-            logger.warning(f"Gemini API Key [{key_preview}] in cooldown for {duration_sec}s: {reason}")
+            logger.warning(f"Gemini API Key [{key_preview}] in cooldown for {duration_sec:.0f}s: {reason}")
 
     def execute_with_rotation(
         self,
@@ -103,101 +103,79 @@ class GeminiKeyManager:
         from google import genai
         from google.genai import types
 
-        http_opts = types.HttpOptions(timeout=35.0)
+        http_opts = types.HttpOptions(timeout=90000)
         target_model = preferred_model or GEMINI_MODEL
 
-        # If an explicit key was provided by the caller, use it directly
-        if explicit_api_key:
-            client = genai.Client(api_key=explicit_api_key, http_options=http_opts)
+        def _classify_error(err: Exception) -> Tuple[bool, float, str]:
+            import httpx
             try:
+                import httpcore
+                httpcore_exceptions = (httpcore.TimeoutException, httpcore.NetworkError)
+            except ImportError:
+                httpcore_exceptions = ()
+
+            if isinstance(err, (httpx.TimeoutException, httpx.NetworkError, TimeoutError, *httpcore_exceptions)):
+                return True, 45.0, f"Timeout/Red: {err}"
+
+            err_str = str(err).lower()
+            if any(k in err_str for k in ["no longer available", "depleted", "prepayment", "billing", "invalid api key", "api_key_invalid", "401"]):
+                return True, 600.0, f"Disponibilidad/Saldo agotado (401/402/modelo): {err_str[:120]}"
+
+            if any(k in err_str for k in ["429", "resource_exhausted", "quota", "rate limit", "403", "forbidden"]):
+                return True, 60.0, f"Límite de tasa / Cuota (429/403): {err_str[:120]}"
+
+            if any(k in err_str for k in ["500", "502", "503", "504", "unavailable", "high demand", "spikes in demand", "overloaded", "timeout", "timed out", "time out", "handshake", "ssl", "write operation", "read operation", "connection", "closed"]):
+                return True, 30.0, f"Error transitorio / Sobrecarga (503/timeout): {err_str[:120]}"
+
+            if "404" in err_str or "not_found" in err_str or "not found" in err_str:
+                return True, 180.0, f"Modelo no encontrado (404): {err_str[:120]}"
+
+            return True, 45.0, f"Error de llamada: {err_str[:120]}"
+
+        # If an explicit key was provided, try it first; fallback to rotation pool on failure
+        if explicit_api_key:
+            try:
+                client = genai.Client(api_key=explicit_api_key, http_options=http_opts)
                 return call_fn(client, target_model)
             except Exception as e:
-                err_str = str(e).lower()
-                if (
-                    "not_found" in err_str
-                    or "not found" in err_str
-                    or "read operation timed out" in err_str
-                    or "timeout" in err_str
-                    or "503" in err_str
-                    or "unavailable" in err_str
-                    or "high demand" in err_str
-                    or "spikes in demand" in err_str
-                ) and target_model != FALLBACK_MODEL:
-                    logger.warning(f"Retrying with fallback model {FALLBACK_MODEL} on error: {e}")
-                    return call_fn(client, FALLBACK_MODEL)
-                raise e
+                logger.warning(f"Explicit key call failed on {target_model} ({e}). Falling back to pool rotation across GOOGLE_API_KEYS...")
 
         keys = self.get_all_keys()
         if not keys:
             raise RuntimeError("No Google/Gemini API keys configured in .env (GOOGLE_API_KEYS or GEMINI_API_KEY).")
 
         now = time.time()
+        # Prioritize healthy keys not on cooldown
+        available_keys = [k for k in keys if self._cooldowns.get(k, 0) <= now]
+        candidate_keys = available_keys if available_keys else keys
+
         with self._lock:
-            start_idx = self._index
-            self._index = (self._index + 1) % len(keys)
-            ordered_keys = [keys[(start_idx + i) % len(keys)] for i in range(len(keys))]
+            start_idx = self._index % len(candidate_keys)
+            ordered_keys = [candidate_keys[(start_idx + i) % len(candidate_keys)] for i in range(len(candidate_keys))]
 
         last_error = None
         for key in ordered_keys:
-            # Check cooldown
-            if self._cooldowns.get(key, 0) > time.time():
-                continue
-
+            key_preview = key[:8] + "..." + key[-4:] if len(key) > 12 else "key"
             try:
                 client = genai.Client(api_key=key, http_options=http_opts)
-                try:
-                    res = call_fn(client, target_model)
-                except Exception as model_err:
-                    err_str = str(model_err).lower()
-                    if (
-                        "not_found" in err_str
-                        or "not found" in err_str
-                        or "read operation timed out" in err_str
-                        or "timeout" in err_str
-                        or "503" in err_str
-                        or "unavailable" in err_str
-                        or "high demand" in err_str
-                        or "spikes in demand" in err_str
-                        or "429" in err_str
-                        or "resource_exhausted" in err_str
-                        or "quota" in err_str
-                    ) and target_model != FALLBACK_MODEL:
-                        logger.warning(f"Model {target_model} issue ({model_err}), falling back to {FALLBACK_MODEL}")
-                        res = call_fn(client, FALLBACK_MODEL)
-                    else:
-                        raise model_err
+                res = call_fn(client, target_model)
 
-                # Success! Advance round-robin index
+                # Success! Advance round-robin index across full key pool
                 with self._lock:
                     self._index = (keys.index(key) + 1) % len(keys)
                     self._cooldowns.pop(key, None)
                 return res
 
             except Exception as e:
-                err_str = str(e).lower()
-                if (
-                    "429" in err_str
-                    or "resource_exhausted" in err_str
-                    or "quota" in err_str
-                    or "rate limit" in err_str
-                    or "403" in err_str
-                    or "503" in err_str
-                    or "unavailable" in err_str
-                    or "high demand" in err_str
-                    or "spikes in demand" in err_str
-                    or "overloaded" in err_str
-                    or "read operation timed out" in err_str
-                    or "timeout" in err_str
-                ):
-                    self.mark_key_cooldown(key, duration_sec=30.0, reason=str(e))
-                    last_error = e
-                    continue
-                else:
-                    raise e
+                rotatable, cooldown, reason = _classify_error(e)
+                self.mark_key_cooldown(key, duration_sec=cooldown, reason=reason)
+                logger.warning(f"Gemini call failed with key [{key_preview}] on {target_model} ({reason}). Rotando a la siguiente clave...")
+                last_error = e
+                continue
 
         if last_error:
             raise last_error
-        raise RuntimeError("All Google API keys are currently on cooldown due to rate limits. Please try again shortly.")
+        raise RuntimeError("All Google API keys in GOOGLE_API_KEYS pool are currently on cooldown. Please try again shortly.")
 
 
 key_manager = GeminiKeyManager()
@@ -225,18 +203,18 @@ def generate_gemini_content(
     api_key: Optional[str] = None,
     preferred_model: Optional[str] = None,
 ) -> Any:
-    """Execute generate_content with key rotation, cooldown handling and model fallback."""
+    """Execute generate_content with key rotation and cooldown handling on Gemini 3.5 Flash."""
     def _call(client, model_name):
         from google.genai import types
-        config = types.GenerateContentConfig(
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
-        )
-        if system_instruction:
-            config.system_instruction = system_instruction
-        if temperature is not None:
-            config.temperature = temperature
-        if response_mime_type:
-            config.response_mime_type = response_mime_type
+        config = None
+        if system_instruction or temperature is not None or response_mime_type:
+            config = types.GenerateContentConfig()
+            if system_instruction:
+                config.system_instruction = system_instruction
+            if temperature is not None:
+                config.temperature = temperature
+            if response_mime_type:
+                config.response_mime_type = response_mime_type
 
         return client.models.generate_content(
             model=model_name,
@@ -801,7 +779,7 @@ def validate_uncertain_detections_with_gemini(
     max_to_validate: int = 25,
 ) -> List[Dict[str, Any]]:
     """
-    Arbitrates and validates ambiguous/uncertain histological instances using Gemini 2.5 Flash Vision.
+    Arbitrates and validates ambiguous/uncertain histological instances using Gemini 3.5 Flash Vision.
 
     Selects ambiguous detections, passes contextual high-resolution crops along with the full slide context,
     and returns adjudications conforming strictly to candidate ontology classes.
@@ -1475,31 +1453,26 @@ def classify_cells_batch_gemini(
     detections: List[Dict[str, Any]],
     ontology_classes: List[Dict[str, Any]],
     spatial_map: Optional[Dict[str, List[str]]] = None,
+    spatial_rules_lookup: Optional[Dict[str, Dict[str, Any]]] = None,
+    forbidden_map: Optional[Dict[str, List[str]]] = None,
+    macro_annotations: Optional[List[Dict[str, Any]]] = None,
     organ_context: str = "histología",
     max_cells_per_call: int = 250,
     api_key: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], List[int]]:
     """
-    Batch-classify all Cellpose-segmented cells using Gemini Vision with annotated image.
+    Batch-classify all Cellpose-segmented cells using Gemini Vision with annotated image,
+    strictly respecting textual and topological spatial ontology rules.
 
     Strategy:
     1. Render numbered contours/bboxes on the original image so Gemini sees each cell
-       in its full tissue context (like a pathologist looking through a microscope).
-    2. Send the annotated image + structured prompt with ontology class descriptions
-       to Gemini in a single API call (or split into quadrants if >max_cells_per_call).
-    3. Parse the JSON response and assign class_key, label, color, score to each detection.
-
-    Args:
-        image: Original PIL image (RGB).
-        detections: Cellpose segmentation results (list of dicts with 'bbox', 'segmentation').
-        ontology_classes: Cellular ontology classes (list of dicts with 'key', 'name', etc.).
-        spatial_map: Optional mapping of macro-compartment keys to allowed cell class keys.
-        organ_context: Tissue/organ description for Gemini context.
-        max_cells_per_call: Maximum cells per Gemini API call before splitting.
-        api_key: Optional explicit API key.
-
-    Returns:
-        Tuple of (classified_detections, uncertain_indices).
+       in its full tissue context.
+    2. Compute geometric containment in macro compartments (tubule, lumen, interstitium)
+       via OpenCV polygons if macro_annotations are provided.
+    3. Send the annotated image + structured prompt with ontology class descriptions,
+       spatial constraints, and negative exclusion rules.
+    4. Parse response and run post-processing enforcement (enforce_spatial_rules_on_detections)
+       to ensure 0% biological violations.
     """
     if not detections:
         return [], []
@@ -1514,35 +1487,97 @@ def classify_cells_batch_gemini(
 
     num_dets = len(detections)
 
-    # Build class description block for the prompt
+    # 1. Pre-calculate containing_layer for detections using macro_annotations if available
+    if macro_annotations:
+        import cv2
+        import numpy as np
+
+        macro_polys: Dict[str, List[np.ndarray]] = {}
+        for macro in macro_annotations:
+            m_key = str(macro.get("class_key") or macro.get("category_id") or macro.get("key") or macro.get("label") or "").strip().lower()
+            if not m_key:
+                continue
+            segs = macro.get("segmentation") or []
+            if isinstance(segs, list):
+                for poly in segs:
+                    if isinstance(poly, list) and len(poly) >= 6:
+                        pts = np.array(poly, dtype=np.float32).reshape(-1, 2)
+                        macro_polys.setdefault(m_key, []).append(pts)
+
+        for det in detections:
+            if not det.get("containing_layer"):
+                cx, cy = 0.0, 0.0
+                if "centroid" in det and isinstance(det["centroid"], (list, tuple)) and len(det["centroid"]) == 2:
+                    cx, cy = float(det["centroid"][0]), float(det["centroid"][1])
+                elif "bbox" in det and isinstance(det["bbox"], (list, tuple)) and len(det["bbox"]) == 4:
+                    cx, cy = det["bbox"][0] + det["bbox"][2] / 2.0, det["bbox"][1] + det["bbox"][3] / 2.0
+                elif "box" in det and isinstance(det["box"], (list, tuple)) and len(det["box"]) == 4:
+                    cx, cy = (det["box"][0] + det["box"][2]) / 2.0, (det["box"][1] + det["box"][3]) / 2.0
+
+                matched_layer = None
+                for check_key in ["luz_tubular", "membrana_basal", "tubulo_seminifero", "espacio_intersticial"]:
+                    if check_key in macro_polys:
+                        for poly in macro_polys[check_key]:
+                            if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
+                                matched_layer = check_key
+                                break
+                    if matched_layer:
+                        break
+
+                if matched_layer:
+                    det["containing_layer"] = matched_layer
+                    det["compartment"] = matched_layer
+
+    # 2. Build class description block for the prompt
     class_meta: Dict[str, Dict[str, Any]] = {}
     class_descriptions: List[str] = []
+    rules_lookup = spatial_rules_lookup or {}
+
     for c in ontology_classes:
         c_key = c.get("key", "")
         c_name = c.get("name", c.get("label", c_key))
         c_color = c.get("color", "#8b5cf6")
-        c_zone = c.get("spatial_zone", c.get("spatial_rules", {}).get("compartment", ""))
-        c_parent = c.get("parent_compartment", c.get("spatial_rules", {}).get("parent_macro", ""))
-        c_cyto = c.get("cytological_features", c.get("prompt", ""))
+
+        rule = rules_lookup.get(c_key, {})
+        c_zone = c.get("spatial_zone") or rule.get("compartment") or c.get("spatial_rules", {}).get("compartment", "general")
+        c_parent = c.get("parent_compartment") or rule.get("parent_macro") or c.get("spatial_rules", {}).get("parent_macro", "organ")
+        c_forb = rule.get("forbidden_in") or c.get("spatial_rules", {}).get("forbidden_in", [])
+        c_cyto = c.get("cytological_features") or rule.get("rule_description") or c.get("prompt", "")
 
         class_meta[c_key] = {"name": c_name, "color": c_color}
         class_descriptions.append(
-            f"- key: '{c_key}' | name: '{c_name}' | zone: {c_zone} | "
-            f"parent: {c_parent} | cytology: {c_cyto}"
+            f"- key: '{c_key}' | name: '{c_name}' | zone: '{c_zone}' | "
+            f"parent_macro: '{c_parent}' | forbidden_in: {c_forb} | cytology: {c_cyto}"
         )
 
     classes_block = "\n".join(class_descriptions)
 
-    # Spatial map hint for Gemini
-    spatial_hint = ""
-    if spatial_map:
-        sp_lines = []
-        for comp_key, allowed_keys in spatial_map.items():
-            sp_lines.append(f"  - Compartment '{comp_key}' → allowed cells: {allowed_keys}")
-        spatial_hint = (
-            "\n\nSPATIAL CONSTRAINT RULES (cells MUST only appear in their parent compartment):\n"
-            + "\n".join(sp_lines)
-        )
+    # 3. Build comprehensive spatial topological constraints
+    spatial_rules_text = """\
+==================================================================
+REGLAS ESTRICTAS DE ONTOLOGÍA ESPACIAL Y DISTRIBUCIÓN TOPOLÓGICA:
+1. ESPACIO INTERSTICIAL (estroma conectivo intertubular):
+   - PERMITIDAS: celula_leydig, celula_peritubular, celula_intersticial.
+   - ESTRICTAMENTE PROHIBIDAS: espermatogonia_*, espermatocito_*, espermatide_*, espermatozoide, celula_sertoli.
+   * ¡Las células germinales y de Sertoli NUNCA existen en el estroma conectivo intertubular!
+2. TÚBULO SEMINÍFERO (epitelio germinal):
+   - ESTRICTAMENTE PROHIBIDA: celula_leydig.
+   * Estrato Basal (pegado a membrana basal): espermatogonia_a_clara, espermatogonia_a_oscura, espermatogonia_b, celula_sertoli, celula_peritubular.
+   * Estrato Intermedio (capas medias del epitelio): espermatocito_primario, espermatocito_secundario.
+   * Estrato Adluminal (hacia la cavidad central): espermatide_temprana, espermatide_tardia.
+   * Luz Tubular Central (cavidad): espermatozoide, espermatide_tardia.
+=================================================================="""
+
+    if spatial_map or forbidden_map:
+        sp_extra = []
+        if spatial_map:
+            for comp_key, allowed_keys in spatial_map.items():
+                sp_extra.append(f"  * Compartimento '{comp_key}' → PERMITIDAS: {allowed_keys}")
+        if forbidden_map:
+            for comp_key, forb_keys in forbidden_map.items():
+                sp_extra.append(f"  * Compartimento '{comp_key}' → PROHIBIDAS: {forb_keys}")
+        if sp_extra:
+            spatial_rules_text += "\nREGLAS DE LA ONTOLOGÍA ACTIVA:\n" + "\n".join(sp_extra)
 
     def _classify_subset(
         subset_indices: List[int],
@@ -1551,10 +1586,7 @@ def classify_cells_batch_gemini(
         if not subset_indices:
             return {}
 
-        # Render annotated image with numbered contours for this subset
         annotated = _render_numbered_contours(image, detections, subset_indices)
-
-        # Resize for Gemini if too large (keep detail but respect API limits)
         max_dim = 1280
         if max(annotated.size) > max_dim:
             ratio = max_dim / max(annotated.size)
@@ -1563,50 +1595,48 @@ def classify_cells_batch_gemini(
                 Image.LANCZOS,
             )
 
-        # Build detection context: what spatial compartment each cell is in
         cell_context_lines: List[str] = []
         for det_idx in subset_indices:
             det = detections[det_idx]
-            layer_info = det.get("containing_layer", "unknown")
+            layer_info = det.get("containing_layer") or det.get("compartment") or "evaluar_por_posicion_en_imagen"
             cell_context_lines.append(f"  Cell #{det_idx}: in compartment '{layer_info}'")
         cell_context_block = "\n".join(cell_context_lines)
 
         prompt = f"""\
-You are an expert histopathologist and cytologist analyzing a high-resolution H&E stained \
-photomicrograph of {organ_context}.
+You are an expert histopathologist and spatial cytologist analyzing an H&E stained photomicrograph of {organ_context}.
 
-The image shows numbered cell/nucleus segmentations (contours with index numbers). \
-Each number corresponds to a segmented cell instance detected by automated instance segmentation.
+The image shows numbered cell/nucleus segmentations (contours with index numbers).
+Each number corresponds to an individual cell detected in tissue.
 
-CELL SPATIAL LOCATIONS:
+CELL SPATIAL CONTEXT:
 {cell_context_block}
 
-CANDIDATE ONTOLOGY CLASSES (you MUST choose from these):
-{classes_block}{spatial_hint}
+CANDIDATE ONTOLOGY CLASSES:
+{classes_block}
+
+{spatial_rules_text}
 
 YOUR TASK:
 For EACH numbered cell visible in the image, classify it into the most accurate ontology class \
-based on its cytological morphology IN CONTEXT:
-- Nuclear shape, size, and chromatin pattern
-- Position within the tissue architecture (basal vs adluminal vs luminal vs interstitial)
-- Surrounding cellular neighborhood
-- Cytoplasmic characteristics
-
-CRITICAL RULES:
-1. Use ONLY the exact class keys listed above
-2. Respect spatial constraints: a cell inside a tubule cannot be classified as interstitial
-3. If uncertain between two classes, choose the most probable and set confidence < 0.7
+based on cytological morphology AND strict anatomical compartment compliance:
+1. Examine cytological morphology: nuclear size, chromatin density/pattern, nucleoli, cytoplasm.
+2. Verify spatial positioning:
+   - If outside tubular rings in interstitial connective tissue -> MUST be classified as interstitial cell (e.g. celula_leydig).
+   - If inside seminiferous tubule -> MUST be a germ cell or Sertoli cell; NEVER celula_leydig.
+   - At outer basement membrane -> espermatogonia_* or celula_sertoli or celula_peritubular.
+   - Intermediate layers -> espermatocito_*.
+   - Near or in central lumen -> espermatide_* or espermatozoide.
 
 Respond STRICTLY with valid JSON:
 ```json
 {{
   "classifications": [
-    {{"cell_index": 0, "class_key": "<exact_key>", "confidence": 0.92, "reasoning": "<brief cytological rationale in Spanish>"}},
-    {{"cell_index": 5, "class_key": "<exact_key>", "confidence": 0.85, "reasoning": "<brief rationale>"}}
+    {{"cell_index": 0, "compartment": "tubulo_basal", "class_key": "<exact_key>", "confidence": 0.95, "reasoning": "<brief cytological rationale in Spanish>"}},
+    {{"cell_index": 5, "compartment": "espacio_intersticial", "class_key": "celula_leydig", "confidence": 0.90, "reasoning": "<brief rationale>"}}
   ]
 }}
 ```
-Include ALL numbered cells. Do not skip any.
+Include ALL numbered cells without skipping any.
 """
 
         try:
@@ -1622,13 +1652,15 @@ Include ALL numbered cells. Do not skip any.
                 for item in parsed.get("classifications", []):
                     c_idx = int(item.get("cell_index", -1))
                     c_key = item.get("class_key", "")
+                    c_comp = str(item.get("compartment", "")).strip()
                     if c_idx in subset_indices and c_key in class_meta:
                         results[c_idx] = {
                             "class_key": c_key,
                             "class_name": class_meta[c_key]["name"],
                             "color": class_meta[c_key]["color"],
-                            "confidence": float(item.get("confidence", 0.80)),
+                            "confidence": float(item.get("confidence", 0.85)),
                             "reasoning": item.get("reasoning", ""),
+                            "compartment": c_comp,
                         }
                 return results
         except Exception as e:
@@ -1643,9 +1675,6 @@ Include ALL numbered cells. Do not skip any.
     if num_dets <= max_cells_per_call:
         batches = [all_indices]
     else:
-        # Spatial quadrant splitting based on cell centroids
-        import numpy as np
-
         centroids = []
         for det in detections:
             bbox = det.get("bbox", [0, 0, 1, 1])
@@ -1665,11 +1694,9 @@ Include ALL numbered cells. Do not skip any.
 
         for q_indices in quadrants.values():
             if q_indices:
-                # Further split if a quadrant still has too many
                 for start in range(0, len(q_indices), max_cells_per_call):
                     batches.append(q_indices[start:start + max_cells_per_call])
 
-    # Execute batches (parallel if multiple)
     all_results: Dict[int, Dict[str, Any]] = {}
 
     if len(batches) == 1:
@@ -1706,13 +1733,17 @@ Include ALL numbered cells. Do not skip any.
             det_copy["score"] = float(result.get("confidence", 0.85))
             det_copy["decision_source"] = "gemini_vision_batch"
             det_copy["cytological_reasoning"] = result.get("reasoning", "")
+            if result.get("compartment"):
+                det_copy["compartment"] = result["compartment"]
+                if not det_copy.get("containing_layer"):
+                    det_copy["containing_layer"] = result["compartment"]
+
             if float(result.get("confidence", 0.85)) < 0.60:
                 det_copy["classification_uncertain"] = True
                 uncertain_indices.append(i)
             else:
                 det_copy["classification_uncertain"] = False
         else:
-            # Cell not explicitly classified by Gemini — keep visible so user can review it
             det_copy["classification_uncertain"] = True
             det_copy["score"] = 0.75
             det_copy["decision_source"] = "unclassified"
@@ -1725,10 +1756,33 @@ Include ALL numbered cells. Do not skip any.
 
         classified.append(det_copy)
 
+    # 4. Mandatory Post-Processing: Enforce topological spatial rules
+    try:
+        from backend.pdf_ontology import enforce_spatial_rules_on_detections, derive_spatial_map_and_rules
+    except ImportError:
+        from pdf_ontology import enforce_spatial_rules_on_detections, derive_spatial_map_and_rules
+
+    if spatial_rules_lookup is None or forbidden_map is None:
+        s_lookup, s_map, f_map = derive_spatial_map_and_rules(None)
+        spatial_rules_lookup = spatial_rules_lookup or s_lookup
+        spatial_map = spatial_map or s_map
+        forbidden_map = forbidden_map or f_map
+
+    classified, corr_count, corr_log = enforce_spatial_rules_on_detections(
+        detections=classified,
+        spatial_rules_lookup=spatial_rules_lookup or {},
+        spatial_map=spatial_map or {},
+        forbidden_map=forbidden_map or {},
+        macro_annotations=macro_annotations,
+        class_meta=class_meta,
+    )
+    if corr_count > 0:
+        logger.info(f"Topological spatial rules corrected {corr_count} cell violations after Gemini classification.")
+
     classified_count = num_dets - len(uncertain_indices)
     logger.info(
         f"Gemini Vision batch classified {classified_count}/{num_dets} cells "
-        f"({len(uncertain_indices)} uncertain) in {len(batches)} API call(s)."
+        f"({len(uncertain_indices)} uncertain, {corr_count} spatial corrections) in {len(batches)} API call(s)."
     )
 
     return classified, uncertain_indices

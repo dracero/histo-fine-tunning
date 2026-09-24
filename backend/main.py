@@ -147,6 +147,8 @@ from pdf_ontology import (
     merge_ontology_structures,
     is_histology_ontology,
     validate_spatial_rules,
+    derive_spatial_map_and_rules,
+    enforce_spatial_rules_on_detections,
     PDF_IMAGES_DIR,
 )
 
@@ -306,17 +308,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Initializing SAM 3 models...")
     start_time = time.time()
 
+    # Find SAM 3 weights path
+    model_file = "sam3.pt"
+    if not os.path.exists(model_file):
+        hf_cache = os.path.expanduser("~/.cache/huggingface/hub/models--facebook--sam3/snapshots")
+        if os.path.exists(hf_cache):
+            for root, _, files in os.walk(hf_cache):
+                if "sam3.pt" in files:
+                    model_file = os.path.join(root, "sam3.pt")
+                    break
+
     # 1. Initialize Ultralytics SAM3SemanticPredictor if available
     if SAM3SemanticPredictor is not None:
         try:
-            model_file = "sam3.pt"
-            if not os.path.exists(model_file):
-                hf_cache = os.path.expanduser("~/.cache/huggingface/hub/models--facebook--sam3/snapshots")
-                if os.path.exists(hf_cache):
-                    for root, _, files in os.walk(hf_cache):
-                        if "sam3.pt" in files:
-                            model_file = os.path.join(root, "sam3.pt")
-                            break
             if os.path.exists(model_file):
                 sam3_semantic_predictor = SAM3SemanticPredictor(overrides={
                     "conf": 0.15,
@@ -1070,6 +1074,172 @@ async def segment_auto(
         raise HTTPException(status_code=500, detail=f"Inference error: {str(e)}")
 
 
+def _segment_box_internal(
+    pil_image: Image.Image,
+    px1: int,
+    py1: int,
+    px2: int,
+    py2: int,
+    prompt: Optional[str] = None,
+    umbral: float = 0.05
+) -> Dict[str, Any]:
+    """
+    Internal helper executing geometric prompt SAM 3 segmentation for a bounding box,
+    with GrabCut / Otsu morphological and bounding box polygon fallbacks.
+    """
+    orig_w, orig_h = pil_image.size
+    x_min = max(0, min(orig_w - 1, min(px1, px2)))
+    x_max = max(0, min(orig_w, max(px1, px2)))
+    y_min = max(0, min(orig_h - 1, min(py1, py2)))
+    y_max = max(0, min(orig_h, max(py1, py2)))
+    bw = max(4, x_max - x_min)
+    bh = max(4, y_max - y_min)
+
+    matched_det = None
+
+    # Priority 1: SAM 3 Processor with geometric prompt
+    if processor is not None:
+        try:
+            prepare_engine_vram("sam3")
+            with sam3_inference_context():
+                inf_image, _, _, scale_x, scale_y = _prepare_image_for_inference(pil_image)
+                state = processor.set_image(inf_image)
+                processor.reset_all_prompts(state)
+
+                # Normalized coordinates [cx, cy, w, h] in [0, 1] range
+                cx = (x_min + x_max) / (2.0 * float(orig_w))
+                cy = (y_min + y_max) / (2.0 * float(orig_h))
+                box_w = float(bw) / float(orig_w)
+                box_h = float(bh) / float(orig_h)
+
+                if prompt and prompt.strip() and prompt.strip().lower() not in ("object", "none", ""):
+                    try:
+                        processor.set_text_prompt(state=state, prompt=prompt.strip())
+                    except Exception:
+                        pass
+
+                output = processor.add_geometric_prompt(
+                    box=[cx, cy, box_w, box_h],
+                    label=True,
+                    state=state
+                )
+                dets = _extract_detections(
+                    output,
+                    umbral=max(0.01, float(umbral)),
+                    scale_x=scale_x,
+                    scale_y=scale_y,
+                    include_polygons=True,
+                    img_w=orig_w,
+                    img_h=orig_h
+                )
+
+                if dets:
+                    # Pick detection with best overlap with target box
+                    def box_overlap(d):
+                        bx, by, bw_d, bh_d = d["bbox"]
+                        inter_x1 = max(x_min, bx)
+                        inter_y1 = max(y_min, by)
+                        inter_x2 = min(x_max, bx + bw_d)
+                        inter_y2 = min(y_max, by + bh_d)
+                        inter_w = max(0.0, inter_x2 - inter_x1)
+                        inter_h = max(0.0, inter_y2 - inter_y1)
+                        return inter_w * inter_h
+
+                    dets.sort(key=lambda d: (box_overlap(d), d.get("confidence", 0)), reverse=True)
+                    matched_det = dets[0]
+        except Exception as e:
+            logger.warning(f"Error in SAM 3 geometric box prompt: {e}")
+
+    # Fallback 1: Localized GrabCut / Otsu foreground segmentation on the crop
+    if matched_det is None or not matched_det.get("segmentation"):
+        try:
+            crop_np = np.array(pil_image.crop((x_min, y_min, x_max, y_max)))
+            if crop_np.shape[0] >= 5 and crop_np.shape[1] >= 5:
+                gray = cv2.cvtColor(crop_np, cv2.COLOR_RGB2GRAY)
+                # Hematoxylin stains cells/nuclei darker than surrounding stroma/background
+                _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+                contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                best_cnt = None
+                max_area = 0
+                for cnt in contours:
+                    area = cv2.contourArea(cnt)
+                    if area > max_area and area > 10:
+                        max_area = area
+                        best_cnt = cnt
+
+                if best_cnt is not None:
+                    approx = cv2.approxPolyDP(best_cnt, 1.5, True)
+                    poly = []
+                    for pt in approx:
+                        poly.extend([float(pt[0][0] + x_min), float(pt[0][1] + y_min)])
+                    if len(poly) >= 6:
+                        matched_det = {
+                            "class_id": 1,
+                            "confidence": 0.88,
+                            "bbox": [x_min, y_min, bw, bh],
+                            "segmentation": [poly]
+                        }
+        except Exception as fallback_err:
+            logger.debug(f"GrabCut/Otsu fallback note: {fallback_err}")
+
+    # Fallback 2: Direct rectangular polygon
+    if matched_det is None or not matched_det.get("segmentation"):
+        matched_det = {
+            "class_id": 1,
+            "confidence": 0.95,
+            "bbox": [x_min, y_min, bw, bh],
+            "segmentation": [[
+                float(x_min), float(y_min),
+                float(x_max), float(y_min),
+                float(x_max), float(y_max),
+                float(x_min), float(y_max)
+            ]]
+        }
+
+    return {
+        "success": True,
+        "box": [x_min, y_min, bw, bh],
+        "detection": matched_det
+    }
+
+
+@app.post("/api/segment-box")
+async def segment_box(
+    image: UploadFile = File(...),
+    x1: float = Form(...),
+    y1: float = Form(...),
+    x2: float = Form(...),
+    y2: float = Form(...),
+    prompt: Optional[str] = Form(None),
+    umbral: float = Form(0.05)
+) -> Dict[str, Any]:
+    """
+    Interactive box-to-segment endpoint (Human-in-the-Loop).
+    Accepts bounding box corners [x1, y1, x2, y2], runs geometric SAM 3 segmentation,
+    and returns fine polygon contour for the selected structure.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        orig_w, orig_h = pil_image.size
+
+        # Support both pixel coordinates and normalized [0..1] coordinates
+        px1 = int(x1 * orig_w) if (x1 <= 1.0 and x2 <= 1.0 and x1 >= 0 and x2 >= 0) else int(x1)
+        px2 = int(x2 * orig_w) if (x1 <= 1.0 and x2 <= 1.0 and x1 >= 0 and x2 >= 0) else int(x2)
+        py1 = int(y1 * orig_h) if (y1 <= 1.0 and y2 <= 1.0 and y1 >= 0 and y2 >= 0) else int(y1)
+        py2 = int(y2 * orig_h) if (y1 <= 1.0 and y2 <= 1.0 and y1 >= 0 and y2 >= 0) else int(y2)
+
+        res = _segment_box_internal(pil_image, px1, py1, px2, py2, prompt=prompt, umbral=umbral)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return res
+    except Exception as e:
+        logger.error(f"Error in segment_box: {e}", exc_info=True)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/segment-point")
 async def segment_point(
     image: UploadFile = File(...),
@@ -1079,99 +1249,31 @@ async def segment_point(
     umbral: float = Form(0.05)
 ) -> Dict[str, Any]:
     """
-    Interactive click-to-segment endpoint.
-    Extracts the precise polygon segmentation mask around point (x, y) on the image.
+    Interactive click-to-segment endpoint (Human-in-the-Loop).
+    Extracts the precise polygon segmentation mask around point (x, y) on the image
+    using SAM 3 geometric prompt with local structure priors.
     """
-    if processor is None:
-        raise HTTPException(status_code=503, detail="SAM 3 model is not loaded.")
-
-    logger.info(f"Received segment-point request at x={x}, y={y}, prompt='{prompt}'")
-
     try:
         contents = await image.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
         orig_w, orig_h = pil_image.size
 
-        # Convert normalized coordinates if x, y are <= 1.0
-        px = int(x * orig_w) if x <= 1.0 else int(x)
-        py = int(y * orig_h) if y <= 1.0 else int(y)
+        px = int(x * orig_w) if (x <= 1.0 and x >= 0) else int(x)
+        py = int(y * orig_h) if (y <= 1.0 and y >= 0) else int(y)
 
-        with sam3_inference_context():
-            # 1. Try text prompt on full image first
-            inf_image, width, height, scale_x, scale_y = _prepare_image_for_inference(pil_image)
-            state = processor.set_image(inf_image)
-            output = processor.set_text_prompt(state=state, prompt=prompt if prompt else "object")
-            detections = _extract_detections(output, umbral, scale_x, scale_y, include_polygons=True)
+        # Create a localized cell/nucleus window around the click
+        r = max(20, int(min(orig_w, orig_h) * 0.035))
+        px1 = max(0, px - r)
+        py1 = max(0, py - r)
+        px2 = min(orig_w, px + r)
+        py2 = min(orig_h, py + r)
 
-            matched_det = None
-            min_dist = float("inf")
-
-            for det in detections:
-                bbox = det["bbox"]  # [x, y, w, h]
-                bx, by, bw, bh = bbox
-                if bx <= px <= bx + bw and by <= py <= by + bh:
-                    matched_det = det
-                    break
-                cx, cy = bx + bw / 2, by + bh / 2
-                dist = math.hypot(px - cx, py - cy)
-                if dist < min_dist:
-                    min_dist = dist
-                    matched_det = det
-
-            # 2. Localized crop fallback around (px, py) if no detection matched
-            if matched_det is None or min_dist > 150:
-                crop_size = min(max(orig_w, orig_h) // 3, 300)
-                left = max(0, px - crop_size // 2)
-                top = max(0, py - crop_size // 2)
-                right = min(orig_w, left + crop_size)
-                bottom = min(orig_h, top + crop_size)
-
-                crop_img = pil_image.crop((left, top, right, bottom))
-                crop_inf, cw, ch, c_scale_x, c_scale_y = _prepare_image_for_inference(crop_img)
-
-                c_state = processor.set_image(crop_inf)
-                c_output = processor.set_text_prompt(state=c_state, prompt=prompt if prompt else "object")
-                c_dets = _extract_detections(c_output, 0.01, c_scale_x, c_scale_y, include_polygons=True)
-
-                if c_dets:
-                    best_c = c_dets[0]
-                    bx, by, bw, bh = best_c["bbox"]
-                    best_c["bbox"] = [bx + left, by + top, bw, bh]
-                    if "segmentation" in best_c:
-                        new_seg = []
-                        for poly in best_c["segmentation"]:
-                            new_poly = []
-                            for i in range(0, len(poly), 2):
-                                new_poly.extend([poly[i] + left, poly[i+1] + top])
-                            new_seg.append(new_poly)
-                        best_c["segmentation"] = new_seg
-                    matched_det = best_c
-
-        # Fallback bounding box polygon if no detection returned
-        if matched_det is None:
-            box_r = 45
-            matched_det = {
-                "class_id": 1,
-                "confidence": 0.95,
-                "bbox": [max(0, px - box_r), max(0, py - box_r), box_r * 2, box_r * 2],
-                "segmentation": [[
-                    max(0, px - box_r), max(0, py - box_r),
-                    min(orig_w, px + box_r), max(0, py - box_r),
-                    min(orig_w, px + box_r), min(orig_h, py + box_r),
-                    max(0, px - box_r), min(orig_h, py + box_r)
-                ]]
-            }
-
+        res = _segment_box_internal(pil_image, px1, py1, px2, py2, prompt=prompt, umbral=umbral)
+        res["click_x"] = px
+        res["click_y"] = py
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-
-        return {
-            "success": True,
-            "click_x": px,
-            "click_y": py,
-            "detection": matched_det,
-        }
-
+        return res
     except Exception as e:
         logger.error(f"Error in segment_point: {e}", exc_info=True)
         if torch.cuda.is_available():
@@ -1741,10 +1843,12 @@ async def classify_gemini_endpoint(
     detections: str = Form(...),
     classes: Optional[str] = Form(None),
     ontology_name: Optional[str] = Form(None),
+    macro_annotations: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
-    Direct Gemini Vision batch classification of existing segmented cells.
-    Renders numbered cell contours on the image and uses Gemini Vision to classify all instances in 1-2 calls.
+    Direct Gemini Vision batch classification of segmented cells with strict spatial ontology enforcement.
+    Renders numbered cell contours on the image and uses Gemini Vision to classify all instances in tissue context.
+    Separates macrostructures, evaluates containment, and applies topological rules.
     """
     try:
         contents = await image.read()
@@ -1758,6 +1862,31 @@ async def classify_gemini_endpoint(
         if not isinstance(detections_list, list):
             raise HTTPException(status_code=400, detail="Formato JSON inválido para detections (se esperaba una lista).")
 
+        macro_list: List[Dict[str, Any]] = []
+        if macro_annotations and macro_annotations.strip():
+            try:
+                macro_list = json.loads(macro_annotations)
+            except Exception as m_err:
+                logger.warning(f"Error parseando macro_annotations en classify-gemini: {m_err}")
+
+        # Separate any macro structures that might have been packaged inside detections
+        cell_detections: List[Dict[str, Any]] = []
+        known_macro_keys = {
+            "tubulo_seminifero", "tubulo", "tubule", "membrana_basal",
+            "luz_tubular", "luz", "lumen", "espacio_intersticial", "intersticio"
+        }
+        for d in detections_list:
+            d_key = str(d.get("class_key") or d.get("category_id") or d.get("label") or "").strip().lower()
+            is_macro = bool(
+                d.get("is_macro")
+                or d.get("role") in ["compartment", "boundary_outer", "cavity", "stroma"]
+                or d_key in known_macro_keys
+            )
+            if is_macro:
+                macro_list.append(d)
+            else:
+                cell_detections.append(d)
+
         candidate_classes = []
         if classes and classes.strip():
             try:
@@ -1765,14 +1894,27 @@ async def classify_gemini_endpoint(
             except Exception as parse_err:
                 logger.warning(f"Failed to parse candidate classes: {parse_err}")
 
-        # If ontology is active, pull cellular structures from ontology
+        # If ontology is active, pull cellular structures and topological rules
         ont_doc = None
+        spatial_rules_lookup: Dict[str, Dict[str, Any]] = {}
+        spatial_map: Dict[str, List[str]] = {}
+        forbidden_map: Dict[str, List[str]] = {}
+
         if ontology_name and ontology_name.strip():
             ont_doc = load_ontology(ontology_name.strip())
-            if ont_doc and "structures" in ont_doc and len(ont_doc["structures"]) > 0:
-                cellular = filter_cellular_candidate_classes(ont_doc["structures"])
-                if cellular:
-                    candidate_classes = cellular
+            if ont_doc:
+                spatial_rules_lookup, spatial_map, forbidden_map = derive_spatial_map_and_rules(ont_doc)
+                if "structures" in ont_doc and len(ont_doc["structures"]) > 0:
+                    cellular = filter_cellular_candidate_classes(ont_doc["structures"])
+                    if cellular:
+                        candidate_classes = cellular
+                elif "micro_structures" in ont_doc and len(ont_doc["micro_structures"]) > 0:
+                    cellular = filter_cellular_candidate_classes(ont_doc["micro_structures"])
+                    if cellular:
+                        candidate_classes = cellular
+
+        if not spatial_rules_lookup:
+            spatial_rules_lookup, spatial_map, forbidden_map = derive_spatial_map_and_rules(None)
 
         # If candidate classes are available, filter to keep valid cellular classes
         if candidate_classes:
@@ -1783,31 +1925,33 @@ async def classify_gemini_endpoint(
         # Fallback to default histology classes if none provided
         if not candidate_classes:
             candidate_classes = [
-                {"key": "espermatogonia", "name": "Espermatogonia", "label": "Espermatogonia", "color": "#ef4444"},
-                {"key": "espermatocito", "name": "Espermatocito", "label": "Espermatocito", "color": "#10b981"},
-                {"key": "espermatide", "name": "Espermátide", "label": "Espermátide", "color": "#06b6d4"},
-                {"key": "sertoli", "name": "Célula de Sertoli", "label": "Célula de Sertoli", "color": "#3b82f6"},
-                {"key": "leydig", "name": "Célula de Leydig", "label": "Célula de Leydig", "color": "#f59e0b"},
+                {"key": "espermatogonia_a_clara", "name": "Espermatogonia A clara", "label": "Espermatogonia A clara", "color": "#10b981"},
+                {"key": "espermatocito_primario", "name": "Espermatocito primario", "label": "Espermatocito primario", "color": "#6366f1"},
+                {"key": "espermatide_temprana", "name": "Espermátide temprana", "label": "Espermátide temprana", "color": "#06b6d4"},
+                {"key": "celula_sertoli", "name": "Célula de Sertoli", "label": "Célula de Sertoli", "color": "#ef4444"},
+                {"key": "celula_leydig", "name": "Célula de Leydig", "label": "Célula de Leydig", "color": "#f59e0b"},
             ]
-
-        # Spatial map from ontology if available
-        spatial_map = None
-        if ont_doc and "spatial_map" in ont_doc:
-            spatial_map = ont_doc.get("spatial_map")
 
         classified, uncertain_idxs = classify_cells_batch_gemini(
             image=pil_image,
-            detections=detections_list,
+            detections=cell_detections,
             ontology_classes=candidate_classes,
             spatial_map=spatial_map,
+            spatial_rules_lookup=spatial_rules_lookup,
+            forbidden_map=forbidden_map,
+            macro_annotations=macro_list,
             organ_context=ontology_name or "histología",
         )
+
+        corrections_count = sum(1 for d in classified if d.get("spatial_corrected"))
 
         return {
             "success": True,
             "total_classified": len(classified),
             "detections": classified,
+            "macro_annotations": macro_list,
             "uncertain_indices": uncertain_idxs,
+            "spatial_corrections_count": corrections_count,
         }
     except HTTPException:
         raise

@@ -554,6 +554,16 @@ def _extract_detections(
     return detections
 
 
+def _flatten_and_clamp_polygon(poly_pts: Any, img_w: int, img_h: int) -> List[float]:
+    """Helper to flatten and clamp polygon coordinates within image bounds."""
+    poly_flat: List[float] = []
+    for pt in poly_pts:
+        px = max(0.0, min(float(img_w), float(pt[0])))
+        py = max(0.0, min(float(img_h), float(pt[1])))
+        poly_flat.extend([round(px, 2), round(py, 2)])
+    return poly_flat
+
+
 def _extract_detections_ultralytics(
     results,
     elements: List[str],
@@ -588,12 +598,7 @@ def _extract_detections_ultralytics(
             if len(poly_pts) < 3:
                 continue
 
-            poly_flat = []
-            for pt in poly_pts:
-                px = max(0.0, min(float(img_w), float(pt[0])))
-                py = max(0.0, min(float(img_h), float(pt[1])))
-                poly_flat.extend([round(px, 2), round(py, 2)])
-
+            poly_flat = _flatten_and_clamp_polygon(poly_pts, img_w, img_h)
             if len(poly_flat) < 6:
                 continue
 
@@ -1115,8 +1120,8 @@ def _segment_box_internal(
                 if prompt and prompt.strip() and prompt.strip().lower() not in ("object", "none", ""):
                     try:
                         processor.set_text_prompt(state=state, prompt=prompt.strip())
-                    except Exception:
-                        pass
+                    except Exception as text_prompt_err:
+                        logger.warning(f"Could not set text prompt on processor state: {text_prompt_err}")
 
                 output = processor.add_geometric_prompt(
                     box=[cx, cy, box_w, box_h],
@@ -1135,7 +1140,7 @@ def _segment_box_internal(
 
                 if dets:
                     # Pick detection with best overlap with target box
-                    def box_overlap(d):
+                    def box_overlap(d: Dict[str, Any]) -> float:
                         bx, by, bw_d, bh_d = d["bbox"]
                         inter_x1 = max(x_min, bx)
                         inter_y1 = max(y_min, by)
@@ -1143,7 +1148,7 @@ def _segment_box_internal(
                         inter_y2 = min(y_max, by + bh_d)
                         inter_w = max(0.0, inter_x2 - inter_x1)
                         inter_h = max(0.0, inter_y2 - inter_y1)
-                        return inter_w * inter_h
+                        return float(inter_w * inter_h)
 
                     dets.sort(key=lambda d: (box_overlap(d), d.get("confidence", 0)), reverse=True)
                     matched_det = dets[0]
@@ -1875,11 +1880,12 @@ async def classify_gemini_endpoint(
             "tubulo_seminifero", "tubulo", "tubule", "membrana_basal",
             "luz_tubular", "luz", "lumen", "espacio_intersticial", "intersticio"
         }
+        macro_roles_set = {"compartment", "boundary_outer", "cavity", "stroma"}
         for d in detections_list:
             d_key = str(d.get("class_key") or d.get("category_id") or d.get("label") or "").strip().lower()
             is_macro = bool(
                 d.get("is_macro")
-                or d.get("role") in ["compartment", "boundary_outer", "cavity", "stroma"]
+                or d.get("role") in macro_roles_set
                 or d_key in known_macro_keys
             )
             if is_macro:

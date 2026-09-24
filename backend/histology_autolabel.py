@@ -73,6 +73,17 @@ except ImportError:
 logger = logging.getLogger("sam3-backend.autolabel")
 
 
+def _is_point_inside_layer_segs(segs: List[Any], point: Tuple[float, float]) -> bool:
+    """Check if a 2D point lies inside any polygon segmentation contour."""
+    px, py = point
+    for poly in segs:
+        if isinstance(poly, list) and len(poly) >= 6:
+            pts = np.array(poly, dtype=np.float32).reshape(-1, 2)
+            if cv2.pointPolygonTest(pts, (float(px), float(py)), False) >= 0:
+                return True
+    return False
+
+
 class HistologyAutoLabeler:
     """
     End-to-End Automated Dual-Scale Histology Annotation Pipeline.
@@ -155,10 +166,11 @@ class HistologyAutoLabeler:
                     domain_title = ont_doc.get("domain", first_name)
 
         # Ensure macro vs micro flags are properly resolved
+        macro_roles_set = {"compartment", "layer", "cavity", "boundary_outer", "boundary_inner", "stroma"}
         for c in candidate_classes:
             if "is_macro" not in c:
                 c["is_macro"] = not is_cellular_class(c)
-            if "role" in c and c["role"] in ["compartment", "layer", "cavity", "boundary_outer", "boundary_inner", "stroma"]:
+            if "role" in c and c["role"] in macro_roles_set:
                 c["is_macro"] = True
 
         return candidate_classes, str(domain_title)
@@ -427,15 +439,8 @@ class HistologyAutoLabeler:
 
                 for layer in macro_layers:
                     segs = layer.get("segmentation", [])
-                    matched = False
-                    for poly in segs:
-                        if len(poly) >= 6:
-                            pts = np.array(poly, dtype=np.float32).reshape(-1, 2)
-                            if cv2.pointPolygonTest(pts, (float(cx), float(cy)), False) >= 0:
-                                cell_det["containing_layer"] = layer.get("key")
-                                matched = True
-                                break
-                    if matched:
+                    if segs and _is_point_inside_layer_segs(segs, (cx, cy)):
+                        cell_det["containing_layer"] = layer.get("key")
                         break
 
                     if cell_det["containing_layer"] is None:

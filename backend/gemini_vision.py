@@ -87,7 +87,7 @@ class GeminiKeyManager:
             "rotation_enabled": len(all_keys) > 1,
         }
 
-    def mark_key_cooldown(self, key: str, duration_sec: float = 60.0, reason: str = "Rate limit (429/403)"):
+    def mark_key_cooldown(self, key: str, duration_sec: float = 60.0, reason: str = "Rate limit (429/403)") -> None:
         with self._lock:
             self._cooldowns[key] = time.time() + duration_sec
             self._failure_counts[key] = self._failure_counts.get(key, 0) + 1
@@ -1448,6 +1448,21 @@ def _render_numbered_contours(
     return Image.fromarray(img_np)
 
 
+def _find_enclosing_macro_layer(
+    macro_polys: Dict[str, List[np.ndarray]],
+    point: Tuple[float, float],
+) -> Optional[str]:
+    """Identify priority macro layer containing the point."""
+    priority_keys = ("luz_tubular", "membrana_basal", "tubulo_seminifero", "espacio_intersticial")
+    for check_key in priority_keys:
+        polys = macro_polys.get(check_key)
+        if polys:
+            for poly in polys:
+                if cv2.pointPolygonTest(poly, point, False) >= 0:
+                    return check_key
+    return None
+
+
 def classify_cells_batch_gemini(
     image: Image.Image,
     detections: List[Dict[str, Any]],
@@ -1514,15 +1529,7 @@ def classify_cells_batch_gemini(
                 elif "box" in det and isinstance(det["box"], (list, tuple)) and len(det["box"]) == 4:
                     cx, cy = (det["box"][0] + det["box"][2]) / 2.0, (det["box"][1] + det["box"][3]) / 2.0
 
-                matched_layer = None
-                for check_key in ["luz_tubular", "membrana_basal", "tubulo_seminifero", "espacio_intersticial"]:
-                    if check_key in macro_polys:
-                        for poly in macro_polys[check_key]:
-                            if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
-                                matched_layer = check_key
-                                break
-                    if matched_layer:
-                        break
+                matched_layer = _find_enclosing_macro_layer(macro_polys, (cx, cy))
 
                 if matched_layer:
                     det["containing_layer"] = matched_layer

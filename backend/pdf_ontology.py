@@ -1277,6 +1277,15 @@ def delete_pdf_image(pdf_id: str, filename: str) -> bool:
     return False
 
 
+def _point_in_any_poly(polys: List[Any], pt: Tuple[float, float]) -> bool:
+    """Check if 2D point lies inside any polygon contour."""
+    import cv2
+    for poly_pts in polys:
+        if cv2.pointPolygonTest(poly_pts, pt, False) >= 0:
+            return True
+    return False
+
+
 def validate_spatial_rules(
     detections: List[Dict[str, Any]],
     macro_annotations: List[Dict[str, Any]],
@@ -1342,21 +1351,17 @@ def validate_spatial_rules(
 
         # Check forbidden regions: cell centroid inside forbidden macro polygon
         for forb_key in forbidden:
-            if forb_key in macro_polys_by_key:
-                for poly_pts in macro_polys_by_key[forb_key]:
-                    dist = cv2.pointPolygonTest(poly_pts, (cx, cy), False)
-                    if dist >= 0:
-                        det_violation = {
-                            "detection_index": idx,
-                            "class_key": d_key,
-                            "label": det.get("label", d_key),
-                            "centroid": [round(cx, 1), round(cy, 1)],
-                            "violation_type": "forbidden_compartment",
-                            "forbidden_macro": forb_key,
-                            "reason": f"Célula '{det.get('label', d_key)}' detectada dentro de la macroestructura prohibida '{forb_key}' ({rule.get('rule_description', 'violación anatómica')})"
-                        }
-                        break
-            if det_violation:
+            polys = macro_polys_by_key.get(forb_key)
+            if polys and _point_in_any_poly(polys, (cx, cy)):
+                det_violation = {
+                    "detection_index": idx,
+                    "class_key": d_key,
+                    "label": det.get("label", d_key),
+                    "centroid": [round(cx, 1), round(cy, 1)],
+                    "violation_type": "forbidden_compartment",
+                    "forbidden_macro": forb_key,
+                    "reason": f"Célula '{det.get('label', d_key)}' detectada dentro de la macroestructura prohibida '{forb_key}' ({rule.get('rule_description', 'violación anatómica')})"
+                }
                 break
 
         if det_violation:

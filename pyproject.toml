@@ -37,11 +37,8 @@ dependencies = [
     "psutil>=5.9.0",
     # PDF Extraction
     "pymupdf>=1.24.0",
-    # FAISS Similarity Search (CPU — sufficient for <10k vectors per image)
-    "faiss-cpu>=1.7.4",
-    # Roboflow & Utilities
+    # Utilities
     "python-dotenv>=1.0.0",
-    "roboflow>=1.1.0",
     "setuptools<70",
     "cellpose>=4.2.1.1",
     "scikit-learn>=1.3.0",

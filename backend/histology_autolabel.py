@@ -40,7 +40,7 @@ try:
         extract_crops_from_detections,
     )
     from backend.pdf_ontology import list_ontologies, load_ontology
-    from backend.roboflow_integration import build_coco_json, build_multi_image_coco, upload_dataset_to_roboflow
+    from backend.coco_utils import build_coco_json, build_multi_image_coco
     from backend.gemini_vision import (
         detect_histological_macro_layers_gemini,
         validate_uncertain_detections_with_gemini,
@@ -61,7 +61,7 @@ except ImportError:
         extract_crops_from_detections,
     )
     from pdf_ontology import list_ontologies, load_ontology
-    from roboflow_integration import build_coco_json, build_multi_image_coco, upload_dataset_to_roboflow
+    from coco_utils import build_coco_json, build_multi_image_coco
     from gemini_vision import (
         detect_histological_macro_layers_gemini,
         validate_uncertain_detections_with_gemini,
@@ -236,6 +236,8 @@ class HistologyAutoLabeler:
                     "color": m_color,
                     "structure_type": "boundary",
                     "is_macro_layer": True,
+                    "is_macro": True,
+                    "scale": "macro",
                     "parent_structure": tubule.get("key"),
                     "score": 0.95,
                     "box": [float(bx), float(by), float(bx + bw), float(by + bh)],
@@ -260,6 +262,7 @@ class HistologyAutoLabeler:
         uncertainty_threshold: float = 0.30,
         use_gemini_validation: bool = True,
         include_macro_layers: bool = True,
+        include_cells: bool = True,
         min_area: int = 15,
     ) -> Dict[str, Any]:
         """
@@ -326,7 +329,7 @@ class HistologyAutoLabeler:
             except Exception as gemini_err:
                 logger.warning(f"Gemini dual-scale analysis note: {gemini_err}")
 
-        # Fallback to standard macro layer grounding if dual-scale returned empty
+        # Fallback 1 to standard macro layer grounding if dual-scale returned empty
         if not grounded and include_macro_layers and macro_classes:
             try:
                 grounded = detect_histological_macro_layers_gemini(
@@ -337,13 +340,117 @@ class HistologyAutoLabeler:
             except Exception as e:
                 logger.warning(f"Macro grounding fallback note: {e}")
 
+        # Fallback 2: Direct SAM 3 zero-shot text inference for macro-classes
+        if not grounded and include_macro_layers and macro_classes:
+            logger.info("Executing SAM 3 zero-shot text inference fallback for macro-classes...")
+            try:
+                for mc in macro_classes:
+                    m_key = mc.get("key", "macro")
+                    m_prompt = mc.get("prompt") or mc.get("name") or m_key
+                    m_label = mc.get("label", mc.get("name", m_key))
+                    m_color = mc.get("color", "#3b82f6")
+
+                    if self.sam3_predictor is not None:
+                        try:
+                            self.sam3_predictor.set_image(img_rgb)
+                            res = self.sam3_predictor(text=[m_prompt])
+                            if res and hasattr(res[0], "masks") and res[0].masks is not None:
+                                xy_masks = res[0].masks.xy
+                                boxes = res[0].boxes.xyxy.cpu().numpy() if (hasattr(res[0], "boxes") and res[0].boxes is not None) else []
+                                for m_i, poly in enumerate(xy_masks):
+                                    if len(poly) >= 3:
+                                        pts = poly.astype(float).flatten().tolist()
+                                        bx = boxes[m_i].tolist() if m_i < len(boxes) else [min(pts[0::2]), min(pts[1::2]), max(pts[0::2]), max(pts[1::2])]
+                                        grounded.append({
+                                            "id": f"macro_{m_key}_{m_i + 1}",
+                                            "key": m_key,
+                                            "class_key": m_key,
+                                            "class_label": m_label,
+                                            "category_id": m_key,
+                                            "label": m_label,
+                                            "color": m_color,
+                                            "structure_type": "macro_compartment",
+                                            "is_macro_layer": True,
+                                            "is_macro": True,
+                                            "scale": "macro",
+                                            "score": 0.90,
+                                            "box": [round(float(bx[0]), 1), round(float(bx[1]), 1), round(float(bx[2]), 1), round(float(bx[3]), 1)],
+                                            "bbox": [round(float(bx[0]), 1), round(float(bx[1]), 1), round(float(bx[2] - bx[0]), 1), round(float(bx[3] - bx[1]), 1)],
+                                            "segmentation": [pts],
+                                            "decision_source": "sam3_text_prompt",
+                                        })
+                        except Exception as sam_text_err:
+                            logger.debug(f"SAM 3 text prompt note for '{m_prompt}': {sam_text_err}")
+            except Exception as sam_err:
+                logger.warning(f"SAM 3 macro segmentation fallback error: {sam_err}")
+
+        # Fallback 3: Morphological tissue & lumen macro compartments if still empty
+        if not grounded and include_macro_layers and macro_classes:
+            try:
+                img_np_morph = np.array(img_rgb)
+                gray_morph = cv2.cvtColor(img_np_morph, cv2.COLOR_RGB2GRAY)
+                blur_morph = cv2.GaussianBlur(gray_morph, (25, 25), 0)
+                _, thresh_morph = cv2.threshold(blur_morph, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+                kernel_morph = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (31, 31))
+                closed_morph = cv2.morphologyEx(thresh_morph, cv2.MORPH_CLOSE, kernel_morph)
+                contours_morph, _ = cv2.findContours(closed_morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                target_mac = macro_classes[0]
+                m_key = target_mac.get("key", "tubulo_seminifero")
+                m_label = target_mac.get("label", target_mac.get("name", "Túbulo seminífero"))
+                m_color = target_mac.get("color", "#3b82f6")
+
+                for c_i, cnt in enumerate(contours_morph):
+                    if cv2.contourArea(cnt) >= (w * h * 0.05):
+                        epsilon = 0.005 * cv2.arcLength(cnt, True)
+                        approx = cv2.approxPolyDP(cnt, epsilon, True)
+                        if len(approx) >= 3:
+                            pts = approx.reshape(-1, 2).flatten().astype(float).tolist()
+                            bx, by, bw_c, bh_c = cv2.boundingRect(cnt)
+                            grounded.append({
+                                "id": f"macro_{m_key}_{c_i + 1}",
+                                "key": m_key,
+                                "class_key": m_key,
+                                "class_label": m_label,
+                                "category_id": m_key,
+                                "label": m_label,
+                                "color": m_color,
+                                "structure_type": "macro_compartment",
+                                "is_macro_layer": True,
+                                "is_macro": True,
+                                "scale": "macro",
+                                "score": 0.88,
+                                "box": [float(bx), float(by), float(bx + bw_c), float(by + bh_c)],
+                                "bbox": [float(bx), float(by), float(bw_c), float(bh_c)],
+                                "segmentation": [pts],
+                                "decision_source": "morphological_macro_compartment",
+                            })
+            except Exception as morph_err:
+                logger.debug(f"Morphological macro compartment extraction note: {morph_err}")
+
         if grounded:
             # Refine macro-layer polygon boundaries using SAM 3.1 or adaptive gradient contours
             img_np = np.array(img_rgb)
             gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
             tubule_detections: List[Dict[str, Any]] = []
 
+            # Prepare SAM 3 predictor once on the image under torch.inference_mode()
+            sam_ready = False
+            if self.sam3_predictor is not None:
+                try:
+                    with torch.inference_mode():
+                        self.sam3_predictor.set_image(img_rgb)
+                        sam_ready = True
+                except Exception as set_err:
+                    logger.debug(f"Could not initialize SAM 3 predictor image for refinement: {set_err}")
+
             for layer in grounded:
+                # Ensure all macro tags are present
+                layer["scale"] = "macro"
+                layer["is_macro"] = True
+                layer["is_macro_layer"] = True
+                layer["structure_type"] = layer.get("structure_type") or "macro_compartment"
+
                 lx1, ly1, lx2, ly2 = [int(v) for v in layer["box"]]
                 lx1, ly1 = max(0, lx1), max(0, ly1)
                 lx2, ly2 = min(w, lx2), min(h, ly2)
@@ -351,21 +458,21 @@ class HistologyAutoLabeler:
 
                 refined_poly: Optional[List[float]] = None
 
-                # Refinement Priority 1: SAM 3.1 box prompt if predictor available
-                if self.sam3_predictor is not None:
+                # Refinement Priority 1: SAM 3.1 box prompt if predictor available and no fine polygon yet
+                if sam_ready and (not layer.get("segmentation") or len(layer.get("segmentation", [[]])[0]) <= 8):
                     try:
-                        self.sam3_predictor.set_image(img_rgb)
-                        sam_res = self.sam3_predictor(bboxes=[[lx1, ly1, lx2, ly2]])
-                        if sam_res and hasattr(sam_res[0], "masks") and sam_res[0].masks is not None:
-                            polys = sam_res[0].masks.xy
-                            if len(polys) > 0 and len(polys[0]) >= 3:
-                                pts = polys[0].astype(float)
-                                refined_poly = pts.flatten().tolist()
+                        with torch.inference_mode():
+                            sam_res = self.sam3_predictor(bboxes=[[lx1, ly1, lx2, ly2]])
+                            if sam_res and hasattr(sam_res[0], "masks") and sam_res[0].masks is not None:
+                                polys = sam_res[0].masks.xy
+                                if len(polys) > 0 and len(polys[0]) >= 3:
+                                    pts = polys[0].astype(float)
+                                    refined_poly = pts.flatten().tolist()
                     except Exception as sam_err:
                         logger.debug(f"SAM 3 predictor box refinement note: {sam_err}")
 
                 # Refinement Priority 2: Adaptive morphological contour extraction on crop
-                if refined_poly is None:
+                if refined_poly is None and (not layer.get("segmentation") or len(layer.get("segmentation", [[]])[0]) <= 8):
                     try:
                         crop_gray = gray[ly1:ly2, lx1:lx2]
                         if crop_gray.size > 100:
@@ -418,94 +525,101 @@ class HistologyAutoLabeler:
         # =========================================================================
         # LEVEL 2: Cellular & Nuclear Instance Segmentation (Cellpose)
         # =========================================================================
-        cp_model = cellpose_model or self.default_cellpose_model
-        seg_res = run_cellpose_segmentation(
-            image_input=img_rgb,
-            model_type=cp_model,
-            diameter=cell_diameter,
-            min_area=min_area,
-        )
-        raw_cell_detections = seg_res.get("detections", [])
-        total_cells_segmented = len(raw_cell_detections)
-        logger.info(f"Segmented {total_cells_segmented} cell/nucleus instances with Cellpose ({cp_model}).")
-
         classified_cell_detections: List[Dict[str, Any]] = []
-        if raw_cell_detections:
-            # Spatial Layer Attribution: Map each cell to its containing macro-compartment
-            for cell_det in raw_cell_detections:
-                cbx, cby, cbw, cbh = cell_det.get("bbox", [0, 0, 1, 1])
-                cx, cy = cbx + cbw / 2.0, cby + cbh / 2.0
-                cell_det["containing_layer"] = None
+        if include_cells:
+            # Clear CUDA cache before Level 2 to avoid memory fragmentation
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-                for layer in macro_layers:
-                    segs = layer.get("segmentation", [])
-                    if segs and _is_point_inside_layer_segs(segs, (cx, cy)):
-                        cell_det["containing_layer"] = layer.get("key")
-                        break
+            cp_model = cellpose_model or self.default_cellpose_model
+            seg_res = run_cellpose_segmentation(
+                image_input=img_rgb,
+                model_type=cp_model,
+                diameter=cell_diameter,
+                min_area=min_area,
+            )
+            raw_cell_detections = seg_res.get("detections", [])
+            total_cells_segmented = len(raw_cell_detections)
+            logger.info(f"Segmented {total_cells_segmented} cell/nucleus instances with Cellpose ({cp_model}).")
+            if raw_cell_detections:
+                # Spatial Layer Attribution: Map each cell to its containing macro-compartment
+                for cell_det in raw_cell_detections:
+                    cbx, cby, cbw, cbh = cell_det.get("bbox", [0, 0, 1, 1])
+                    cx, cy = cbx + cbw / 2.0, cby + cbh / 2.0
+                    cell_det["containing_layer"] = None
 
-                    if cell_det["containing_layer"] is None:
-                        lx1, ly1, lx2, ly2 = layer.get("box", [0, 0, 0, 0])
-                        if lx1 <= cx <= lx2 and ly1 <= cy <= ly2:
+                    for layer in macro_layers:
+                        segs = layer.get("segmentation", [])
+                        if segs and _is_point_inside_layer_segs(segs, (cx, cy)):
                             cell_det["containing_layer"] = layer.get("key")
+                            break
 
-            # =================================================================
-            # PRIMARY: Gemini Vision Batch Classification (0 GPU VRAM)
-            # Sends annotated image with numbered contours to Gemini for
-            # contextual classification of all cells in 1-2 API calls.
-            # =================================================================
-            gemini_success = False
-            if use_gemini_validation:
-                try:
-                    classified_cell_detections, uncertain_indices = classify_cells_batch_gemini(
+                        if cell_det["containing_layer"] is None:
+                            lx1, ly1, lx2, ly2 = layer.get("box", [0, 0, 0, 0])
+                            if lx1 <= cx <= lx2 and ly1 <= cy <= ly2:
+                                cell_det["containing_layer"] = layer.get("key")
+
+                # =================================================================
+                # PRIMARY: Gemini Vision Batch Classification (0 GPU VRAM)
+                # Sends annotated image with numbered contours to Gemini for
+                # contextual classification of all cells in 1-2 API calls.
+                # =================================================================
+                gemini_success = False
+                if use_gemini_validation:
+                    try:
+                        classified_cell_detections, uncertain_indices = classify_cells_batch_gemini(
+                            image=img_rgb,
+                            detections=raw_cell_detections,
+                            ontology_classes=cellular_classes,
+                            spatial_map=spatial_map,
+                            organ_context=domain_title,
+                        )
+                        # Consider success if Gemini classified at least 50% of cells
+                        classified_count = len(raw_cell_detections) - len(uncertain_indices)
+                        if classified_count >= len(raw_cell_detections) * 0.5:
+                            gemini_success = True
+                            logger.info(
+                                f"Gemini Vision batch classified {classified_count}/{len(raw_cell_detections)} cells "
+                                f"({len(uncertain_indices)} uncertain)."
+                            )
+                    except Exception as gemini_err:
+                        logger.warning(f"Gemini Vision batch classification failed, falling back to ensemble: {gemini_err}")
+
+                # =================================================================
+                # FALLBACK: Quad-Foundation Ensemble (if Gemini unavailable/failed)
+                # Uses CONCH 512d + Virchow2 1280d + UNI 1024d + Lunit DINO 384d
+                # =================================================================
+                if not gemini_success:
+                    logger.info("Using Quad-Foundation Ensemble classification (fallback).")
+                    classified_cell_detections, uncertain_indices = classify_with_ontology_ensemble(
                         image=img_rgb,
                         detections=raw_cell_detections,
                         ontology_classes=cellular_classes,
-                        spatial_map=spatial_map,
-                        organ_context=domain_title,
+                        confidence_threshold=confidence_threshold,
+                        uncertainty_threshold=uncertainty_threshold,
+                        is_histology=True,
                     )
-                    # Consider success if Gemini classified at least 50% of cells
-                    classified_count = len(raw_cell_detections) - len(uncertain_indices)
-                    if classified_count >= len(raw_cell_detections) * 0.5:
-                        gemini_success = True
-                        logger.info(
-                            f"Gemini Vision batch classified {classified_count}/{len(raw_cell_detections)} cells "
-                            f"({len(uncertain_indices)} uncertain)."
-                        )
-                except Exception as gemini_err:
-                    logger.warning(f"Gemini Vision batch classification failed, falling back to ensemble: {gemini_err}")
 
-            # =================================================================
-            # FALLBACK: Quad-Foundation Ensemble (if Gemini unavailable/failed)
-            # Uses CONCH 512d + Virchow2 1280d + UNI 1024d + Lunit DINO 384d
-            # =================================================================
-            if not gemini_success:
-                logger.info("Using Quad-Foundation Ensemble classification (fallback).")
-                classified_cell_detections, uncertain_indices = classify_with_ontology_ensemble(
-                    image=img_rgb,
-                    detections=raw_cell_detections,
-                    ontology_classes=cellular_classes,
-                    confidence_threshold=confidence_threshold,
-                    uncertainty_threshold=uncertainty_threshold,
-                    is_histology=True,
-                )
+                # Spatial Constraint Enforcement via Spatial Map / Ontology Parent Graph
+                for det in classified_cell_detections:
+                    layer_k = det.get("containing_layer")
+                    if layer_k and layer_k in spatial_map:
+                        allowed_keys = set(spatial_map[layer_k])
+                        cur_key = det.get("class_key")
+                        if cur_key not in allowed_keys:
+                            matched_c = next((c for c in cellular_classes if c.get("key") in allowed_keys), None)
+                            if matched_c:
+                                det["category_id"] = matched_c.get("key")
+                                det["class_key"] = matched_c.get("key")
+                                det["class_label"] = matched_c.get("name", matched_c.get("label", matched_c.get("key")))
+                                det["color"] = matched_c.get("color", "#8b5cf6")
+                                det["spatial_parent_aligned"] = layer_k
+                                det["classification_uncertain"] = True
 
-            # Spatial Constraint Enforcement via Spatial Map / Ontology Parent Graph
-            for det in classified_cell_detections:
-                layer_k = det.get("containing_layer")
-                if layer_k and layer_k in spatial_map:
-                    allowed_keys = set(spatial_map[layer_k])
-                    cur_key = det.get("class_key")
-                    if cur_key not in allowed_keys:
-                        matched_c = next((c for c in cellular_classes if c.get("key") in allowed_keys), None)
-                        if matched_c:
-                            det["category_id"] = matched_c.get("key")
-                            det["class_key"] = matched_c.get("key")
-                            det["class_label"] = matched_c.get("name", matched_c.get("label", matched_c.get("key")))
-                            det["color"] = matched_c.get("color", "#8b5cf6")
-                            det["spatial_parent_aligned"] = layer_k
-                            det["classification_uncertain"] = True
+                all_combined_detections.extend(classified_cell_detections)
 
-            all_combined_detections.extend(classified_cell_detections)
+        else:
+            logger.info("Level 2 (cellular segmentation) skipped as requested (macro-only mode).")
 
         # =========================================================================
         # COMBINED RESULTS & COCO EXPORT GENERATION
@@ -514,6 +628,11 @@ class HistologyAutoLabeler:
             classified_detections=all_combined_detections,
             candidate_classes=classes,
         )
+        for g in groups:
+            has_macro = any(d.get("is_macro") or d.get("scale") == "macro" for d in g.get("detections", []))
+            if has_macro or g.get("role") in ("compartment", "layer", "cavity", "boundary_outer", "boundary_inner", "stroma"):
+                g["is_macro"] = True
+                g["scale"] = "macro"
 
         scores = [float(d.get("score", 0.0)) for d in all_combined_detections]
         conf_stats = {
@@ -638,27 +757,3 @@ class HistologyAutoLabeler:
             "combined_coco": combined_coco,
             "execution_time_seconds": round(time.time() - start_time, 2),
         }
-
-    def export_to_roboflow(
-        self,
-        labeled_results: Union[Dict[str, Any], List[Dict[str, Any]]],
-        image_files: Dict[str, bytes],
-    ) -> Dict[str, Any]:
-        """
-        Upload the autolabeled images & COCO annotations directly to Roboflow.
-        """
-        if isinstance(labeled_results, dict):
-            if "per_image_results" in labeled_results:
-                images_list = [
-                    r["coco_payload"] for r in labeled_results["per_image_results"] if "coco_payload" in r
-                ]
-            elif "coco_payload" in labeled_results:
-                images_list = [labeled_results["coco_payload"]]
-            elif "images" in labeled_results:
-                images_list = labeled_results["images"]
-            else:
-                images_list = [labeled_results]
-        else:
-            images_list = labeled_results
-
-        return upload_dataset_to_roboflow(images_data=images_list, image_files=image_files)

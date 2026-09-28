@@ -117,15 +117,10 @@ except ImportError:
     SAM3SemanticPredictor = None
     logger.debug("Ultralytics SAM3SemanticPredictor not installed; using native Meta SAM 3 & Cellpose.")
 
-# Import Roboflow integration
-from roboflow_integration import (
-    check_connection as rf_check_connection,
-    get_roboflow_models_and_versions,
+# Import COCO generation utilities
+from coco_utils import (
     build_coco_json,
     build_multi_image_coco,
-    upload_dataset_to_roboflow,
-    trigger_training,
-    export_dataset_version,
 )
 
 # Import PDF ontology pipeline
@@ -184,6 +179,7 @@ try:
         GEMINI_MODEL,
         suggest_cell_prototype_gemini,
         classify_cells_batch_gemini,
+        validate_student_structure_identification,
     )
 except ImportError:
     from gemini_vision import (
@@ -191,14 +187,8 @@ except ImportError:
         GEMINI_MODEL,
         suggest_cell_prototype_gemini,
         classify_cells_batch_gemini,
+        validate_student_structure_identification,
     )
-
-# Import FAISS Semantic Similarity Labeler for Histology
-from faiss_similarity_labeler import FAISSSimilarityLabeler
-try:
-    import faiss
-except ImportError:
-    faiss = None
 
 # Import Automated Histology Labeling Pipeline
 from histology_autolabel import HistologyAutoLabeler
@@ -361,7 +351,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="SAM 3 Histological & Universal Segmenter API",
-    description="Backend for Segment Anything Model v3 automated cell & structure segmentation with Roboflow integration",
+    description="Backend for Histological Segmentation (Micro & Macro) and Student Learning Validation with Gemini 3.5",
     lifespan=lifespan,
 )
 
@@ -719,12 +709,25 @@ async def segment_image(
     model_engine: str = Form("sam3"),
     cellpose_model: str = Form("cpsam"),
     cell_diameter: Optional[float] = Form(None),
+    structure_scale: str = Form("micro"),
 ) -> Dict[str, Any]:
     """
-    Segmentation endpoint supporting both Meta SAM 3.1 and Cellpose / Cellpose-SAM.
+    Segmentation endpoint supporting both Meta SAM 3.1 and Cellpose / Cellpose-SAM,
+    with distinct handling for Microstructure (cells, nuclei) and Macrostructure (layers, glands, lumens).
     """
-    query_text = (elements if elements and elements.strip() else (prompt if prompt and prompt.strip() else "cell nucleus")).strip()
-    logger.info(f"Received segment request: engine='{model_engine}', query='{query_text}', umbral={umbral}")
+    norm_scale = structure_scale.lower() if structure_scale else "micro"
+    if norm_scale not in ("micro", "macro"):
+        norm_scale = "micro"
+
+    if not elements and not prompt:
+        if norm_scale == "macro":
+            query_text = "gland, tissue layer, epithelium, mucosa, submucosa, muscular layer, lumen cavity, follicle, blood vessel, connective stroma"
+        else:
+            query_text = "cell nucleus, cell, leukocyte, lymphocyte, plasma cell"
+    else:
+        query_text = (elements if elements and elements.strip() else (prompt if prompt and prompt.strip() else "cell nucleus")).strip()
+
+    logger.info(f"Received segment request: engine='{model_engine}', scale='{norm_scale}', query='{query_text}', umbral={umbral}")
     start_time = time.time()
 
     # Dynamically allocate GPU VRAM for the requested model engine
@@ -738,14 +741,23 @@ async def segment_image(
             if not is_cellpose_available():
                 raise HTTPException(status_code=503, detail="Cellpose no está instalado en el servidor.")
 
-            query_label = query_text if query_text else "cell"
+            query_label = query_text if query_text else ("tissue_unit" if norm_scale == "macro" else "cell")
+            actual_cellpose_model = cellpose_model
+            if norm_scale == "macro" and cellpose_model in ("cpsam", "nuclei"):
+                # Suggest/use tissuenet for macroscopic structures
+                actual_cellpose_model = "tissuenet"
+
             cellpose_res = run_cellpose_segmentation(
                 image_input=contents,
-                model_type=cellpose_model or "cpsam",
+                model_type=actual_cellpose_model or "cpsam",
                 diameter=cell_diameter if (cell_diameter and cell_diameter > 0) else None,
                 prompt_label=query_label,
                 cellprob_threshold=(float(umbral) - 0.5) * 4.0 if umbral is not None else 0.0,
             )
+            # Add scale tag to all detections
+            for d in cellpose_res.get("detections", []):
+                d["scale"] = norm_scale
+            cellpose_res["structure_scale"] = norm_scale
             return cellpose_res
 
         # Engine Branch 2: Meta SAM 3.1 Zero-Shot Segmentation
@@ -758,7 +770,7 @@ async def segment_image(
         # Parse elements list (split by comma)
         concept_list = [c.strip() for c in query_text.split(",") if c.strip()]
         if not concept_list:
-            concept_list = ["cell nucleus"]
+            concept_list = ["gland, tissue layer" if norm_scale == "macro" else "cell nucleus"]
 
         detections = []
         with sam3_inference_context():
@@ -793,11 +805,15 @@ async def segment_image(
                         d["category_name"] = c_text
                     detections.extend(c_dets)
 
+        # Annotate scale on each detection
+        for d in detections:
+            d["scale"] = norm_scale
+
         # Group detections by category_name for frontend compatibility
         palette = ["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#84cc16"]
         groups_map = {}
         for d in detections:
-            cat = d.get("category_name", "Objeto")
+            cat = d.get("category_name", "Estructura" if norm_scale == "macro" else "Célula")
             if cat not in groups_map:
                 idx = len(groups_map)
                 color = palette[idx % len(palette)]
@@ -813,7 +829,7 @@ async def segment_image(
         groups = list(groups_map.values())
 
         inference_time = time.time() - start_time
-        logger.info(f"Found {len(detections)} detections for concepts {concept_list} in {inference_time:.2f}s")
+        logger.info(f"Found {len(detections)} {norm_scale} detections for concepts {concept_list} in {inference_time:.2f}s")
 
         return {
             "width": width,
@@ -825,6 +841,7 @@ async def segment_image(
             "prompt": query_text,
             "elements": concept_list,
             "umbral": umbral,
+            "structure_scale": norm_scale,
             "engine": "sam3",
         }
 
@@ -846,23 +863,30 @@ async def segment_auto(
     model_engine: str = Form("sam3"),
     cellpose_model: str = Form("cpsam"),
     cell_diameter: Optional[float] = Form(None),
+    structure_scale: str = Form("all"),
+    include_macro_layers: bool = Form(True),
 ) -> Dict[str, Any]:
     """
     Exhaustive automatic multi-prompt segmentation and semantic discrimination.
-    Supports both Meta SAM 3.1 and Cellpose/Cellpose-SAM engines.
+    Supports both Meta SAM 3.1 and Cellpose/Cellpose-SAM engines, with dual-scale micro/macro support.
     """
-    logger.info(f"Received segment-auto request: engine={model_engine}, umbral={umbral}, custom_prompt='{custom_prompt}', ontology_name='{ontology_name}'")
+    logger.info(f"Received segment-auto request: engine={model_engine}, scale={structure_scale}, umbral={umbral}, custom_prompt='{custom_prompt}', ontology_name='{ontology_name}'")
     start_time = time.time()
 
     # Dynamically allocate GPU VRAM for the requested model engine
     prepare_engine_vram(model_engine)
 
+    norm_scale = structure_scale.lower() if structure_scale in ("micro", "macro", "all") else "all"
+    inc_macro = include_macro_layers if norm_scale != "micro" else False
+
     try:
         contents = await image.read()
 
         # Dual-Scale Automated Histology Pipeline (Macro SAM 3.1 + Micro Cellpose + Gemini)
-        if (ontology_name and ontology_name.strip()) or model_engine == "dual":
-            logger.info(f"Executing Dual-Scale Pipeline (Macro SAM 3.1 + Micro Cellpose + Gemini) for ontology '{ontology_name}'...")
+        if (ontology_name and ontology_name.strip()) or model_engine == "dual" or norm_scale == "macro":
+            inc_cells = False if norm_scale == "macro" else True
+            inc_macro = True if norm_scale == "macro" else (include_macro_layers if norm_scale != "micro" else False)
+            logger.info(f"Executing Dual-Scale Pipeline (scale={norm_scale}, include_macro={inc_macro}, include_cells={inc_cells}) for ontology '{ontology_name}'...")
             pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
             labeler = HistologyAutoLabeler(
                 default_cellpose_model=cellpose_model,
@@ -877,17 +901,36 @@ async def segment_auto(
                 cell_diameter=cell_diameter,
                 confidence_threshold=float(umbral),
                 use_gemini_validation=True,
-                include_macro_layers=True,
+                include_macro_layers=inc_macro,
+                include_cells=inc_cells,
             )
+            raw_groups = autolabel_res.get("groups", [])
+            if norm_scale == "macro":
+                filtered_groups = [g for g in raw_groups if g.get("is_macro")]
+                if not filtered_groups and raw_groups:
+                    filtered_groups = raw_groups
+                for g in filtered_groups:
+                    g["is_macro"] = True
+                    g["scale"] = "macro"
+                    for d in g.get("detections", []):
+                        d["is_macro"] = True
+                        d["scale"] = "macro"
+                        d["structure_type"] = "macro_compartment"
+            elif norm_scale == "micro":
+                filtered_groups = [g for g in raw_groups if not g.get("is_macro")]
+            else:
+                filtered_groups = raw_groups
+
             return {
                 "width": autolabel_res.get("width", pil_image.width),
                 "height": autolabel_res.get("height", pil_image.height),
-                "groups": autolabel_res.get("groups", []),
-                "total_detections": autolabel_res.get("total_detections", 0),
+                "groups": filtered_groups,
+                "total_detections": sum(len(g.get("detections", [])) for g in filtered_groups),
                 "macro_layers_count": autolabel_res.get("macro_layers_count", 0),
                 "cells_count": autolabel_res.get("cells_count", 0),
                 "inference_time_seconds": autolabel_res.get("execution_time_seconds", 0.0),
                 "umbral": umbral,
+                "structure_scale": norm_scale,
                 "is_histology": True,
             }
 
@@ -1032,9 +1075,15 @@ async def segment_auto(
 
         logger.info(f"Ontology domain histology status: is_histology={is_histo}")
 
-        # Filter candidate classes to retain only cellular entities (remove lumen, tubule wall, tissue, organs)
-        cellular_prompts = filter_cellular_candidate_classes(prompts_to_run)
-        effective_classes = cellular_prompts if cellular_prompts else prompts_to_run
+        # Filter candidate classes: if macro scale, retain macro classes; if micro, retain cellular
+        if norm_scale == "macro":
+            effective_classes = [p for p in prompts_to_run if not is_cellular_class(p)] or prompts_to_run
+            for c in effective_classes:
+                c["is_macro"] = True
+                c["scale"] = "macro"
+        else:
+            cellular_prompts = filter_cellular_candidate_classes(prompts_to_run)
+            effective_classes = cellular_prompts if cellular_prompts else prompts_to_run
 
         classified_detections = []
         if filtered_candidates:
@@ -1139,8 +1188,8 @@ def _segment_box_internal(
                 )
 
                 if dets:
-                    # Pick detection with best overlap with target box
-                    def box_overlap(d: Dict[str, Any]) -> float:
+                    # Pick detection with best IoU and proximity to target box, penalizing oversized background masks
+                    def box_score(d: Dict[str, Any]) -> float:
                         bx, by, bw_d, bh_d = d["bbox"]
                         inter_x1 = max(x_min, bx)
                         inter_y1 = max(y_min, by)
@@ -1148,10 +1197,18 @@ def _segment_box_internal(
                         inter_y2 = min(y_max, by + bh_d)
                         inter_w = max(0.0, inter_x2 - inter_x1)
                         inter_h = max(0.0, inter_y2 - inter_y1)
-                        return float(inter_w * inter_h)
+                        inter_area = float(inter_w * inter_h)
+                        if inter_area <= 0:
+                            return 0.0
+                        union_area = float(bw * bh) + float(bw_d * bh_d) - inter_area
+                        iou = inter_area / max(1.0, union_area)
+                        size_ratio = float(bw_d * bh_d) / max(1.0, float(bw * bh))
+                        penalty = 0.01 if size_ratio > 10.0 else (0.4 if size_ratio > 3.0 else 1.0)
+                        return (iou * 2.0) * penalty + float(d.get("confidence", 0)) * 0.1
 
-                    dets.sort(key=lambda d: (box_overlap(d), d.get("confidence", 0)), reverse=True)
-                    matched_det = dets[0]
+                    dets.sort(key=box_score, reverse=True)
+                    if box_score(dets[0]) > 0.01:
+                        matched_det = dets[0]
         except Exception as e:
             logger.warning(f"Error in SAM 3 geometric box prompt: {e}")
 
@@ -1216,7 +1273,8 @@ async def segment_box(
     x2: float = Form(...),
     y2: float = Form(...),
     prompt: Optional[str] = Form(None),
-    umbral: float = Form(0.05)
+    umbral: float = Form(0.05),
+    structure_scale: str = Form("micro"),
 ) -> Dict[str, Any]:
     """
     Interactive box-to-segment endpoint (Human-in-the-Loop).
@@ -1235,6 +1293,12 @@ async def segment_box(
         py2 = int(y2 * orig_h) if (y1 <= 1.0 and y2 <= 1.0 and y1 >= 0 and y2 >= 0) else int(y2)
 
         res = _segment_box_internal(pil_image, px1, py1, px2, py2, prompt=prompt, umbral=umbral)
+        norm_scale = structure_scale.lower() if structure_scale in ("micro", "macro") else "micro"
+        if res.get("detection"):
+            res["detection"]["scale"] = norm_scale
+            res["detection"]["is_macro"] = (norm_scale == "macro")
+            res["detection"]["structure_type"] = "macro_compartment" if norm_scale == "macro" else "cell"
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         return res
@@ -1245,18 +1309,97 @@ async def segment_box(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _segment_point_with_cellpose(
+    pil_image: Image.Image,
+    px: int,
+    py: int,
+    radius: int = 75,
+    model_type: str = "cpsam"
+) -> Optional[Dict[str, Any]]:
+    """
+    Runs high-precision localized Cellpose-SAM (cpsam) segmentation on a crop around the click point.
+    Returns the cell polygon matching the clicked coordinate.
+    """
+    if not is_cellpose_available():
+        return None
+    try:
+        orig_w, orig_h = pil_image.size
+        x1 = max(0, px - radius)
+        y1 = max(0, py - radius)
+        x2 = min(orig_w, px + radius)
+        y2 = min(orig_h, py + radius)
+
+        crop = pil_image.crop((x1, y1, x2, y2))
+        res = run_cellpose_segmentation(crop, model_type=model_type or "cpsam")
+        dets = res.get("detections", [])
+        if not dets:
+            return None
+
+        rel_click_x = float(px - x1)
+        rel_click_y = float(py - y1)
+
+        best_det = None
+        min_dist = float("inf")
+
+        for det in dets:
+            poly = det.get("segmentation", [[]])[0]
+            if len(poly) >= 6:
+                pts = np.array(poly, dtype=np.float32).reshape(-1, 2)
+                dist = cv2.pointPolygonTest(pts, (rel_click_x, rel_click_y), True)
+                if dist >= 0:  # Point is inside this cell polygon!
+                    best_det = det
+                    break
+                bx, by, bw, bh = det["bbox"]
+                dcx = bx + bw / 2.0
+                dcy = by + bh / 2.0
+                d = (dcx - rel_click_x) ** 2 + (dcy - rel_click_y) ** 2
+                if d < min_dist:
+                    min_dist = d
+                    best_det = det
+
+        if best_det is None:
+            return None
+
+        bx, by, bw, bh = best_det["bbox"]
+        abs_bbox = [bx + x1, by + y1, bw, bh]
+        abs_box = [bx + x1, by + y1, bx + x1 + bw, by + y1 + bh]
+        abs_poly = []
+        for p in best_det.get("segmentation", []):
+            shifted = []
+            for i in range(0, len(p), 2):
+                shifted.extend([float(p[i] + x1), float(p[i + 1] + y1)])
+            abs_poly.append(shifted)
+
+        return {
+            "id": best_det.get("id", 1),
+            "class_id": 1,
+            "score": best_det.get("score", 0.95),
+            "confidence": best_det.get("score", 0.95),
+            "bbox": abs_bbox,
+            "box": abs_box,
+            "segmentation": abs_poly,
+            "engine": f"cellpose_{model_type or 'cpsam'}",
+        }
+    except Exception as e:
+        logger.warning(f"Error in _segment_point_with_cellpose: {e}")
+        return None
+
+
 @app.post("/api/segment-point")
 async def segment_point(
     image: UploadFile = File(...),
     x: float = Form(...),
     y: float = Form(...),
     prompt: str = Form("object"),
-    umbral: float = Form(0.05)
+    umbral: float = Form(0.05),
+    model_engine: str = Form("auto"),
+    cellpose_model: str = Form("cpsam"),
+    structure_scale: str = Form("micro"),
 ) -> Dict[str, Any]:
     """
     Interactive click-to-segment endpoint (Human-in-the-Loop).
-    Extracts the precise polygon segmentation mask around point (x, y) on the image
-    using SAM 3 geometric prompt with local structure priors.
+    Segments the precise cell or structure at point (x, y) using either
+    Cellpose-SAM (cpsam / MedSAM for histology cells) or SAM 3.1.
     """
     try:
         contents = await image.read()
@@ -1266,19 +1409,59 @@ async def segment_point(
         px = int(x * orig_w) if (x <= 1.0 and x >= 0) else int(x)
         py = int(y * orig_h) if (y <= 1.0 and y >= 0) else int(y)
 
-        # Create a localized cell/nucleus window around the click
-        r = max(20, int(min(orig_w, orig_h) * 0.035))
-        px1 = max(0, px - r)
-        py1 = max(0, py - r)
-        px2 = min(orig_w, px + r)
-        py2 = min(orig_h, py + r)
+        matched_det = None
+        engine_used = "sam3"
+        norm_scale = structure_scale.lower() if structure_scale in ("micro", "macro") else "micro"
 
-        res = _segment_box_internal(pil_image, px1, py1, px2, py2, prompt=prompt, umbral=umbral)
-        res["click_x"] = px
-        res["click_y"] = py
+        # Check if Cellpose-SAM (MedSAM for cells/histology) should be used (ONLY for micro scale)
+        use_cellpose = (
+            norm_scale != "macro" and (
+                model_engine in ("cellpose", "cpsam") or
+                (model_engine == "auto" and norm_scale == "micro" and is_cellpose_available()) or
+                (is_cellpose_available() and any(w in prompt.lower() for w in ("célula", "celula", "cell", "nucleus", "núcleo", "linfocito", "eritrocito", "neutrofilo", "eosinofilo", "basofilo")))
+            )
+        )
+
+        if use_cellpose and is_cellpose_available():
+            r_cp = max(50, int(min(orig_w, orig_h) * 0.08))
+            matched_det = _segment_point_with_cellpose(
+                pil_image, px, py, radius=r_cp, model_type=cellpose_model or "cpsam"
+            )
+            if matched_det:
+                matched_det["scale"] = "micro"
+                matched_det["is_macro"] = False
+                matched_det["structure_type"] = "cell"
+                engine_used = matched_det.get("engine", "cellpose_cpsam")
+
+        # Fallback to SAM 3 with geometric box prompt (or for macrostructures)
+        if matched_det is None:
+            r_scale = 0.16 if norm_scale == "macro" else 0.04
+            r = max(40 if norm_scale == "macro" else 20, int(min(orig_w, orig_h) * r_scale))
+            px1 = max(0, px - r)
+            py1 = max(0, py - r)
+            px2 = min(orig_w, px + r)
+            py2 = min(orig_h, py + r)
+
+            res = _segment_box_internal(pil_image, px1, py1, px2, py2, prompt=prompt, umbral=umbral)
+            matched_det = res.get("detection")
+            if matched_det:
+                matched_det["scale"] = norm_scale
+                matched_det["is_macro"] = (norm_scale == "macro")
+                matched_det["structure_type"] = "macro_compartment" if norm_scale == "macro" else "cell"
+            engine_used = "sam3"
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        return res
+
+        fallback_box = [max(0, px - 15), max(0, py - 15), min(orig_w, px + 15), min(orig_h, py + 15)]
+        return {
+            "success": True,
+            "engine": engine_used,
+            "click_x": px,
+            "click_y": py,
+            "box": matched_det.get("box", fallback_box) if matched_det else fallback_box,
+            "detection": matched_det,
+        }
     except Exception as e:
         logger.error(f"Error in segment_point: {e}", exc_info=True)
         if torch.cuda.is_available():
@@ -2024,343 +2207,60 @@ async def classify_dino_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ======================== FAISS Semantic Similarity Labeling ========================
+# ======================== Student Identification & Gemini 3.5 Validation ========================
 
-# Global labeler instance (per-session, holds the FAISS index and prototypes)
-_similarity_labeler: Optional[FAISSSimilarityLabeler] = None
-_similarity_image_hash: Optional[str] = None  # Track which image the index was built for
-
-
-def _get_image_hash(contents: bytes) -> str:
-    """Fast hash for cache-invalidating the FAISS index when image changes."""
-    import hashlib
-    return hashlib.sha256(contents[:8192]).hexdigest()[:16]
-
-
-@app.post("/api/similarity/build-index")
-async def similarity_build_index(
+@app.post("/api/student/validate-structure")
+async def student_validate_structure_endpoint(
     image: UploadFile = File(...),
-    detections: str = Form(...),
-    model: str = Form("virchow"),
+    student_choice: str = Form(""),
+    bbox: str = Form(...),
+    structure_scale: str = Form("micro"),
+    polygon: Optional[str] = Form(None),
+    organ_context: Optional[str] = Form(None),
+    student_notes: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
-    Build FAISS embedding index for all detections in the image.
-
-    This must be called before any similarity search or label propagation.
-    Uses pathology foundation models (Virchow2 1280d / UNI 1024d / CONCH 512d)
-    to extract embeddings for each segmented cell crop.
+    Validates a student's identification of a segmented micro or macro structure
+    using Google Gemini 3.5 Flash multimodal vision.
     """
-    global _similarity_labeler, _similarity_image_hash
-
-    # Free Cellpose VRAM so Foundation Models (Virchow2/UNI/CONCH) run at 100% speed on CUDA
-    offload_cellpose_to_cpu()
-
     try:
         contents = await image.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
 
         try:
-            detections_list = json.loads(detections) if isinstance(detections, str) else detections
-        except Exception as json_err:
-            raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {json_err}")
+            parsed_bbox = json.loads(bbox) if isinstance(bbox, str) else bbox
+        except Exception:
+            parsed_bbox = [0, 0, pil_image.width, pil_image.height]
 
-        if not isinstance(detections_list, list):
-            raise HTTPException(status_code=400, detail="detections must be a JSON array.")
+        parsed_poly = None
+        if polygon and polygon.strip():
+            try:
+                parsed_poly = json.loads(polygon)
+            except Exception:
+                parsed_poly = None
 
-        # Build or rebuild the labeler, preserving valid prototypes if present
-        old_prototypes = {}
-        if _similarity_labeler is not None and hasattr(_similarity_labeler, "_prototypes"):
-            old_prototypes = dict(_similarity_labeler._prototypes)
-
-        _similarity_labeler = FAISSSimilarityLabeler(primary_model=model)
-        result = _similarity_labeler.build_index(pil_image, detections_list)
-        _similarity_image_hash = _get_image_hash(contents)
-
-        if old_prototypes:
-            for p_lbl, p_obj in old_prototypes.items():
-                val_idxs = [i for i in p_obj.detection_indices if 0 <= i < len(detections_list)]
-                if val_idxs:
-                    _similarity_labeler.add_prototype(p_lbl, p_obj.color, val_idxs)
-
+        result = validate_student_structure_identification(
+            image=pil_image,
+            bbox=parsed_bbox,
+            student_choice=student_choice,
+            structure_scale=structure_scale,
+            polygon=parsed_poly,
+            organ_context=organ_context,
+            student_notes=student_notes,
+        )
         return result
-
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error building FAISS index: {e}", exc_info=True)
+        logger.error(f"Error in student structure validation: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/similarity/search")
-async def similarity_search(
-    detection_index: int = Form(...),
-    threshold: float = Form(0.80),
-    top_k: int = Form(0),
-    label: Optional[str] = Form(None),
-) -> Dict[str, Any]:
-    """
-    Search for detections similar to a given detection.
-
-    If *label* is provided, uses the registered prototype centroid.
-    Otherwise uses the raw embedding of detection_index as query.
-    """
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(status_code=400, detail="FAISS index not built. Call /api/similarity/build-index first.")
-
-    try:
-        if label and label.strip():
-            result = _similarity_labeler.search_similar(
-                label.strip(), threshold=threshold, top_k=top_k
-            )
-            return {
-                "success": True,
-                "prototype_label": result.prototype_label,
-                "prototype_color": result.prototype_color,
-                "matches": result.matches,
-                "total_matches": len(result.matches),
-            }
-        else:
-            matches = _similarity_labeler.search_similar_by_index(
-                detection_index, threshold=threshold, top_k=top_k if top_k > 0 else 500
-            )
-            return {
-                "success": True,
-                "query_detection_index": detection_index,
-                "matches": matches,
-                "total_matches": len(matches),
-            }
-    except (ValueError, IndexError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error in similarity search: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/similarity/add-prototype")
-async def similarity_add_prototype(
-    label: str = Form(...),
-    color: str = Form("#e11d48"),
-    detection_indices: str = Form(...),
-) -> Dict[str, Any]:
-    """
-    Register one or more detections as a named prototype class.
-
-    The pathologist clicks on a cell, names it (e.g. "Espermatogonia A Clara"),
-    and the system registers it as a prototype for FAISS similarity search.
-    Multiple detections can be registered for the same label to build a
-    more robust centroid (multi-prototype).
-    """
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(status_code=400, detail="FAISS index not built. Call /api/similarity/build-index first.")
-
-    try:
-        indices = json.loads(detection_indices) if isinstance(detection_indices, str) else detection_indices
-        if not isinstance(indices, list):
-            indices = [int(indices)]
-        indices = [int(i) for i in indices]
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid detection_indices: {e}")
-
-    result = _similarity_labeler.add_prototype(label.strip(), color.strip(), indices)
-    if not result.get("success", False):
-        raise HTTPException(status_code=400, detail=result.get("error", "Error al registrar el prototipo."))
-    return result
-
-
-@app.delete("/api/similarity/remove-prototype/{label}")
-def similarity_remove_prototype(label: str) -> Dict[str, Any]:
-    """Remove a registered prototype by label."""
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(status_code=400, detail="FAISS index not built.")
-
-    removed = _similarity_labeler.remove_prototype(label)
-    if not removed:
-        raise HTTPException(status_code=404, detail=f"Prototype '{label}' not found.")
-    return {"success": True, "removed": label}
-
-
-@app.get("/api/similarity/prototypes")
-def similarity_list_prototypes() -> Dict[str, Any]:
-    """List all registered prototypes and their metadata."""
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        return {"prototypes": []}
-
-    return {"prototypes": _similarity_labeler.list_prototypes()}
-
-
-@app.post("/api/similarity/propagate-label")
-async def similarity_propagate_label(
-    label: str = Form(...),
-    detections: str = Form(...),
-    threshold: float = Form(0.80),
-    color: Optional[str] = Form(None),
-    detection_index: Optional[int] = Form(None),
-) -> Dict[str, Any]:
-    """
-    Propagate a single prototype's label to all similar detections.
-
-    Mutates the detections array and returns the updated version with
-    category_name, color, similarity_score set on matched items.
-    """
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(status_code=400, detail="FAISS index not built.")
-
-    try:
-        detections_list = json.loads(detections) if isinstance(detections, str) else detections
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {e}")
-
-    clean_label = label.strip()
-
-    # Fallback auto-registration if prototype is not found but detection_index is provided
-    if _similarity_labeler.get_prototype(clean_label) is None and detection_index is not None:
-        if 0 <= detection_index < _similarity_labeler._num_detections:
-            proto_color = color.strip() if color else "#e11d48"
-            logger.info(f"Auto-registering prototype '{clean_label}' with detection #{detection_index}")
-            _similarity_labeler.add_prototype(clean_label, proto_color, [detection_index])
-
-    try:
-        updated, num_labeled = _similarity_labeler.propagate_label(
-            clean_label, detections_list, threshold=threshold
-        )
-        return {
-            "success": True,
-            "label": clean_label,
-            "num_labeled": num_labeled,
-            "detections": updated,
-        }
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/api/similarity/propagate-all")
-async def similarity_propagate_all(
-    detections: str = Form(...),
-    threshold: float = Form(0.80),
-) -> Dict[str, Any]:
-    """
-    Propagate labels from ALL registered prototypes to similar detections.
-
-    Winner-takes-all: if a detection matches multiple prototypes, the one
-    with the highest cosine similarity wins.
-    """
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(status_code=400, detail="FAISS index not built.")
-
-    try:
-        detections_list = json.loads(detections) if isinstance(detections, str) else detections
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid detections JSON: {e}")
-
-    result = _similarity_labeler.propagate_all_labels(detections_list, threshold=threshold)
-    return result
-
-
-@app.post("/api/similarity/auto-cluster")
-async def similarity_auto_cluster(
-    n_clusters: int = Form(5),
-) -> Dict[str, Any]:
-    """
-    Run unsupervised k-means clustering over the FAISS embeddings.
-
-    Returns suggested groups without any user-labeled prototypes.
-    Useful as a starting point for the pathologist to review.
-    """
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(status_code=400, detail="FAISS index not built.")
-
-    try:
-        clusters = _similarity_labeler.auto_cluster(n_clusters=n_clusters)
-        return {
-            "success": True,
-            "n_clusters": len(clusters),
-            "clusters": clusters,
-        }
-    except Exception as e:
-        logger.error(f"Auto-cluster error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ======================== Gemini & Similarity Assistant Endpoints ========================
-
-@app.get("/api/gemini/status")
-def gemini_keys_status() -> Dict[str, Any]:
-    """Return the Gemini API Key Pool status, model, and active keys count."""
-    return {
-        "success": True,
-        **key_manager.get_status(),
-    }
-
-
-@app.post("/api/similarity/gemini-suggest-prototype")
-async def similarity_gemini_suggest_prototype(
-    detection_index: int = Form(...),
-    organ_context: str = Form("testículo / espermatogénesis"),
-) -> Dict[str, Any]:
-    """
-    Ask Gemini 3.5 Flash to inspect the high-resolution crop of the selected cell
-    and suggest its cytological name, color, and reasoning.
-    """
-    global _similarity_labeler
-
-    if _similarity_labeler is None:
-        raise HTTPException(
-            status_code=400,
-            detail="El índice FAISS no está construido. Haz clic primero en '1. Indexar Detecciones'."
-        )
-
-    crop = _similarity_labeler.get_crop(detection_index)
-    if crop is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se encontró el recorte citológico para la célula #{detection_index}."
-        )
-
-    try:
-        suggestion = suggest_cell_prototype_gemini(
-            crop=crop,
-            organ_context=organ_context,
-        )
-        return {
-            "success": True,
-            "detection_index": detection_index,
-            **suggestion,
-        }
-    except Exception as e:
-        logger.error(f"Error sugiriendo prototipo con Gemini: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ======================== Roboflow Integration Endpoints ========================
-
-@app.get("/api/roboflow-status")
-def roboflow_status() -> Dict[str, Any]:
-    """Check Roboflow connection and list project info."""
-    return rf_check_connection()
 
 
 @app.post("/api/export-coco")
 async def export_coco(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
     """
-    Generate a COCO JSON from the curated annotations.
-
-    Accepts either:
-    - A single image payload (has "image_filename" key)
-    - A multi-image payload (has "images" key with a list)
+    Generate a COCO JSON from annotations.
+    Accepts single image payload or multi-image payload ("images" key).
     """
     try:
         if "images" in payload:
@@ -2374,91 +2274,6 @@ async def export_coco(payload: Dict[str, Any] = Body(...)) -> JSONResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/upload-roboflow")
-async def upload_roboflow(
-    annotations: str = Form(default=""),
-    images: List[UploadFile] = File(default=[])
-) -> Dict[str, Any]:
-    """
-    Upload annotated images to Roboflow.
-
-    - annotations: JSON string with the multi-image annotation payload
-    - images: list of image files
-    """
-    logger.info(f"Received upload-roboflow request: {len(images)} files attached, annotations len={len(annotations)}")
-
-    if not annotations or not annotations.strip():
-        logger.error("Upload error: annotations payload is empty")
-        raise HTTPException(status_code=400, detail="El campo de anotaciones ('annotations') está vacío.")
-
-    try:
-        annotations_data = json.loads(annotations)
-        if isinstance(annotations_data, dict):
-            images_list = annotations_data.get("images", [annotations_data])
-        else:
-            images_list = annotations_data
-
-        # Read image files
-        image_files = {}
-        for img_file in images:
-            if img_file and img_file.filename:
-                img_bytes = await img_file.read()
-                if len(img_bytes) > 0:
-                    image_files[img_file.filename] = img_bytes
-
-        logger.info(f"Read {len(image_files)} image files from upload payload.")
-
-        result = upload_dataset_to_roboflow(images_list, image_files)
-
-        if result.get("success"):
-            return result
-        else:
-            err_msg = result.get("error", "Upload failed")
-            logger.error(f"Roboflow upload failed: {err_msg}")
-            raise HTTPException(status_code=500, detail=err_msg)
-
-    except json.JSONDecodeError as e:
-        logger.error(f"JSONDecodeError in upload_roboflow: {e}")
-        raise HTTPException(status_code=400, detail=f"JSON de anotaciones inválido: {str(e)}")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Upload error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/roboflow-models")
-def roboflow_models() -> Dict[str, Any]:
-    """Get available dataset versions and supported model architectures from Roboflow."""
-    return get_roboflow_models_and_versions()
-
-
-@app.post("/api/train-roboflow")
-async def train_roboflow(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Trigger model training on Roboflow for specified model_type and dataset version."""
-    model_type = payload.get("model_type", "yolov8")
-    version = payload.get("version", None)
-    result = trigger_training(model_type=model_type, version=version)
-
-    if result.get("success"):
-        return result
-    else:
-        raise HTTPException(status_code=500, detail=result.get("error", "Training trigger failed"))
-
-
-@app.post("/api/export-roboflow-dataset")
-async def export_roboflow_dataset(payload: Dict[str, Any] = Body(default={})) -> Dict[str, Any]:
-    """Generate version snapshot in Roboflow and download dataset locally for GPU training on PC."""
-    model_format = payload.get("model_type", "yolov8")
-    version = payload.get("version", None)
-    result = export_dataset_version(model_format=model_format, version=version)
-
-    if result.get("success"):
-        return result
-    else:
-        raise HTTPException(status_code=500, detail=result.get("error", "Export failed"))
-
-
 # ======================== Automated Semantic Labeling Pipeline ========================
 
 @app.get("/api/autolabel-status")
@@ -2469,9 +2284,15 @@ def autolabel_status_endpoint() -> Dict[str, Any]:
         "cellpose": get_cellpose_status(),
         "pathology_models": get_pathology_models_status(),
         "ontologies": list_ontologies(),
-        "faiss_available": faiss is not None,
-        "pipeline": "FAISS Similarity (Cellpose-SAM + Virchow 2 + UNI + CONCH)",
+        "gemini": key_manager.get_status(),
+        "pipeline": "Histology Micro/Macro Learning & Validation (Cellpose + SAM 3 + Gemini 3.5)",
     }
+
+
+@app.get("/api/gemini/status")
+@app.get("/api/gemini-status")
+def gemini_status_endpoint() -> Dict[str, Any]:
+    return key_manager.get_status()
 
 
 @app.post("/api/autolabel")
@@ -2573,7 +2394,6 @@ async def autolabel_batch_endpoint(
     confidence_threshold: float = Form(0.50),
     use_gemini_validation: bool = Form(True),
     include_macro_layers: bool = Form(True),
-    auto_upload_roboflow: bool = Form(False),
 ) -> Dict[str, Any]:
     """
     Batch Automated Histology Labeling for multiple images with optional Roboflow export.
@@ -2617,13 +2437,7 @@ async def autolabel_batch_endpoint(
             include_macro_layers=include_macro_layers,
         )
 
-        # Upload to Roboflow if requested
-        if auto_upload_roboflow:
-            rf_res = labeler.export_to_roboflow(
-                labeled_results=batch_result,
-                image_files=image_bytes_dict,
-            )
-            batch_result["roboflow_upload"] = rf_res
+# Roboflow export removed
 
         return batch_result
     except HTTPException:

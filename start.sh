@@ -34,7 +34,7 @@ for i in {1..30}; do
         echo -e "${RED}Error: El backend falló al iniciar. Revisa los logs.${NC}"
         exit 1
     fi
-    if curl -s http://127.0.0.1:8000/api/ontologies >/dev/null 2>&1; then
+    if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ontologies')" >/dev/null 2>&1; then
         READY=true
         break
     fi

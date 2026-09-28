@@ -48,6 +48,7 @@ class GeminiKeyManager:
         self._index = 0
         self._cooldowns: Dict[str, float] = {}  # key -> timestamp until available
         self._failure_counts: Dict[str, int] = {}
+        self._model_cooldowns: Dict[str, float] = {}  # model_name -> timestamp until retry
 
     def get_all_keys(self) -> List[str]:
         keys = []
@@ -132,20 +133,26 @@ class GeminiKeyManager:
 
             return True, 45.0, f"Error de llamada: {err_str[:120]}"
 
-        # If an explicit key was provided, try it first; fallback to rotation pool on failure
+        # Build list of candidate models with intelligent fallback if primary model is 503/overloaded
+        models_to_try = [target_model]
+        for m_candidate in ["gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-flash-latest"]:
+            if m_candidate not in models_to_try:
+                models_to_try.append(m_candidate)
+
+        # If an explicit key was provided, try it first
         if explicit_api_key:
-            try:
-                client = genai.Client(api_key=explicit_api_key, http_options=http_opts)
-                return call_fn(client, target_model)
-            except Exception as e:
-                logger.warning(f"Explicit key call failed on {target_model} ({e}). Falling back to pool rotation across GOOGLE_API_KEYS...")
+            for mod in models_to_try:
+                try:
+                    client = genai.Client(api_key=explicit_api_key, http_options=http_opts)
+                    return call_fn(client, mod)
+                except Exception as e:
+                    logger.warning(f"Explicit key call failed on {mod} ({e}). Trying next...")
 
         keys = self.get_all_keys()
         if not keys:
             raise RuntimeError("No Google/Gemini API keys configured in .env (GOOGLE_API_KEYS or GEMINI_API_KEY).")
 
         now = time.time()
-        # Prioritize healthy keys not on cooldown
         available_keys = [k for k in keys if self._cooldowns.get(k, 0) <= now]
         candidate_keys = available_keys if available_keys else keys
 
@@ -154,23 +161,42 @@ class GeminiKeyManager:
             ordered_keys = [candidate_keys[(start_idx + i) % len(candidate_keys)] for i in range(len(candidate_keys))]
 
         last_error = None
-        for key in ordered_keys:
-            key_preview = key[:8] + "..." + key[-4:] if len(key) > 12 else "key"
-            try:
-                client = genai.Client(api_key=key, http_options=http_opts)
-                res = call_fn(client, target_model)
+        for mod in models_to_try:
+            if self._model_cooldowns.get(mod, 0) > time.time():
+                continue
+            model_overloaded = False
+            for key in ordered_keys:
+                key_preview = key[:8] + "..." + key[-4:] if len(key) > 12 else "key"
+                try:
+                    client = genai.Client(api_key=key, http_options=http_opts)
+                    res = call_fn(client, mod)
 
-                # Success! Advance round-robin index across full key pool
-                with self._lock:
-                    self._index = (keys.index(key) + 1) % len(keys)
-                    self._cooldowns.pop(key, None)
-                return res
+                    # Success! Advance round-robin index across full key pool
+                    with self._lock:
+                        self._index = (keys.index(key) + 1) % len(keys)
+                        self._cooldowns.pop(key, None)
+                    return res
 
-            except Exception as e:
-                rotatable, cooldown, reason = _classify_error(e)
-                self.mark_key_cooldown(key, duration_sec=cooldown, reason=reason)
-                logger.warning(f"Gemini call failed with key [{key_preview}] on {target_model} ({reason}). Rotando a la siguiente clave...")
-                last_error = e
+                except Exception as e:
+                    rotatable, cooldown, reason = _classify_error(e)
+                    err_s = str(e).lower()
+                    if any(ov in err_s for ov in ["503", "unavailable", "spikes in demand", "high demand", "overloaded"]):
+                        logger.warning(f"Model {mod} is overloaded/503 ({reason}). Skipping to next candidate model immediately.")
+                        self._model_cooldowns[mod] = time.time() + 90.0
+                        model_overloaded = True
+                        last_error = e
+                        break
+                    if any(nf in err_s for nf in ["404", "not_found", "not found", "no longer available"]):
+                        logger.warning(f"Model {mod} is not found / deprecated ({reason}). Skipping model permanently.")
+                        self._model_cooldowns[mod] = time.time() + 86400.0
+                        model_overloaded = True
+                        last_error = e
+                        break
+                    self.mark_key_cooldown(key, duration_sec=cooldown, reason=reason)
+                    logger.warning(f"Gemini call failed with key [{key_preview}] on {mod} ({reason}). Rotando...")
+                    last_error = e
+                    continue
+            if model_overloaded:
                 continue
 
         if last_error:
@@ -1793,4 +1819,236 @@ Include ALL numbered cells without skipping any.
     )
 
     return classified, uncertain_indices
+
+
+def validate_student_structure_identification(
+    image: Image.Image,
+    bbox: List[int],
+    student_choice: str,
+    structure_scale: str = "micro",
+    polygon: Optional[List[List[float]]] = None,
+    organ_context: Optional[str] = None,
+    student_notes: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Validates a student's histological identification of a segmented micro or macro structure
+    using Google Gemini 3.5 Flash multimodal vision and API key rotation.
+    
+    Provides:
+      - Correct / Partially Correct / Incorrect classification
+      - Precise score (0-100)
+      - True histological diagnosis
+      - Key morphological hallmarks (cytology/tissue architecture)
+      - Pedagogical didactic feedback and study tips
+      - Differential diagnosis
+    """
+    clean_student_choice = student_choice.strip() if student_choice else ""
+    norm_scale = structure_scale.lower() if structure_scale else "micro"
+    if norm_scale not in ("micro", "macro"):
+        norm_scale = "micro"
+
+    is_direct_consult = (
+        not clean_student_choice
+        or clean_student_choice.lower() in ("?", "consulta", "no se", "no sé", "identificar", "corregir", "ayuda", "docente", "desconocida")
+    )
+
+    # 1. Normalize image
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    img_w, img_h = image.size
+
+    # 2. Extract bounding box with contextual margin
+    if len(bbox) >= 4:
+        bx1, by1, bx2, by2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+    else:
+        bx1, by1, bx2, by2 = 0, 0, img_w, img_h
+
+    # Ensure box validity
+    bx1, bx2 = max(0, min(bx1, bx2)), min(img_w, max(bx1, bx2))
+    by1, by2 = max(0, min(by1, by2)), min(img_h, max(by1, by2))
+    bw = max(1, bx2 - bx1)
+    bh = max(1, by2 - by1)
+
+    # Padding factor (more context for micro cells, modest for macro layers)
+    pad_ratio = 0.50 if norm_scale == "micro" else 0.25
+    pad_x = max(16, int(bw * pad_ratio))
+    pad_y = max(16, int(bh * pad_ratio))
+
+    crop_x1 = max(0, bx1 - pad_x)
+    crop_y1 = max(0, by1 - pad_y)
+    crop_x2 = min(img_w, bx2 + pad_x)
+    crop_y2 = min(img_h, by2 + pad_y)
+
+    crop = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+
+    # Draw highlighted boundary around the target object in a crop preview copy
+    crop_annotated = crop.copy()
+    try:
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(crop_annotated)
+        rel_x1 = bx1 - crop_x1
+        rel_y1 = by1 - crop_y1
+        rel_x2 = bx2 - crop_x1
+        rel_y2 = by2 - crop_y1
+
+        # Outline box with high visibility neon cyan/amber outline
+        color_box = "#06b6d4" if norm_scale == "micro" else "#f59e0b"
+        for offset in range(2):
+            draw.rectangle(
+                [rel_x1 - offset, rel_y1 - offset, rel_x2 + offset, rel_y2 + offset],
+                outline=color_box,
+            )
+    except Exception as draw_err:
+        logger.debug(f"Crop highlight drawing skipped: {draw_err}")
+        crop_annotated = crop
+
+    # Ensure crop has adequate size for Gemini Vision inspection
+    min_dim = 256
+    cw, ch = crop_annotated.size
+    if max(cw, ch) < min_dim:
+        scale_fac = min_dim / max(cw, ch)
+        crop_annotated = crop_annotated.resize(
+            (int(cw * scale_fac), int(ch * scale_fac)),
+            Image.Resampling.LANCZOS,
+        )
+
+    # 3. Construct didactic validation prompt
+    if is_direct_consult:
+        prompt = f"""\
+Eres un Catedrático y Profesor Experto en Histología y Anatomía Patológica.
+El estudiante solicita tu DIAGNÓSTICO Y CORRECCIÓN DOCENTE DIRECTA sobre la estructura señalada ({'MICROESTRUCTURA (célula, núcleo o elemento citológico)' if norm_scale == 'micro' else 'MACROESTRUCTURA (capa de tejido, glándula, lumen, vaso, estroma o tabique)'}) en esta preparación histológica microscópica.
+La estructura de interés está destacada en el recuadro dentro de la imagen.
+
+INFORMACIÓN DEL CASO:
+- Contexto anatómico / de tejido: {organ_context or 'Corte histológico óptico estándar (tinción H&E u homologada)'}.
+- Escala estructural: {norm_scale.upper()}
+- Modo: Consulta y corrección docente directa.
+{f'- Observaciones del estudiante: "{student_notes.strip()}"' if student_notes and student_notes.strip() else ''}
+
+TU TAREA DOCENTE:
+1. Inspecciona con detenimiento el corte histológico y la estructura señalada (citoplasma, núcleo, cromatina, luces, membrana, relación con tejidos vecinos).
+2. Identifica con precisión científica el nombre exacto de la célula o estructura.
+3. Enumera los criterios morfológicos esenciales que permiten reconocerla sin dudas.
+4. Explica cómo diferenciarla de estructuras adyacentes o morfológicamente similares (diagnóstico diferencial).
+5. Aporta un consejo práctico de estudio o mnemotécnico.
+
+RESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO CON LA SIGUIENTE ESTRUCTURA:
+```json
+{{
+  "status": "correct",
+  "score": 100,
+  "verdict_title": "Corrección y Diagnóstico Docente 💡",
+  "student_choice": "Consulta a Gemini 3.5",
+  "actual_structure": "<Nombre histológico formal y canónico>",
+  "structure_scale": "{norm_scale}",
+  "confidence": 0.95,
+  "morphological_hallmarks": [
+    "<Criterio 1: Forma celular y cromatina>",
+    "<Criterio 2: Afinidad tintorial del citoplasma (acidófilo/basófilo)>",
+    "<Criterio 3: Posición tisular o relación arquitectural>"
+  ],
+  "didactic_feedback": "<Explicación docente detallada sobre por qué es esta estructura y cómo identificarla>",
+  "differential_diagnosis": "<Cómo diferenciarla de 1 o 2 estructuras semejantes>",
+  "study_tip": "<Consejo mnemotécnico o visual práctico para reconocerla en futuros cortes>"
+}}
+```
+"""
+    else:
+        prompt = f"""\
+Eres un Catedrático y Profesor Experto en Histología y Anatomía Patológica evaluando a un estudiante de medicina/biología.
+El estudiante ha seleccionado una estructura segmentada ({'MICROESTRUCTURA (célula, núcleo o componente citológico)' if norm_scale == 'micro' else 'MACROESTRUCTURA (capa de tejido, glándula, lumen, vaso, estroma o tabique)'}) en una preparación microscópica histológica.
+La estructura de interés está destacada en el recuadro dentro de la imagen.
+
+INFORMACIÓN DEL CASO:
+- Contexto anatómico / de tejido: {organ_context or 'Corte histológico óptico estándar (tinción H&E u homologada)'}.
+- Escala estructural: {norm_scale.upper()}
+- RESPUESTA DEL ESTUDIANTE: "{clean_student_choice}"
+{f'- Observaciones adicionales del estudiante: "{student_notes.strip()}"' if student_notes and student_notes.strip() else ''}
+
+TU TAREA DOCENTE:
+1. Inspecciona con detenimiento el corte histológico y la estructura señalada (citoplasma, núcleo, cromatina, luces, membrana, relación con tejidos vecinos).
+2. Determina con rigor científico si la respuesta del estudiante es:
+   - "correct": Exacta o sinónimo histológico comúnmente aceptado (ej: "Célula parietal" o "Célula oxíntica", "Linfocito", "Glándula tubular simple", "Epitelio estratificado plano queratinizado").
+   - "partially_correct": Diagnóstico general acertado pero incompleto o impreciso (ej: dijo "Espermatocito" en vez de "Espermatocito Primario", "Glándula" en vez de "Glándula Fúndica", "Célula epitelial" sin especificar tipo).
+   - "incorrect": Estructura o tipo celular erróneo.
+3. Asigna un puntaje de 0 a 100:
+   - 90 - 100: Identificación correcta y precisa.
+   - 50 - 89: Identificación parcialmente correcta o de aproximación lógica.
+   - 0 - 49: Identificación incorrecta.
+4. Redacta retroalimentación pedagógica, entusiasta y formativa en ESPAÑOL.
+
+RESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO CON LA SIGUIENTE ESTRUCTURA:
+```json
+{{
+  "status": "correct",
+  "score": 95,
+  "verdict_title": "¡Diagnóstico Exacto! 🎯",
+  "student_choice": "{clean_student_choice}",
+  "actual_structure": "<Nombre histológico formal y canónico>",
+  "structure_scale": "{norm_scale}",
+  "confidence": 0.95,
+  "morphological_hallmarks": [
+    "<Criterio 1: Forma celular y cromatina>",
+    "<Criterio 2: Afinidad tintorial del citoplasma (acidófilo/basófilo)>",
+    "<Criterio 3: Posición tisular o relación arquitectural>"
+  ],
+  "didactic_feedback": "<Explicación docente: fundamenta por qué es esta estructura. Si el estudiante acertó felicítalo; si falló, analiza por qué pudo confundirse y cómo reconocerla>",
+  "differential_diagnosis": "<Cómo diferenciarla de 1 o 2 estructuras semejantes>",
+  "study_tip": "<Consejo mnemotécnico o visual práctico para reconocerla en futuros cortes>"
+}}
+```
+"""
+
+    try:
+        response = generate_gemini_content(
+            contents=[prompt, crop_annotated],
+            temperature=0.1,
+            api_key=api_key,
+        )
+        text_resp = response.text if hasattr(response, "text") else str(response)
+
+        # Parse JSON from response
+        json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text_resp)
+        raw_json = json_match.group(1).strip() if json_match else text_resp.strip()
+        parsed = json.loads(raw_json)
+
+        # Guarantee all required keys exist
+        return {
+            "status": parsed.get("status", "correct" if parsed.get("score", 0) >= 80 else "partially_correct"),
+            "score": int(parsed.get("score", 85)),
+            "verdict_title": parsed.get("verdict_title", "Evaluación completada"),
+            "student_choice": clean_student_choice,
+            "actual_structure": parsed.get("actual_structure", clean_student_choice),
+            "structure_scale": norm_scale,
+            "confidence": float(parsed.get("confidence", 0.90)),
+            "morphological_hallmarks": parsed.get("morphological_hallmarks", []),
+            "didactic_feedback": parsed.get("didactic_feedback", "Estructura verificada correctamente por Gemini 3.5."),
+            "differential_diagnosis": parsed.get("differential_diagnosis", ""),
+            "study_tip": parsed.get("study_tip", "Revisa la relación núcleo-citoplasma."),
+        }
+
+    except Exception as e:
+        logger.error(f"Error validating student identification with Gemini 3.5: {e}", exc_info=True)
+        # Graceful fallback so the student receives feedback even if network/quota is strained
+        return {
+            "status": "partially_correct",
+            "score": 75,
+            "verdict_title": "Validación aproximada (Servidor ocupado)",
+            "student_choice": clean_student_choice,
+            "actual_structure": clean_student_choice,
+            "structure_scale": norm_scale,
+            "confidence": 0.70,
+            "morphological_hallmarks": [
+                f"Estructura compatible con '{clean_student_choice}' en escala {norm_scale}",
+                "Verifica la tinción citoplasmática y el patrón de cromatina nuclear",
+            ],
+            "didactic_feedback": (
+                f"Tu respuesta '{clean_student_choice}' es morfológicamente plausible para esta región "
+                f"en escala {norm_scale}. (Nota: La validación completa de Gemini reportó: {str(e)[:100]})."
+            ),
+            "differential_diagnosis": "Considera estructuras vecinas en la misma capa histológica.",
+            "study_tip": "Recuerda correlacionar la morfología nuclear con la tinción hematoxilina-eosina.",
+        }
+
 

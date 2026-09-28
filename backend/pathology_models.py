@@ -941,10 +941,12 @@ def group_detections_by_class(
     grouped_map: Dict[str, Dict[str, Any]] = {}
 
     # Initialize from candidate_classes if provided to preserve full ontology ordering
+    macro_roles_set = {"compartment", "layer", "cavity", "boundary_outer", "boundary_inner", "stroma"}
     if candidate_classes:
         for c in candidate_classes:
             k = c.get("key")
             if k:
+                is_mac = bool(c.get("is_macro", False) or c.get("role") in macro_roles_set)
                 grouped_map[k] = {
                     "key": k,
                     "prompt": c.get("prompt", k),
@@ -952,10 +954,21 @@ def group_detections_by_class(
                     "color": c.get("color", "#8b5cf6"),
                     "detections": [],
                     "count": 0,
+                    "is_macro": is_mac,
+                    "scale": "macro" if is_mac else "micro",
+                    "role": c.get("role", "compartment" if is_mac else "cell"),
+                    "structure_type": c.get("structure_type", "macro_layer" if is_mac else "cell"),
                 }
 
     for det in classified_detections:
         k = det.get("class_key", det.get("category_id", det.get("initial_class_key", "default_class")))
+        is_det_mac = bool(
+            det.get("is_macro", False)
+            or det.get("is_macro_layer", False)
+            or det.get("scale") == "macro"
+            or det.get("role") in macro_roles_set
+            or det.get("structure_type") in ("macro_compartment", "macro_layer", "boundary")
+        )
         if k not in grouped_map:
             grouped_map[k] = {
                 "key": k,
@@ -964,7 +977,26 @@ def group_detections_by_class(
                 "color": det.get("color", "#8b5cf6"),
                 "detections": [],
                 "count": 0,
+                "is_macro": is_det_mac,
+                "scale": "macro" if is_det_mac else "micro",
+                "role": det.get("role", "compartment" if is_det_mac else "cell"),
+                "structure_type": det.get("structure_type", "macro_layer" if is_det_mac else "cell"),
             }
+        else:
+            if is_det_mac:
+                grouped_map[k]["is_macro"] = True
+                grouped_map[k]["scale"] = "macro"
+
+        # Explicitly tag the detection itself
+        if is_det_mac or grouped_map[k].get("is_macro"):
+            det["is_macro"] = True
+            det["scale"] = "macro"
+            det["structure_type"] = det.get("structure_type") or "macro_compartment"
+        else:
+            det["is_macro"] = False
+            det["scale"] = "micro"
+            det["structure_type"] = det.get("structure_type") or "cell"
+
         grouped_map[k]["detections"].append(det)
         grouped_map[k]["count"] += 1
 

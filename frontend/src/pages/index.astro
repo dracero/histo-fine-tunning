@@ -4664,6 +4664,40 @@
 			<li style="margin-bottom: 0.25rem;">${h}</li>
 		`).join("");
 
+		const precisionBadgeHtml = (val.vistas_precision === 3 || val.conch_disponible) ? `
+			<div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 6px; padding: 0.4rem 0.6rem; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between; font-size: 0.68rem;">
+				<span style="color: #a7f3d0; display: flex; align-items: center; gap: 0.35rem;">
+					<span>🔬</span>
+					<strong>Recortes Multi-Escala:</strong> Citológico + Contexto + Máscara
+				</span>
+				<span style="background: rgba(16,185,129,0.2); color: #34d399; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.65rem;">
+					Alta Precisión
+				</span>
+			</div>
+		` : '';
+
+		let conchBadgeHtml = '';
+		if (val.conch_disponible && val.conch_afinidad !== undefined) {
+			const topChips = (val.conch_alternativas || []).slice(0, 3).map(c => 
+				`<span style="display: inline-block; background: rgba(255,255,255,0.06); padding: 0.1rem 0.35rem; border-radius: 4px; margin: 0.1rem 0.15rem; color: #cbd5e1; font-size: 0.64rem;">${c.label} (${c.pct}%)</span>`
+			).join('');
+
+			conchBadgeHtml = `
+				<div style="background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(129, 140, 248, 0.3); border-radius: 6px; padding: 0.45rem 0.6rem; margin-bottom: 0.5rem;">
+					<div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.7rem;">
+						<span style="color: #c7d2fe; display: flex; align-items: center; gap: 0.35rem;">
+							<span>🧬</span>
+							<strong>Afinidad CONCH (MahmoodLab):</strong>
+						</span>
+						<span style="background: rgba(99, 102, 241, 0.25); color: #a5b4fc; font-weight: 800; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem;">
+							${val.conch_afinidad}%
+						</span>
+					</div>
+					${topChips ? `<div style="margin-top: 0.3rem; font-size: 0.65rem; color: #94a3b8;">Candidatos afines: ${topChips}</div>` : ''}
+				</div>
+			`;
+		}
+
 		studentResultContent.innerHTML = `
 			<!-- Probability Gauge Hero Badge -->
 			<div style="background: rgba(2,132,199,0.12); border: 1px solid rgba(56,189,248,0.35); border-radius: 8px; padding: 0.65rem; margin-bottom: 0.55rem; text-align: center;">
@@ -4681,6 +4715,9 @@
 					<span>Modelo: <strong style="color: #38bdf8;">${val.model_used || "Gemini 3.8 / 3.5"}</strong></span>
 				</div>
 			</div>
+
+			${precisionBadgeHtml}
+			${conchBadgeHtml}
 
 			<div style="background: rgba(255,255,255,0.03); border-radius: 6px; padding: 0.5rem; margin-bottom: 0.5rem; font-size: 0.73rem; border: 1px solid var(--border-color);">
 				<div>Elección evaluada: <strong style="color: #f1f5f9;">${studentChoice}</strong></div>

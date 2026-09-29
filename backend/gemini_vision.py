@@ -2134,6 +2134,111 @@ def _render_crop_with_segmentation(
     return Image.fromarray(img_np)
 
 
+def _enhance_cytological_crop(crop: Image.Image) -> Image.Image:
+    """
+    Subtly enhances cytological contrast and nuclear texture using mild CLAHE
+    on the luminance channel, making chromatin clumps and nucleoli crystal clear
+    without altering the natural H&E stain colors.
+    """
+    try:
+        import cv2
+        import numpy as np
+        img_np = np.array(crop)
+        if len(img_np.shape) == 3 and img_np.shape[2] == 3:
+            lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
+            l, a, b = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=1.8, tileGridSize=(8, 8))
+            l_enhanced = clahe.apply(l)
+            enhanced_lab = cv2.merge((l_enhanced, a, b))
+            rgb = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB)
+            return Image.fromarray(rgb)
+    except Exception as e:
+        logger.debug(f"Cytological crop enhancement skipped: {e}")
+    return crop
+
+
+def _compute_conch_crop_affinity(
+    crop_image: Image.Image,
+    choice_text: str,
+    organ_context: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Computes objective zero-shot vision-language affinity for a cropped histological structure using CONCH.
+    Calibrates cosine similarity against differential diagnosis candidates.
+    """
+    try:
+        try:
+            from backend.pathology_models import ConchModelWrapper
+        except ImportError:
+            from pathology_models import ConchModelWrapper
+        import torch
+        import torch.nn.functional as F
+        import numpy as np
+
+        conch = ConchModelWrapper.get_instance()
+        if not conch.is_loaded:
+            conch.load()
+        if not conch.is_loaded:
+            return {}
+
+        clean = (choice_text or "").strip()
+        if not clean:
+            return {}
+
+        # Build candidate class list including the choice and common histological differential classes
+        common_candidates = [
+            clean,
+            "linfocito", "célula plasmática", "célula parietal", "célula principal",
+            "célula caliciforme", "enterocito", "fibroblasto", "célula endotelial",
+            "macrófago", "célula muscular lisa", "glándula tubular", "epitelio cúbico",
+        ]
+        seen = set()
+        candidates = []
+        for c in common_candidates:
+            norm = c.lower().strip()
+            if norm not in seen:
+                seen.add(norm)
+                candidates.append(c)
+
+        templates = [f"a histological section showing a {c}" for c in candidates]
+
+        img_feats = conch.encode_image_crops([crop_image], batch_size=1)  # (1, 512)
+        txt_feats = conch.encode_texts(templates)                         # (K, 512)
+
+        sims = (img_feats @ txt_feats.T).squeeze(0)  # (K,)
+        probs = F.softmax(sims * 15.0, dim=-1).cpu().numpy()
+
+        target_idx = 0
+        choice_prob = float(probs[target_idx])
+        raw_sim = float(sims[target_idx].cpu().item())
+
+        calibrated_score = float(np.clip((raw_sim - 0.12) / (0.35 - 0.12), 0.10, 0.98))
+        final_affinity = float(0.6 * calibrated_score + 0.4 * choice_prob)
+
+        ranked_indices = np.argsort(-probs)
+        top_candidates = []
+        for idx in ranked_indices[:4]:
+            c_name = candidates[idx]
+            c_prob = float(probs[idx])
+            top_candidates.append({
+                "label": c_name.capitalize(),
+                "prob": round(c_prob, 3),
+                "pct": int(round(c_prob * 100)),
+            })
+
+        return {
+            "available": True,
+            "affinity": round(final_affinity, 2),
+            "percentage": int(round(final_affinity * 100)),
+            "raw_similarity": round(raw_sim, 3),
+            "top_candidates": top_candidates,
+            "model": "CONCH (MahmoodLab 512d)",
+        }
+    except Exception as e:
+        logger.debug(f"CONCH affinity computation skipped: {e}")
+        return {}
+
+
 def evaluate_segmentation_with_gemini(
     image: Image.Image,
     bbox: Optional[List[float]] = None,
@@ -2289,51 +2394,80 @@ RESPONDE EXCLUSIVAMENTE CON UN OBJETO JSON VÁLIDO CON ESTE ESQUEMA:
     bw = max(1, bx2 - bx1)
     bh = max(1, by2 - by1)
 
-    pad_ratio = 0.45 if norm_scale == "micro" else 0.25
-    pad_x = max(16, int(bw * pad_ratio))
-    pad_y = max(16, int(bh * pad_ratio))
+    # 1. Multi-scale precision cropping:
+    # a) High-magnification zoomed view (cytological detail & chromatin texture)
+    pad_ratio_high = 0.20 if norm_scale == "micro" else 0.15
+    pad_hx = max(10, int(bw * pad_ratio_high))
+    pad_hy = max(10, int(bh * pad_ratio_high))
+    hx1, hy1 = max(0, bx1 - pad_hx), max(0, by1 - pad_hy)
+    hx2, hy2 = min(img_w, bx2 + pad_hx), min(img_h, by2 + pad_hy)
+    crop_high_mag = image.crop((hx1, hy1, hx2, hy2))
+    crop_high_mag_enhanced = _enhance_cytological_crop(crop_high_mag)
 
-    crop_x1 = max(0, bx1 - pad_x)
-    crop_y1 = max(0, by1 - pad_y)
-    crop_x2 = min(img_w, bx2 + pad_x)
-    crop_y2 = min(img_h, by2 + pad_y)
+    # b) Contextual tissue architecture view (tissue layer, stroma, basement membrane, lumen)
+    pad_ratio_context = 1.15 if norm_scale == "micro" else 0.50
+    pad_cx = max(32, int(bw * pad_ratio_context))
+    pad_cy = max(32, int(bh * pad_ratio_context))
+    cx1, cy1 = max(0, bx1 - pad_cx), max(0, by1 - pad_cy)
+    cx2, cy2 = min(img_w, bx2 + pad_cx), min(img_h, by2 + pad_cy)
+    crop_context = image.crop((cx1, cy1, cx2, cy2))
 
-    crop_raw = image.crop((crop_x1, crop_y1, crop_x2, crop_y2))
+    # c) Mask boundary adherence view
     crop_annotated = _render_crop_with_segmentation(
-        crop_raw,
+        crop_context,
         bbox=[bx1, by1, bx2, by2],
-        crop_offset=(crop_x1, crop_y1),
+        crop_offset=(cx1, cy1),
         polygon=polygon,
         color="#06b6d4" if norm_scale == "micro" else "#3b82f6",
     )
 
-    # Ensure crop size is >= 256 for vision detail
-    min_dim = 256
-    cw, ch = crop_annotated.size
-    if max(cw, ch) < min_dim:
-        fac = min_dim / max(cw, ch)
-        crop_annotated = crop_annotated.resize((int(cw * fac), int(ch * fac)), Image.Resampling.LANCZOS)
-        crop_raw = crop_raw.resize((int(cw * fac), int(ch * fac)), Image.Resampling.LANCZOS)
+    # Ensure crops meet minimum dimensions (>= 280px) for optimal visual tokenization
+    min_dim = 280
+    def _ensure_min_dim(c: Image.Image) -> Image.Image:
+        w, h = c.size
+        if max(w, h) < min_dim:
+            r = min_dim / max(w, h)
+            return c.resize((int(w * r), int(h * r)), Image.Resampling.LANCZOS)
+        return c
+
+    crop_high_mag_enhanced = _ensure_min_dim(crop_high_mag_enhanced)
+    crop_context = _ensure_min_dim(crop_context)
+    crop_annotated = _ensure_min_dim(crop_annotated)
+
+    # 2. Compute quantitative affinity using CONCH Pathology Foundation Model
+    conch_info = _compute_conch_crop_affinity(crop_high_mag, clean_choice, organ_context)
+    conch_prompt_text = ""
+    if conch_info.get("available"):
+        conch_pct = conch_info.get("percentage", 85)
+        top_candidates = conch_info.get("top_candidates", [])
+        top_str = ", ".join([f"{c['label']} ({c['pct']}%)" for c in top_candidates[:3]])
+        conch_prompt_text = f"""
+ANÁLISIS CUANTITATIVO DE MODELO DE BASE HISTOPATOLÓGICO (CONCH MahmoodLab 512d):
+- Afinidad matemática calculada por CONCH para '{clean_choice}': {conch_pct}%
+- Diagnósticos diferenciales morfológicamente más afines en este corte: {top_str}
+Integra esta afinidad patológica objetiva junto con tu examen visual para calibrar con máximo rigor la 'probabilidad_eleccion_correcta'.
+"""
 
     prompt = f"""\
-Eres un Catedrático y Patólogo Computacional Experto en Histología y Citología Diagnóstica.
+Eres un Catedrático y Patólogo Computacional Senior Experto en Histología y Citología Diagnóstica.
 Tu tarea es auditar y evaluar con rigor una segmentación microscópica de una {norm_scale.upper()}ESTRUCTURA en un corte histológico ({organ_context or 'Tinción H&E'}).
 
 INFORMACIÓN DE LA ESTRUCTURA SEGMENTADA:
 - Elección / Etiqueta asignada: "{clean_choice}"
 - Escala: {norm_scale.upper()}
-
-Se te proporcionan dos vistas:
-1. El corte tisular con la máscara y contorno de segmentación destacados (vista delimitada).
-2. El corte tisular original sin marcas (vista morfológica pura).
+{conch_prompt_text}
+VISTAS DE ALTA PRECISIÓN INCLUIDAS:
+1. [Vista 1 - Delimitada]: Recorte con máscara y contorno de segmentación destacados (evalúa ajuste y delimitación).
+2. [Vista 2 - Citológica Zoom]: Alta magnificación sin marcas con realce de contraste luminante (evalúa cromatina, nucléolo, relación N/C).
+3. [Vista 3 - Contexto Arquitectural]: Microentorno tisular ampliado (evalúa estratificación, lámina propia, membrana basal o luz).
 
 TAREA DE EVALUACIÓN:
-1. Evalúa si la elección "{clean_choice}" es correcta morfológicamente.
+1. Evalúa si la elección "{clean_choice}" es correcta morfológicamente integrando las 3 vistas y la afinidad de CONCH.
 2. Asigna la 'probabilidad_eleccion_correcta': un valor de 0.00 a 1.00 (ejemplo: 0.94) que representa la probabilidad objetiva de que esta estructura corresponda exactamente a la elección indicada.
 3. Asigna la 'calidad_segmentacion': un valor de 0.00 a 1.00 que evalúa qué tan fiel es la delimitación del contorno (ausencia de sobresegmentación o subsegmentación).
 4. Determina el 'estado': "correcta" (prob >= 0.80), "parcialmente_correcta" (0.50 a 0.79), o "incorrecta" (< 0.50).
 5. Determina el 'diagnostico_verdadero': nombre histológico formal y canónico en español.
-6. Enumera 3 a 4 'criterios_morfologicos' observados (patrón de cromatina, nucleolos, citoplasma, relación núcleo/citoplasma, arquitectura tisular).
+6. Enumera 3 a 4 'criterios_morfologicos' observados en las vistas de alta resolución.
 7. Brinda una 'evaluacion_delimitacion' sobre la calidad de los bordes.
 8. Redacta una 'justificacion' explicativa en español.
 9. Indica 'diagnostico_diferencial' y 'recomendacion'.
@@ -2363,7 +2497,7 @@ RESPONDE EXCLUSIVAMENTE CON UN OBJETO JSON VÁLIDO CON ESTE ESQUEMA:
 
     try:
         resp = generate_gemini_content(
-            contents=[prompt, crop_annotated, crop_raw],
+            contents=[prompt, crop_annotated, crop_high_mag_enhanced, crop_context],
             temperature=0.1,
             preferred_model=target_model,
             api_key=api_key,
@@ -2402,6 +2536,10 @@ RESPONDE EXCLUSIVAMENTE CON UN OBJETO JSON VÁLIDO CON ESTE ESQUEMA:
             "recomendacion": parsed.get("recomendacion", "Continúa correlacionando con la histología."),
             "study_tip": parsed.get("recomendacion", "Continúa correlacionando con la histología."),
             "model_used": target_model,
+            "conch_disponible": bool(conch_info.get("available")),
+            "conch_afinidad": conch_info.get("percentage"),
+            "conch_alternativas": conch_info.get("top_candidates", []),
+            "vistas_precision": 3,
         }
 
     except Exception as err:

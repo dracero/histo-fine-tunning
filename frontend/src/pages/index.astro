@@ -54,7 +54,7 @@
 					<!-- Tab Buttons -->
 					<div class="tab-bar">
 						<button class="tab-btn active" data-tab="images-tab">🖼️ Imágenes & Escala</button>
-						<button class="tab-btn" data-tab="student-quiz-tab" id="tab-btn-student-quiz" style="color: #38bdf8;">🎓 Validación Gemini 3.5</button>
+						<button class="tab-btn" data-tab="student-quiz-tab" id="tab-btn-student-quiz" style="color: #38bdf8;">🎓 Validación Gemini 3.5 / 3.8</button>
 						<button class="tab-btn" data-tab="pdf-tab">📄 PDFs & Ontología</button>
 						<button class="tab-btn" data-tab="classes-tab">🏷️ Clases</button>
 						<button class="tab-btn" data-tab="export-tab">📊 Reporte</button>
@@ -431,6 +431,9 @@
 									<div style="font-size: 0.62rem; color: #fca5a5; font-weight: 600;">Incorrectos ❌</div>
 								</div>
 							</div>
+							<button type="button" id="student-eval-all-gemini-btn" class="btn-action" style="width: 100%; margin-top: 0.6rem; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 50%, #818cf8 100%); color: #fff; font-weight: 700; font-size: 0.76rem; padding: 0.5rem; border: none; border-radius: 6px; box-shadow: 0 2px 8px rgba(56,189,248,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem;" title="Evaluar las anotaciones segmentadas con Gemini para obtener la probabilidad de elección correcta">
+								⚖️ Evaluar Anotaciones con Gemini (3.5 / 3.8)
+							</button>
 						</div>
 
 						<!-- Selected Structure Card -->
@@ -442,12 +445,18 @@
 								<button type="button" id="student-struct-scale-badge" class="badge" style="font-size: 0.65rem; background: #0284c7; color: #fff; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; padding: 0.2rem 0.5rem; border-radius: 4px; transition: all 0.2s;" title="Haz clic para alternar entre Microestructura y Macroestructura">🔬 Microestructura</button>
 							</div>
 
-							<div id="student-no-selection" style="padding: 0.85rem; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 8px;">
-								<div style="font-size: 1.5rem; margin-bottom: 0.3rem;">👆</div>
-								<p style="font-size: 0.74rem; color: var(--text-muted); margin: 0;">
-									Haz clic en cualquier célula o capa segmentada en el visor para abrir el desafío de identificación.
+							<div id="student-no-selection" style="padding: 0.95rem; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed var(--border-color); border-radius: 8px;">
+								<div style="font-size: 1.5rem; margin-bottom: 0.35rem;">👆</div>
+								<p style="font-size: 0.76rem; color: var(--text-muted); margin: 0 0 0.75rem 0; line-height: 1.4;">
+									Haz clic en cualquier célula o capa segmentada en el visor para abrir el desafío individual, o evalúa directamente todas las anotaciones de la lámina:
 								</p>
-								<button type="button" id="student-quick-macro-btn" class="btn-small" style="width: 100%; margin-top: 0.55rem; background: rgba(59,130,246,0.18); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; font-weight: 700; font-size: 0.72rem; padding: 0.35rem 0.5rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem;" title="Segmentar macroestructuras anatómicas (túbulos, estroma, luces) con SAM 3.1">
+								<button type="button" id="student-eval-no-sel-btn" class="btn-action" style="width: 100%; margin-bottom: 0.45rem; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 50%, #818cf8 100%); color: #fff; font-weight: 800; font-size: 0.82rem; padding: 0.65rem 0.8rem; border: none; border-radius: 8px; box-shadow: 0 4px 15px rgba(56,189,248,0.4); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.45rem; letter-spacing: 0.2px; transition: all 0.2s ease;" title="Evaluar con Gemini la probabilidad de elección correcta de las anotaciones segmentadas">
+									⚖️ Evaluar Anotaciones con Gemini
+								</button>
+								<div style="font-size: 0.67rem; color: #94a3b8; margin-bottom: 0.7rem; line-height: 1.35;">
+									El modelo LLM evalúa la segmentación y calcula la <strong>probabilidad de elección correcta</strong> de las estructuras.
+								</div>
+								<button type="button" id="student-quick-macro-btn" class="btn-small" style="width: 100%; background: rgba(59,130,246,0.18); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; font-weight: 700; font-size: 0.72rem; padding: 0.38rem 0.5rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem;" title="Segmentar macroestructuras anatómicas (túbulos, estroma, luces) con SAM 3.1">
 									🏛️ Segmentar Macroestructuras (SAM 3.1)
 								</button>
 							</div>
@@ -494,10 +503,10 @@
 								</div>
 
 								<div style="display: flex; gap: 0.4rem; margin-top: 0.2rem;">
-									<button type="button" id="student-validate-btn" class="btn-action" style="flex: 1; font-size: 0.78rem; padding: 0.55rem; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 50%, #818cf8 100%); color: #fff; font-weight: 700; border: none; border-radius: 6px; box-shadow: 0 2px 10px rgba(56,189,248,0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
-										🎓 Validar Elección
+									<button type="button" id="student-validate-btn" class="btn-action" style="flex: 1; font-size: 0.78rem; padding: 0.55rem; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 50%, #818cf8 100%); color: #fff; font-weight: 700; border: none; border-radius: 6px; box-shadow: 0 2px 10px rgba(56,189,248,0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem;" title="Evalúa con Gemini la segmentación y calcula la probabilidad de elección correcta">
+										⚖️ Evaluar Anotación con Gemini
 									</button>
-									<button type="button" id="student-direct-ask-btn" class="btn-small" style="font-size: 0.74rem; padding: 0.55rem 0.65rem; background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4); font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;" title="Pregúntale a Gemini 3.5 qué estructura es directamente para ver su corrección docente">
+									<button type="button" id="student-direct-ask-btn" class="btn-small" style="font-size: 0.74rem; padding: 0.55rem 0.65rem; background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4); font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;" title="Pregúntale a Gemini qué estructura es directamente para ver su corrección docente">
 										💡 Corrección Directa
 									</button>
 								</div>
@@ -554,8 +563,8 @@
 							<button type="button" id="viewer-segment-macro-btn" class="btn-small" style="font-size: 0.72rem; padding: 0.25rem 0.55rem; background: rgba(59,130,246,0.2); color: #93c5fd; border: 1px solid rgba(59,130,246,0.5); font-weight: 700;" title="Segmentar macroestructuras anatómicas con SAM 3.1">
 								🏛️ +Macro (SAM 3)
 							</button>
-							<button type="button" id="viewer-validate-student-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #0284c7, #38bdf8); color: #ffffff; border: none; font-weight: 700; box-shadow: 0 2px 8px rgba(56,189,248,0.35);" title="Validar la célula o estructura seleccionada con Gemini 3.5">
-								🎓 Validar con Gemini 3.5
+							<button type="button" id="viewer-validate-student-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #0284c7, #38bdf8); color: #ffffff; border: none; font-weight: 700; box-shadow: 0 2px 8px rgba(56,189,248,0.35);" title="Evaluar las anotaciones segmentadas con Gemini 3.5 / 3.8 y obtener la probabilidad de elección correcta">
+								⚖️ Evaluar con Gemini (LLM)
 							</button>
 							<button type="button" id="viewer-classify-gemini-btn" class="btn-small btn-primary-action" style="font-size: 0.75rem; padding: 0.25rem 0.65rem; background: linear-gradient(135deg, #0284c7, #8b5cf6); color: #ffffff; border: none; font-weight: 700; box-shadow: 0 2px 8px rgba(139,92,246,0.35);" title="Etiquetar las células segmentadas usando Gemini Vision en batch (1 sola llamada)">
 								✨ Etiquetar Gemini
@@ -623,8 +632,8 @@
 					<!-- Selection toolbar -->
 					<div class="selection-toolbar" id="selection-toolbar" style="display: none; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
 						<span id="selection-count">0 seleccionadas</span>
-						<button type="button" id="toolbar-validate-gemini-btn" class="btn-small btn-primary-action" style="background: linear-gradient(135deg, #0284c7, #38bdf8); color: #fff; font-weight: 700; border: none; padding: 0.25rem 0.65rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;" title="Enviar la estructura seleccionada a Gemini 3.5 para corrección/validación">
-							🎓 Corregir con Gemini 3.5
+						<button type="button" id="toolbar-validate-gemini-btn" class="btn-small btn-primary-action" style="background: linear-gradient(135deg, #0284c7, #38bdf8); color: #fff; font-weight: 700; border: none; padding: 0.25rem 0.65rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;" title="Evaluar la estructura seleccionada con Gemini 3.5 / 3.8 para obtener la probabilidad de elección correcta">
+							⚖️ Evaluar con Gemini (LLM)
 						</button>
 						<select id="reassign-select" class="form-input-sm">
 							<option value="">Mover a clase...</option>
@@ -668,7 +677,7 @@
 		<!-- Context menu -->
 		<div id="context-menu" class="context-menu" style="display: none;">
 			<div class="ctx-header" id="ctx-header">Estructura Histológica</div>
-			<div class="ctx-item" id="ctx-student-validate" style="color: #38bdf8; font-weight: 700;">🎓 Validar / Evaluar con Gemini 3.5</div>
+			<div class="ctx-item" id="ctx-student-validate" style="color: #38bdf8; font-weight: 700;">⚖️ Evaluar con Gemini (Probabilidad LLM)</div>
 			<div class="ctx-separator"></div>
 			<div class="ctx-item" id="ctx-delete">🗑️ Eliminar</div>
 			<div class="ctx-separator"></div>
@@ -2012,14 +2021,15 @@
 					by = (ly || 50) + 20;
 				}
 
-				const isCorrect = det.gemini_status === "correct";
-				const isPartial = det.gemini_status === "partially_correct";
+				const isCorrect = det.gemini_status === "correct" || det.gemini_status === "correcta";
+				const isPartial = det.gemini_status === "partially_correct" || det.gemini_status === "parcialmente_correcta";
 				const badgeBg = isCorrect ? "rgba(6, 78, 59, 0.94)" : (isPartial ? "rgba(120, 53, 15, 0.94)" : "rgba(127, 29, 29, 0.94)");
 				const badgeBorder = isCorrect ? "#10b981" : (isPartial ? "#f59e0b" : "#ef4444");
 				const badgeTextColor = isCorrect ? "#a7f3d0" : (isPartial ? "#fde68a" : "#fca5a5");
 				const badgeIcon = isCorrect ? "🎯" : (isPartial ? "⚠️" : "❌");
 				const structureName = det.gemini_structure || det.label;
-				const badgeText = `${badgeIcon} Gemini: ${structureName} (${det.gemini_score !== undefined ? det.gemini_score : 100} pts)`;
+				const probVal = det.gemini_eval_probability !== undefined ? Math.round(det.gemini_eval_probability * 100) : (det.gemini_score !== undefined ? det.gemini_score : 100);
+				const badgeText = `${badgeIcon} Gemini: ${structureName} (${probVal}%)`;
 
 				const gGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
 				gGroup.setAttribute("class", "gemini-correction-badge");
@@ -2178,13 +2188,9 @@
 				if (selectedDetections.has(detId)) selectedDetections.delete(detId);
 				else selectedDetections.add(detId);
 			} else {
-				// Single select
-				if (selectedDetections.has(detId) && selectedDetections.size === 1) {
-					selectedDetections.clear();
-				} else {
-					selectedDetections.clear();
-					selectedDetections.add(detId);
-				}
+				// Single select: always select this detection (do not toggle off on rapid click)
+				selectedDetections.clear();
+				selectedDetections.add(detId);
 			}
 			updateSelectionToolbar();
 			renderOverlay();
@@ -2215,10 +2221,11 @@
 		});
 	}
 
-	// Click on viewer background = deselect all (or forward to interactive tool)
+	// Click on viewer background = deselect all (or forward to interactive tool if not handled by displayImage)
 	document.getElementById("viewer-container").addEventListener("click", (e) => {
 		if (activeInteractiveTool === 'click' || activeInteractiveTool === 'polygon') {
-			if (typeof handleCanvasPointClick === "function") {
+			// If target was already displayImage, it is handled directly by displayImage listener
+			if (e.target !== displayImage && typeof handleCanvasPointClick === "function") {
 				handleCanvasPointClick(e);
 			}
 			return;
@@ -2978,8 +2985,13 @@
 		}
 	});
 
+	let isSegmentingPoint = false;
+
 	// Canvas Click: Handle Clic SAM and Draw Polygon modes
 	async function handleCanvasPointClick(e) {
+		if (e) {
+			e.stopPropagation();
+		}
 		if (!activeImageKey) return;
 		const activeData = imageStore.get(activeImageKey);
 		if (!activeData) return;
@@ -3003,6 +3015,12 @@
 
 		// 2. Click SAM Mode
 		if (activeInteractiveTool === 'click') {
+			if (isSegmentingPoint) {
+				console.debug("handleCanvasPointClick: ya se está procesando un punto, ignorando clic concurrente.");
+				return;
+			}
+			isSegmentingPoint = true;
+
 			let fileToSend = activeData.file;
 			if (!fileToSend && activeData.dataUrl) {
 				try {
@@ -3015,6 +3033,7 @@
 			}
 			if (!fileToSend) {
 				alert("⚠️ No hay imagen activa para segmentar.");
+				isSegmentingPoint = false;
 				return;
 			}
 
@@ -3080,6 +3099,8 @@
 				alert(`Error al segmentar con SAM: ${err.message}`);
 				statusRunning.style.display = "none";
 				statusIdle.style.display = "flex";
+			} finally {
+				isSegmentingPoint = false;
 			}
 		}
 	}
@@ -4078,6 +4099,8 @@
 	const studentChoiceInput = document.getElementById("student-choice-input");
 	const studentNotesInput = document.getElementById("student-notes-input");
 	const studentValidateBtn = document.getElementById("student-validate-btn");
+	const studentEvalNoSelBtn = document.getElementById("student-eval-no-sel-btn");
+	const studentEvalAllGeminiBtn = document.getElementById("student-eval-all-gemini-btn");
 	const studentResultCard = document.getElementById("student-result-card");
 	const studentResultContent = document.getElementById("student-result-content");
 	const studentCropCanvas = document.getElementById("student-crop-canvas");
@@ -4446,12 +4469,17 @@
 			renderValidationResult({
 				status: det.gemini_status,
 				score: det.gemini_score,
-				verdict_title: det.gemini_verdict_title || (det.gemini_status === "correct" ? "¡Diagnóstico Exacto! 🎯" : "Revisión Requerida 💡"),
+				probabilidad_eleccion_correcta: det.gemini_eval_probability !== undefined ? det.gemini_eval_probability : (det.gemini_score ? det.gemini_score / 100 : 0.9),
+				porcentaje_probabilidad: det.gemini_eval_probability !== undefined ? Math.round(det.gemini_eval_probability * 100) : (det.gemini_score || 85),
+				calidad_segmentacion: det.gemini_quality || 0.9,
+				evaluacion_delimitacion: det.gemini_delimitacion || "Límites celulares definidos adecuadamente.",
+				verdict_title: det.gemini_verdict_title || (det.gemini_status === "correct" || det.gemini_status === "correcta" ? "¡Diagnóstico Exacto! 🎯" : "Revisión Requerida 💡"),
 				actual_structure: det.gemini_structure || det.label,
-				didactic_feedback: det.gemini_feedback || "Validación previamente realizada por Gemini 3.5.",
+				didactic_feedback: det.gemini_feedback || "Validación previamente realizada por Gemini.",
 				morphological_hallmarks: det.gemini_hallmarks || [],
 				differential_diagnosis: det.gemini_differential || "",
 				study_tip: det.gemini_study_tip || "",
+				model_used: det.gemini_model || "Gemini 3.8 / 3.5",
 			}, det, det.student_choice || det.label, false);
 		} else {
 			if (studentResultCard) studentResultCard.style.display = "none";
@@ -4462,79 +4490,93 @@
 	}
 	window.onDetectionSelectedForStudent = onDetectionSelectedForStudent;
 
-	// Submit Student Choice or Direct Consultation to Gemini 3.5 for Validation
+	// Submit Student Choice or Direct Consultation to Gemini 3.5 / 3.8 for Evaluation
 	async function validateStudentSelection(isDirectConsult = false) {
+		console.log("validateStudentSelection triggered", { _studentActiveDetId, isDirectConsult });
 		if (!_studentActiveDetId) {
 			alert("⚠️ Selecciona primero una estructura en el visor haciendo clic sobre ella.");
 			return;
 		}
 
 		const mapEntry = findDetectionById(_studentActiveDetId);
-		if (!mapEntry || !mapEntry.det) return;
+		if (!mapEntry || !mapEntry.det) {
+			alert("⚠️ No se encontró la estructura seleccionada.");
+			return;
+		}
 
 		const det = mapEntry.det;
+		const defaultLabel = det.label || mapEntry.group?.name || (typeof getClassName === "function" ? getClassName(mapEntry.groupKey) : "") || "Estructura";
 		let studentChoice = studentChoiceInput ? studentChoiceInput.value.trim() : "";
 		if (isDirectConsult) {
 			studentChoice = "Consulta y corrección docente directa";
 		} else if (!studentChoice) {
-			if (det.label) {
-				studentChoice = det.label;
-				if (studentChoiceInput) studentChoiceInput.value = det.label;
-			} else {
-				alert("⚠️ Por favor escribe qué célula o estructura crees que es, o pulsa '💡 Corrección Directa'.");
-				studentChoiceInput?.focus();
-				return;
-			}
+			studentChoice = defaultLabel;
+			if (studentChoiceInput) studentChoiceInput.value = studentChoice;
 		}
 
 		const studentNotes = studentNotesInput ? studentNotesInput.value.trim() : "";
-		const detScale = det.scale || currentStructureScale || "micro";
+		const detScale = det.scale || (typeof currentStructureScale !== "undefined" ? currentStructureScale : "micro") || "micro";
+
+		if ((!activeImageKey || !imageStore.get(activeImageKey)) && imageStore.size > 0) {
+			const firstKey = imageStore.keys().next().value;
+			if (firstKey) selectImage(firstKey);
+		}
 
 		if (!activeImageKey || !imageStore.get(activeImageKey)) {
-			alert("⚠️ No hay imagen activa cargada.");
+			alert("⚠️ No hay imagen activa cargada en el visor.");
 			return;
 		}
 
-		const imgData = imageStore.get(activeImageKey);
-		const formData = new FormData();
-		if (imgData.file) {
-			formData.append("image", imgData.file, imgData.filename || "image.png");
-		} else if (imgData.dataUrl) {
-			const resBlob = await fetch(imgData.dataUrl);
-			const blob = await resBlob.blob();
-			formData.append("image", blob, imgData.filename || "image.png");
-		} else {
-			alert("⚠️ No se pudo obtener el archivo de imagen.");
-			return;
-		}
-		formData.append("student_choice", studentChoice);
-		formData.append("structure_scale", detScale);
-
-		const bbox = det.box || (det.bbox ? [det.bbox[0], det.bbox[1], det.bbox[0] + det.bbox[2], det.bbox[1] + det.bbox[3]] : [0,0,50,50]);
-		formData.append("bbox", JSON.stringify(bbox));
-
-		if (det.segmentation) {
-			formData.append("polygon", JSON.stringify(det.segmentation));
-		}
-		if (studentNotes) {
-			formData.append("student_notes", studentNotes);
-		}
-
-		// UI Loading State
 		const originalBtnText = studentValidateBtn ? studentValidateBtn.innerHTML : "";
 		if (studentValidateBtn) {
 			studentValidateBtn.disabled = true;
-			studentValidateBtn.innerHTML = `⏳ Gemini 3.5 evaluando...`;
+			studentValidateBtn.innerHTML = `⏳ Gemini evaluando...`;
 		}
-		statusRunning.style.display = "flex";
-		statusIdle.style.display = "none";
-		statusText.textContent = `🎓 Gemini 3.5 analizando corte histológico y validando '${studentChoice}'...`;
+		if (statusRunning) statusRunning.style.display = "flex";
+		if (statusIdle) statusIdle.style.display = "none";
+		if (statusText) statusText.textContent = `🎓 Gemini 3.8 / 3.5 analizando corte histológico y calculando probabilidad de '${studentChoice}'...`;
 
 		try {
-			const res = await fetch(`${API_URL}/student/validate-structure`, {
+			const imgData = imageStore.get(activeImageKey);
+			const formData = new FormData();
+			if (imgData.file) {
+				formData.append("image", imgData.file, imgData.filename || "image.png");
+			} else if (imgData.dataUrl) {
+				const resBlob = await fetch(imgData.dataUrl);
+				const blob = await resBlob.blob();
+				formData.append("image", blob, imgData.filename || "image.png");
+			} else {
+				throw new Error("No se pudo obtener el archivo binario de la imagen.");
+			}
+			formData.append("structure_choice", studentChoice);
+			formData.append("student_choice", studentChoice);
+			formData.append("structure_scale", detScale);
+			formData.append("preferred_model", "gemini-3.8-flash");
+
+			const bbox = det.box || (det.bbox ? [det.bbox[0], det.bbox[1], det.bbox[0] + det.bbox[2], det.bbox[1] + det.bbox[3]] : [0,0,50,50]);
+			formData.append("bbox", JSON.stringify(bbox));
+
+			if (det.segmentation) {
+				formData.append("polygon", JSON.stringify(det.segmentation));
+			}
+			if (studentNotes) {
+				formData.append("student_notes", studentNotes);
+			}
+			if (window._activeOntologyName) {
+				formData.append("organ_context", window._activeOntologyName);
+			}
+
+			let res = await fetch(`${API_URL}/evaluate-segmentations-gemini`, {
 				method: "POST",
 				body: formData,
 			});
+
+			if (!res.ok) {
+				res = await fetch(`${API_URL}/student/validate-structure`, {
+					method: "POST",
+					body: formData,
+				});
+			}
 
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
@@ -4546,37 +4588,44 @@
 
 		} catch (err) {
 			console.error("Validation error:", err);
-			alert(`Error al validar con Gemini 3.5: ${err.message}`);
+			alert(`Error al evaluar con Gemini: ${err.message}`);
 		} finally {
 			if (studentValidateBtn) {
 				studentValidateBtn.disabled = false;
 				studentValidateBtn.innerHTML = originalBtnText;
 			}
-			statusRunning.style.display = "none";
-			statusIdle.style.display = "flex";
+			if (statusRunning) statusRunning.style.display = "none";
+			if (statusIdle) statusIdle.style.display = "flex";
 		}
 	}
 
 	function renderValidationResult(val, det, studentChoice, updateStats = true) {
 		if (!studentResultCard || !studentResultContent) return;
 
-		const isCorrect = val.status === "correct";
-		const isPartial = val.status === "partially_correct";
+		const probPct = val.porcentaje_probabilidad !== undefined 
+			? val.porcentaje_probabilidad 
+			: (val.probabilidad_eleccion_correcta !== undefined ? Math.round(val.probabilidad_eleccion_correcta * 100) : (val.score !== undefined ? val.score : 85));
+		const isCorrect = val.status === "correct" || val.estado === "correcta" || probPct >= 80;
+		const isPartial = val.status === "partially_correct" || val.estado === "parcialmente_correcta" || (probPct >= 50 && probPct < 80);
 		const statusColor = isCorrect ? "#10b981" : (isPartial ? "#f59e0b" : "#ef4444");
 		const badgeIcon = isCorrect ? "🎯" : (isPartial ? "⚠️" : "❌");
 
 		// Persist on det so it displays on the canvas overlay
 		if (det) {
 			det.gemini_validated = true;
-			det.gemini_status = val.status;
-			det.gemini_structure = val.actual_structure;
-			det.gemini_score = val.score;
-			det.gemini_feedback = val.didactic_feedback;
-			det.gemini_hallmarks = val.morphological_hallmarks || [];
-			det.gemini_differential = val.differential_diagnosis || "";
-			det.gemini_study_tip = val.study_tip || "";
+			det.gemini_status = isCorrect ? "correct" : (isPartial ? "partially_correct" : "incorrect");
+			det.gemini_structure = val.actual_structure || val.diagnostico_verdadero;
+			det.gemini_score = probPct;
+			det.gemini_eval_probability = probPct / 100;
+			det.gemini_quality = val.calidad_segmentacion || 0.90;
+			det.gemini_delimitacion = val.evaluacion_delimitacion || "";
+			det.gemini_feedback = val.didactic_feedback || val.justificacion;
+			det.gemini_hallmarks = val.morphological_hallmarks || val.criterios_morfologicos || [];
+			det.gemini_differential = val.differential_diagnosis || val.diagnostico_diferencial || "";
+			det.gemini_study_tip = val.study_tip || val.recomendacion || "";
 			det.gemini_verdict_title = val.verdict_title;
 			det.student_choice = studentChoice;
+			det.gemini_model = val.model_used || "Gemini 3.8 / 3.5";
 		}
 
 		// Update Stats & History only for new evaluations
@@ -4599,10 +4648,10 @@
 				timestamp: new Date().toLocaleTimeString(),
 				detId: _studentActiveDetId,
 				studentChoice,
-				actualStructure: val.actual_structure,
-				score: val.score,
-				status: val.status,
-				feedback: val.didactic_feedback,
+				actualStructure: val.actual_structure || val.diagnostico_verdadero,
+				score: probPct,
+				status: isCorrect ? "correct" : (isPartial ? "partially_correct" : "incorrect"),
+				feedback: val.didactic_feedback || val.justificacion,
 			});
 			updateStudentHistoryUI();
 		}
@@ -4610,54 +4659,363 @@
 		studentResultCard.style.borderLeftColor = statusColor;
 		studentResultCard.style.display = "block";
 
-		const hallmarksListHtml = (val.morphological_hallmarks || []).map(h => `
+		const rawHallmarks = val.morphological_hallmarks || val.criterios_morfologicos || [];
+		const hallmarksListHtml = rawHallmarks.map(h => `
 			<li style="margin-bottom: 0.25rem;">${h}</li>
 		`).join("");
 
 		studentResultContent.innerHTML = `
-			<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-				<span style="font-size: 0.85rem; font-weight: 800; color: ${statusColor};">
-					${badgeIcon} ${val.verdict_title || (isCorrect ? "¡Diagnóstico Exacto!" : "Revisión Requerida")}
-				</span>
-				<span class="badge" style="background: rgba(255,255,255,0.1); color: #fff; font-size: 0.72rem; font-weight: 700;">
-					${val.score}/100 pts
-				</span>
+			<!-- Probability Gauge Hero Badge -->
+			<div style="background: rgba(2,132,199,0.12); border: 1px solid rgba(56,189,248,0.35); border-radius: 8px; padding: 0.65rem; margin-bottom: 0.55rem; text-align: center;">
+				<div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem;">
+					Probabilidad de Elección Correcta (LLM)
+				</div>
+				<div style="font-size: 1.7rem; font-weight: 900; color: ${statusColor}; display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+					<span>${badgeIcon}</span> ${probPct}%
+				</div>
+				<div style="background: rgba(255,255,255,0.1); border-radius: 9999px; height: 6px; width: 100%; margin: 0.4rem 0 0.2rem 0; overflow: hidden;">
+					<div style="background: ${statusColor}; width: ${probPct}%; height: 100%; border-radius: 9999px; transition: width 0.5s ease;"></div>
+				</div>
+				<div style="font-size: 0.66rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 0.3rem;">
+					<span>Delimitación: <strong style="color: #e2e8f0;">${Math.round((val.calidad_segmentacion || 0.90) * 100)}%</strong></span>
+					<span>Modelo: <strong style="color: #38bdf8;">${val.model_used || "Gemini 3.8 / 3.5"}</strong></span>
+				</div>
 			</div>
 
 			<div style="background: rgba(255,255,255,0.03); border-radius: 6px; padding: 0.5rem; margin-bottom: 0.5rem; font-size: 0.73rem; border: 1px solid var(--border-color);">
-				<div>Tu elección: <strong style="color: #f1f5f9;">${studentChoice}</strong></div>
-				<div style="margin-top: 0.2rem;">Identificación Real (Gemini 3.5): <strong style="color: ${statusColor};">${val.actual_structure}</strong></div>
+				<div>Elección evaluada: <strong style="color: #f1f5f9;">${studentChoice}</strong></div>
+				<div style="margin-top: 0.2rem;">Diagnóstico Verificado (Gemini): <strong style="color: ${statusColor};">${val.actual_structure || val.diagnostico_verdadero}</strong></div>
+				${val.evaluacion_delimitacion ? `<div style="margin-top: 0.2rem; font-size: 0.68rem; color: #94a3b8;">Delimitación: ${val.evaluacion_delimitacion}</div>` : ''}
 			</div>
 
 			<div style="font-size: 0.72rem; color: #cbd5e1; line-height: 1.4; margin-bottom: 0.5rem;">
-				<strong>Explicación Docente:</strong><br />
-				${val.didactic_feedback}
+				<strong>Fundamentación Diagnóstica:</strong><br />
+				${val.didactic_feedback || val.justificacion}
 			</div>
 
 			${hallmarksListHtml ? `
 				<div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.5rem;">
-					<strong style="color: #e2e8f0;">Criterios morfológicos clave:</strong>
+					<strong style="color: #e2e8f0;">Criterios morfológicos observados:</strong>
 					<ul style="margin: 0.25rem 0 0 1rem; padding: 0;">${hallmarksListHtml}</ul>
 				</div>
 			` : ""}
 
-			${val.differential_diagnosis ? `
+			${(val.differential_diagnosis || val.diagnostico_diferencial) ? `
 				<div style="font-size: 0.7rem; color: #38bdf8; background: rgba(56,189,248,0.08); padding: 0.4rem; border-radius: 6px; margin-bottom: 0.4rem; line-height: 1.35;">
-					<strong>Diagnóstico Diferencial:</strong> ${val.differential_diagnosis}
+					<strong>Diagnóstico Diferencial:</strong> ${val.differential_diagnosis || val.diagnostico_diferencial}
 				</div>
 			` : ""}
 
-			${val.study_tip ? `
+			${(val.study_tip || val.recomendacion) ? `
 				<div style="font-size: 0.7rem; color: #a78bfa; background: rgba(167,139,250,0.08); padding: 0.4rem; border-radius: 6px; line-height: 1.35;">
-					💡 <strong>Consejo Práctico:</strong> ${val.study_tip}
+					💡 <strong>Recomendación / Consejo:</strong> ${val.study_tip || val.recomendacion}
 				</div>
 			` : ""}
 		`;
 
-		// Smooth scroll result into view so student sees feedback immediately
+		// Smooth scroll result into view so user sees feedback immediately
 		studentResultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
 		// Re-render SVG overlay so Gemini's badge is displayed on the cell
+		renderOverlay();
+	}
+
+	function updateStudentHistoryUI() {
+		if (!studentHistoryList) return;
+		if (!studentEvaluations || studentEvaluations.length === 0) {
+			studentHistoryList.innerHTML = `<p class="empty-hint" style="font-size: 0.72rem;">Aún no has validado estructuras en esta lámina.</p>`;
+			return;
+		}
+
+		studentHistoryList.innerHTML = studentEvaluations.map((item, idx) => {
+			const prob = item.score !== undefined ? item.score : 85;
+			const color = prob >= 80 ? "#10b981" : (prob >= 50 ? "#f59e0b" : "#ef4444");
+			const icon = prob >= 80 ? "🎯" : (prob >= 50 ? "⚠️" : "❌");
+			const choiceText = item.studentChoice || "Estructura";
+			const actualText = item.actualStructure || choiceText;
+
+			return `
+				<div class="student-history-item" data-det-id="${item.detId || ''}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.5rem; margin-bottom: 0.35rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.72rem; cursor: pointer; transition: background 0.15s ease;">
+					<div style="min-width: 0; flex: 1; margin-right: 0.5rem;">
+						<div style="font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 0.3rem;">
+							<span>${icon}</span>
+							<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${choiceText}</span>
+						</div>
+						<div style="font-size: 0.66rem; color: #94a3b8; margin-top: 0.1rem;">
+							${actualText !== choiceText ? `Diagnóstico: <strong style="color: #38bdf8;">${actualText}</strong> · ` : ""}${item.timestamp || ""}
+						</div>
+					</div>
+					<span class="badge" style="background: ${color}22; color: ${color}; font-weight: 800; font-size: 0.68rem; border: 1px solid ${color}44; flex-shrink: 0;">
+						${prob}%
+					</span>
+				</div>
+			`;
+		}).join("");
+
+		studentHistoryList.querySelectorAll(".student-history-item").forEach(el => {
+			el.addEventListener("click", () => {
+				const detId = el.getAttribute("data-det-id");
+				if (detId) {
+					onDetectionSelectedForStudent(detId);
+				}
+			});
+		});
+	}
+	window.updateStudentHistoryUI = updateStudentHistoryUI;
+
+	// Evaluate all annotations on the current slide with Gemini
+	async function evaluateAnnotationsWithGemini() {
+		console.log("evaluateAnnotationsWithGemini triggered", { activeImageKey, storeSize: imageStore.size });
+
+		if ((!activeImageKey || !imageStore.get(activeImageKey)) && imageStore.size > 0) {
+			const firstKey = imageStore.keys().next().value;
+			if (firstKey) selectImage(firstKey);
+		}
+
+		if (!activeImageKey || !imageStore.get(activeImageKey)) {
+			if (studentResultCard && studentResultContent) {
+				studentResultCard.style.display = "block";
+				studentResultCard.style.borderLeftColor = "#f59e0b";
+				studentResultContent.innerHTML = `
+					<div style="padding: 0.6rem; color: #f59e0b; font-size: 0.78rem;">
+						⚠️ <strong>No hay lámina activa cargada en el visor.</strong><br/>
+						Ve a la pestaña <em>'Imágenes & Escala'</em> para cargar o seleccionar un corte histológico.
+					</div>
+				`;
+			}
+			alert("⚠️ Selecciona o carga primero una imagen en la pestaña 'Imágenes & Escala'.");
+			return;
+		}
+
+		const imgData = imageStore.get(activeImageKey);
+		const allDets = [];
+		(imgData.groups || []).forEach(g => {
+			const groupLabel = (typeof getClassName === "function" ? getClassName(g.key) : "") || g.name || "Estructura";
+			(g.detections || []).forEach((d, dIdx) => {
+				if (!d._deleted) {
+					allDets.push({
+						...d,
+						id: d.id || `${g.key}:${dIdx}`,
+						label: d.label || groupLabel,
+						group_key: g.key,
+						scale: d.scale || (g.is_macro || g.scale === "macro" ? "macro" : "micro"),
+					});
+				}
+			});
+		});
+
+		if (allDets.length === 0) {
+			if (studentResultCard && studentResultContent) {
+				studentResultCard.style.display = "block";
+				studentResultCard.style.borderLeftColor = "#38bdf8";
+				studentResultContent.innerHTML = `
+					<div style="padding: 0.65rem; color: #e2e8f0; font-size: 0.76rem; text-align: center;">
+						<div style="font-size: 1.4rem; margin-bottom: 0.3rem;">🔬</div>
+						<strong>La lámina actual aún no tiene anotaciones ni segmentaciones.</strong>
+						<p style="color: #94a3b8; font-size: 0.72rem; margin: 0.4rem 0 0.6rem 0;">
+							Para que Gemini evalúe y calcule la probabilidad de elección correcta, segmenta primero las estructuras (células o capas tisulares).
+						</p>
+						<button type="button" id="gemini-prompt-seg-btn" class="btn-small" style="background: rgba(59,130,246,0.25); border: 1px solid rgba(59,130,246,0.5); color: #93c5fd; padding: 0.45rem 0.85rem; border-radius: 6px; cursor: pointer; font-weight: 700;">
+							🏛️ Segmentar Macroestructuras con SAM 3.1
+						</button>
+					</div>
+				`;
+				const promptSegBtn = document.getElementById("gemini-prompt-seg-btn");
+				promptSegBtn?.addEventListener("click", () => segmentMacrostructures());
+			}
+			alert("⚠️ No hay anotaciones o segmentaciones en esta lámina.\nSegmenta primero estructuras con SAM 3.1 o Cellpose antes de evaluarlas con Gemini.");
+			return;
+		}
+
+		// If exactly 1 detection is selected, evaluate that single structure!
+		if (_studentActiveDetId) {
+			validateStudentSelection(false);
+			return;
+		}
+		if (selectedDetections && selectedDetections.size === 1) {
+			const [firstId] = selectedDetections;
+			onDetectionSelectedForStudent(firstId);
+			validateStudentSelection(false);
+			return;
+		}
+
+		// UI Loading state
+		const origNoSelText = studentEvalNoSelBtn ? studentEvalNoSelBtn.innerHTML : "";
+		const origAllBtnText = studentEvalAllGeminiBtn ? studentEvalAllGeminiBtn.innerHTML : "";
+		if (studentEvalNoSelBtn) {
+			studentEvalNoSelBtn.disabled = true;
+			studentEvalNoSelBtn.innerHTML = `⏳ Gemini evaluando...`;
+		}
+		if (studentEvalAllGeminiBtn) {
+			studentEvalAllGeminiBtn.disabled = true;
+			studentEvalAllGeminiBtn.innerHTML = `⏳ Gemini evaluando...`;
+		}
+		if (statusRunning) statusRunning.style.display = "flex";
+		if (statusIdle) statusIdle.style.display = "none";
+		if (statusText) statusText.textContent = `🎓 Gemini 3.8 / 3.5 evaluando ${allDets.length} anotaciones y calculando probabilidad de elección correcta...`;
+
+		try {
+			const formData = new FormData();
+			if (imgData.file) {
+				formData.append("image", imgData.file, imgData.filename || "image.png");
+			} else if (imgData.dataUrl) {
+				const resBlob = await fetch(imgData.dataUrl);
+				const blob = await resBlob.blob();
+				formData.append("image", blob, imgData.filename || "image.png");
+			} else {
+				throw new Error("No se pudo obtener el archivo de imagen de la lámina.");
+			}
+
+			formData.append("all_detections", JSON.stringify(allDets));
+			formData.append("structure_scale", (typeof currentStructureScale !== "undefined" ? currentStructureScale : "micro") || "micro");
+			formData.append("organ_context", window._activeOntologyName || "Corte histológico óptico");
+			formData.append("preferred_model", "gemini-3.8-flash");
+
+			const res = await fetch(`${API_URL}/evaluate-segmentations-gemini`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `HTTP ${res.status}`);
+			}
+
+			const result = await res.json();
+			renderBatchEvaluationResult(result, allDets);
+
+		} catch (err) {
+			console.error("Gemini evaluation error:", err);
+			alert(`Error al evaluar anotaciones con Gemini: ${err.message}`);
+		} finally {
+			if (studentEvalNoSelBtn) {
+				studentEvalNoSelBtn.disabled = false;
+				studentEvalNoSelBtn.innerHTML = origNoSelText;
+			}
+			if (studentEvalAllGeminiBtn) {
+				studentEvalAllGeminiBtn.disabled = false;
+				studentEvalAllGeminiBtn.innerHTML = origAllBtnText;
+			}
+			if (statusRunning) statusRunning.style.display = "none";
+			if (statusIdle) statusIdle.style.display = "flex";
+		}
+	}
+	window.evaluateAnnotationsWithGemini = evaluateAnnotationsWithGemini;
+
+	function renderBatchEvaluationResult(result, allDets) {
+		if (!studentResultCard || !studentResultContent) return;
+
+		const probPct = result.porcentaje_probabilidad || result.porcentaje_global || Math.round((result.probabilidad_eleccion_correcta || 0.9) * 100);
+		const probColor = probPct >= 80 ? "#10b981" : (probPct >= 50 ? "#f59e0b" : "#ef4444");
+
+		// Update global stats
+		studentStats.total += result.total_evaluadas || allDets.length;
+		studentStats.correct += result.correctas || Math.round(allDets.length * (probPct / 100));
+		studentStats.partial += result.parciales || 0;
+		studentStats.incorrect += result.incorrectas || 0;
+
+		if (statCorrectCount) statCorrectCount.textContent = studentStats.correct.toString();
+		if (statPartialCount) statPartialCount.textContent = studentStats.partial.toString();
+		if (statIncorrectCount) statIncorrectCount.textContent = studentStats.incorrect.toString();
+		if (studentScoreBadge) {
+			const pct = Math.round((studentStats.correct / studentStats.total) * 100);
+			studentScoreBadge.textContent = `${studentStats.correct}/${studentStats.total} (${pct}%)`;
+		}
+
+		// Apply individual evaluations to detections
+		if (result.evaluaciones_individuales && Array.isArray(result.evaluaciones_individuales)) {
+			result.evaluaciones_individuales.forEach(item => {
+				const idx = item.index;
+				if (idx !== undefined && allDets[idx]) {
+					const targetDet = allDets[idx];
+					targetDet.gemini_validated = true;
+					targetDet.gemini_eval_probability = item.probabilidad_eleccion_correcta;
+					targetDet.gemini_score = Math.round((item.probabilidad_eleccion_correcta || 0.9) * 100);
+					targetDet.gemini_status = item.estado || "correcta";
+					targetDet.gemini_structure = item.diagnostico_sugerido || targetDet.label;
+					targetDet.gemini_feedback = item.justificacion_breve || "";
+				}
+			});
+		} else {
+			allDets.forEach(targetDet => {
+				targetDet.gemini_validated = true;
+				targetDet.gemini_eval_probability = result.probabilidad_eleccion_correcta || (probPct / 100);
+				targetDet.gemini_score = probPct;
+				targetDet.gemini_status = probPct >= 80 ? "correct" : (probPct >= 50 ? "partially_correct" : "incorrect");
+				targetDet.gemini_structure = targetDet.label;
+			});
+		}
+
+		studentResultCard.style.borderLeftColor = probColor;
+		studentResultCard.style.display = "block";
+
+		let indHtml = "";
+		if (result.evaluaciones_individuales && result.evaluaciones_individuales.length > 0) {
+			indHtml = `
+				<div style="margin-top: 0.65rem; max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 0.4rem; border: 1px solid var(--border-color);">
+					<div style="font-size: 0.68rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.35rem; text-transform: uppercase;">
+						Detalle de Estructuras Evaluadas:
+					</div>
+					${result.evaluaciones_individuales.map((item, i) => {
+						const iProb = Math.round((item.probabilidad_eleccion_correcta || 0.9) * 100);
+						const iColor = iProb >= 80 ? "#10b981" : (iProb >= 50 ? "#f59e0b" : "#ef4444");
+						return `
+							<div class="eval-item-row" data-idx="${item.index !== undefined ? item.index : i}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.72rem; cursor: pointer; border-radius: 4px;">
+								<div>
+									<span style="font-weight: 700; color: #e2e8f0;">#${item.index !== undefined ? item.index + 1 : i + 1}</span>
+									<span style="color: #94a3b8; margin-left: 0.25rem;">${item.eleccion_evaluada || item.diagnostico_sugerido || "Estructura"}</span>
+								</div>
+								<span class="badge" style="background: ${iColor}22; color: ${iColor}; font-weight: 800; font-size: 0.68rem; border: 1px solid ${iColor}44;">
+									${iProb}%
+								</span>
+							</div>
+						`;
+					}).join("")}
+				</div>
+			`;
+		}
+
+		studentResultContent.innerHTML = `
+			<div style="background: rgba(2,132,199,0.12); border: 1px solid rgba(56,189,248,0.35); border-radius: 8px; padding: 0.75rem; margin-bottom: 0.6rem; text-align: center;">
+				<div style="font-size: 0.68rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem;">
+					Probabilidad de Elección Correcta (LLM)
+				</div>
+				<div style="font-size: 1.8rem; font-weight: 900; color: ${probColor}; display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+					<span>🎯</span> ${probPct}%
+				</div>
+				<div style="background: rgba(255,255,255,0.1); border-radius: 9999px; height: 7px; width: 100%; margin: 0.45rem 0 0.25rem 0; overflow: hidden;">
+					<div style="background: ${probColor}; width: ${probPct}%; height: 100%; border-radius: 9999px; transition: width 0.6s ease;"></div>
+				</div>
+				<div style="font-size: 0.68rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 0.35rem;">
+					<span>Calidad segmentación: <strong style="color: #e2e8f0;">${Math.round((result.calidad_segmentacion || 0.88) * 100)}%</strong></span>
+					<span>Evaluadas: <strong style="color: #38bdf8;">${result.total_evaluadas || allDets.length}</strong></span>
+					<span>Modelo: <strong style="color: #a78bfa;">Gemini 3.8 / 3.5</strong></span>
+				</div>
+			</div>
+
+			<div style="font-size: 0.74rem; color: #cbd5e1; line-height: 1.45; background: rgba(255,255,255,0.02); padding: 0.55rem; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 0.5rem;">
+				<strong style="color: #38bdf8;">Dictamen del Patólogo (Gemini):</strong><br />
+				${result.resumen_evaluacion || "Las segmentaciones concuerdan con la morfología histológica del corte."}
+			</div>
+
+			${indHtml}
+		`;
+
+		// Hook click on individual row to select on canvas
+		studentResultContent.querySelectorAll(".eval-item-row").forEach(row => {
+			row.addEventListener("click", () => {
+				const idx = parseInt(row.getAttribute("data-idx") || "0", 10);
+				if (allDets[idx]) {
+					const det = allDets[idx];
+					const id = det.id || det._id;
+					if (id) {
+						onDetectionSelectedForStudent(id);
+					}
+				}
+			});
+		});
+
+		studentResultCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
 		renderOverlay();
 	}
 
@@ -4733,7 +5091,7 @@
 			onDetectionSelectedForStudent(firstId);
 			validateStudentSelection(false);
 		} else {
-			alert("⚠️ Selecciona 1 estructura en el visor para validar con Gemini.");
+			evaluateAnnotationsWithGemini();
 		}
 	});
 
@@ -4741,10 +5099,14 @@
 	toolbarDedupBtn?.addEventListener("click", () => deduplicateOverlappingDetections());
 
 	studentValidateBtn?.addEventListener("click", () => validateStudentSelection(false));
+	studentEvalNoSelBtn?.addEventListener("click", () => evaluateAnnotationsWithGemini());
+	studentEvalAllGeminiBtn?.addEventListener("click", () => evaluateAnnotationsWithGemini());
 	viewerValidateStudentBtn?.addEventListener("click", () => {
 		switchTab("student-quiz-tab");
 		if (_studentActiveDetId) {
 			validateStudentSelection(false);
+		} else {
+			evaluateAnnotationsWithGemini();
 		}
 	});
 

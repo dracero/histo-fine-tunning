@@ -180,6 +180,7 @@ try:
         suggest_cell_prototype_gemini,
         classify_cells_batch_gemini,
         validate_student_structure_identification,
+        evaluate_segmentation_with_gemini,
     )
 except ImportError:
     from gemini_vision import (
@@ -188,6 +189,7 @@ except ImportError:
         suggest_cell_prototype_gemini,
         classify_cells_batch_gemini,
         validate_student_structure_identification,
+        evaluate_segmentation_with_gemini,
     )
 
 # Import Automated Histology Labeling Pipeline
@@ -2253,6 +2255,65 @@ async def student_validate_structure_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in student structure validation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/evaluate-segmentations-gemini")
+async def evaluate_segmentations_gemini_endpoint(
+    image: UploadFile = File(...),
+    bbox: Optional[str] = Form(None),
+    polygon: Optional[str] = Form(None),
+    all_detections: Optional[str] = Form(None),
+    structure_choice: Optional[str] = Form(""),
+    structure_scale: str = Form("micro"),
+    organ_context: Optional[str] = Form(None),
+    preferred_model: Optional[str] = Form("gemini-3.8-flash"),
+) -> Dict[str, Any]:
+    """
+    Evaluates segmented histological annotations using Gemini (3.8 Flash / 3.5 Flash).
+    Returns probability of correct choice (probabilidad de elección correcta),
+    segmentation contour quality, true diagnosis, morphological hallmarks, and clinical rationale.
+    """
+    try:
+        contents = await image.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+        parsed_bbox = None
+        if bbox and bbox.strip():
+            try:
+                parsed_bbox = json.loads(bbox)
+            except Exception:
+                parsed_bbox = None
+
+        parsed_poly = None
+        if polygon and polygon.strip():
+            try:
+                parsed_poly = json.loads(polygon)
+            except Exception:
+                parsed_poly = None
+
+        parsed_all_dets = None
+        if all_detections and all_detections.strip():
+            try:
+                parsed_all_dets = json.loads(all_detections)
+            except Exception:
+                parsed_all_dets = None
+
+        result = evaluate_segmentation_with_gemini(
+            image=pil_image,
+            bbox=parsed_bbox,
+            polygon=parsed_poly,
+            all_detections=parsed_all_dets,
+            structure_choice=structure_choice,
+            structure_scale=structure_scale,
+            organ_context=organ_context,
+            preferred_model=preferred_model or "gemini-3.8-flash",
+        )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in Gemini segmentation evaluation: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

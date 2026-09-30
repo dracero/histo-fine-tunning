@@ -67,7 +67,7 @@
       "name": "Espermatogonia A clara",
       "name_en": "Pale A spermatogonium",
       "target_engine": "cellpose",
-      "prompt": "small round pale nucleus at the base of the tubule",
+      "prompt": "spherical or oval nucleus with pale, fine, homogeneously dusty euchromatin and 1-2 prominent nucleoli attached to the inner nuclear envelope (carioteca) resting on basement membrane",
       "expected_diameter_px": 18,
       "spatial_rules": {
         "compartment": "basal",
@@ -86,14 +86,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#10b981",
-      "label": "Espermatogonia A clara"
+      "label": "Espermatogonia A clara",
+      "cytological_features": "Núcleo esférico u ovoide apoyado en la membrana basal. Eucromatina fina, clara, translúcida y homogéneamente pulverulenta (aspecto en vidrio esmerilado uniforme). Presenta 1 o 2 nucléolos prominentes adheridos a la cara interna de la membrana nuclear (carioteca). Sin rarefacción central ni grumos toscos.",
+      "chromatin_pattern": "Eucromatina clara, fina, homogéneamente pulverulenta y translúcida (sin hendidura ni grumos toscos).",
+      "nucleolus": "1 o 2 nucléolos prominentes adosados a la cara interna de la carioteca (membrana nuclear).",
+      "nuclear_shape": "Ovoide o esférico regular, eje mayor frecuentemente paralelo a la membrana basal.",
+      "differential_diagnosis": "Se diferencia de la A oscura por su cromatina pálida y ausencia de vacuola nuclear central; se diferencia de la B por tener eucromatina homogénea fina (no grumos toscos) y nucléolos en la carioteca (no un nucléolo central único)."
     },
     {
       "key": "espermatogonia_a_oscura",
       "name": "Espermatogonia A oscura",
       "name_en": "Dark A spermatogonium",
       "target_engine": "cellpose",
-      "prompt": "small dark nucleus with central rarefaction at basement membrane",
+      "prompt": "intensely hyperchromatic dark nucleus with pathognomonic central nuclear rarefaction vacuole and peripheral chromatin resting on basement membrane",
       "expected_diameter_px": 18,
       "spatial_rules": {
         "compartment": "basal",
@@ -112,14 +117,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#ec4899",
-      "label": "Espermatogonia A oscura"
+      "label": "Espermatogonia A oscura",
+      "cytological_features": "Célula madre de reserva en la lámina basal. Núcleo ovoide o redondeado intensamente hipercromático y oscuro. Rasgo patognomónico: zona o hendidura clara central de rarefacción intranuclear ('vacuola nuclear') rodeada de cromatina periférica condensada. 1-2 nucléolos pequeños poco conspicuos adosados a la carioteca.",
+      "chromatin_pattern": "Hipercromática, sumamente densa y oscura, con zona central clara de rarefacción intranuclear ('vacuola nuclear').",
+      "nucleolus": "1 o 2 nucléolos pequeños y discretos adheridos a la carioteca.",
+      "nuclear_shape": "Ovoide o redondeado, aplanado contra la membrana basal.",
+      "differential_diagnosis": "Patognomónica zona clara central de rarefacción intranuclear ('vacuola nuclear') rodeada por cromatina oscura densa. Inconfundible frente a la cromatina pálida uniforme de la A clara y frente a los grumos de la B."
     },
     {
       "key": "espermatogonia_b",
       "name": "Espermatogonia B",
       "name_en": "B spermatogonium",
       "target_engine": "cellpose",
-      "prompt": "round nucleus with heterogeneous chromatin slightly above basal layer",
+      "prompt": "strictly spherical nucleus with heterogeneous coarse chromatin clumps dispersed throughout and typically a single prominent central nucleolus in basal to suprabasal layer",
       "expected_diameter_px": 20,
       "spatial_rules": {
         "compartment": "basal",
@@ -138,7 +148,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#6366f1",
-      "label": "Espermatogonia B"
+      "label": "Espermatogonia B",
+      "cytological_features": "Última generación espermatogonial premeiótica. Núcleo estrictamente esférico y regular. Rasgo patognomónico: cromatina marcadamente heterogénea en grumos gruesos, densos y apelotonados en la carioteca y en el interior del nucleoplasma. Típicamente un único nucléolo central prominente (no adosado a la carioteca). Frecuentemente en posición basal a yuxtabasal.",
+      "chromatin_pattern": "Heterocromatina marcadamente heterogénea condensada en grumos gruesos, densos y dispersos ('aspecto grumoso en tablero').",
+      "nucleolus": "Típicamente UN ÚNICO nucléolo CENTRAL prominente (a diferencia de las tipo A que tienen nucléolos en la periferia/carioteca).",
+      "nuclear_shape": "Estrictamente esférico, redondeado y regular.",
+      "differential_diagnosis": "Núcleo esférico con cromatina en grumos gruesos heterogéneos y nucléolo único central; a diferencia de las A clara/oscura que tienen cromatina homogénea (fina u oscura con vacuola) y nucléolos adosados a la carioteca."
     },
     {
       "key": "espermatocito_primario",
@@ -164,7 +179,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#14b8a6",
-      "label": "Espermatocito primario en paquinema"
+      "label": "Espermatocito primario en paquinema",
+      "cytological_features": "Célula meiótica de gran tamaño en capas intermedias. Núcleo esférico muy voluminoso con cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema). Citoplasma abundante.",
+      "chromatin_pattern": "Cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema).",
+      "nucleolus": "Disperso o poco visible entre filamentos meióticos gruesos.",
+      "nuclear_shape": "Esférico de gran tamaño (el núcleo más voluminoso del epitelio germinal).",
+      "differential_diagnosis": "Célula de mayor tamaño en capas medias con cromatina filamentosa gruesa meiótica típica de paquinema."
     },
     {
       "key": "espermatocito_secundario",
@@ -189,7 +209,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#f97316",
-      "label": "Espermatocito secundario"
+      "label": "Espermatocito secundario",
+      "cytological_features": "Célula intermedia post-primera división meiótica, vida media efímera. Núcleo esférico mediano con cromatina finamente granular.",
+      "chromatin_pattern": "Cromatina finamente granular, célula de vida media muy corta.",
+      "nucleolus": "Pequeño o indiferenciado.",
+      "nuclear_shape": "Esférico de tamaño mediano (menor que espermatocito I, mayor que espermátide).",
+      "differential_diagnosis": "Célula intermedia infrecuente con cromatina granular, más pequeña que el espermatocito primario."
     },
     {
       "key": "espermartide_temprana",
@@ -214,7 +239,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#84cc16",
-      "label": "Espérmátide temprana"
+      "label": "Espérmátide temprana",
+      "cytological_features": "Célula haploide adluminal. Núcleo esférico pequeño y regular con eucromatina pálida, sostenida por prolongaciones de Sertoli.",
+      "chromatin_pattern": "Eucromatina pálida homogénea, núcleo redondeado pequeño sin divisiones.",
+      "nucleolus": "Poco conspicuo o central pequeño.",
+      "nuclear_shape": "Esférico pequeño y regular en la mitad adluminal.",
+      "differential_diagnosis": "Pequeña esfera nuclear en compartimento adluminal, cromatina no condensada aún."
     },
     {
       "key": "espermartide_tardia",
@@ -240,14 +270,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#a855f7",
-      "label": "Espérmátide tardía"
+      "label": "Espérmátide tardía",
+      "cytological_features": "Espermátide en fase de maduración/espermiogénesis. Núcleo alargado, afilado y densamente condensado e hipercromático, orientado hacia el lumen.",
+      "chromatin_pattern": "Heterocromatina sumamente densa y condensada, hipercromática.",
+      "nucleolus": "Ausente (cromatina totalmente empaquetada).",
+      "nuclear_shape": "Alargada, fusiforme, afilada en punta hacia la luz.",
+      "differential_diagnosis": "Núcleo alargado, pequeño y condensado en proceso de espermiogénesis apical."
     },
     {
       "key": "espermatozoide",
       "name": "Espermatozoide",
       "name_en": "Spermatozoon",
       "target_engine": "cellpose",
-      "prompt": "dense elongated sperm head with flagellum in tubular lumen",
+      "prompt": "small dense elongated condensed nucleus with flagellum in lumen",
       "expected_diameter_px": 10,
       "spatial_rules": {
         "compartment": "luminal",
@@ -266,14 +301,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#0ea5e9",
-      "label": "Espermatozoide"
+      "label": "Espermatozoide",
+      "cytological_features": "Gameto masculino maduro libre en la luz tubular. Cabeza ovalada muy pequeña y electrodensa con acrosoma apical y flagelo largo extendido en la cavidad.",
+      "chromatin_pattern": "Cromatina ultra condensada cristalina en la cabeza espermática.",
+      "nucleolus": "Ausente.",
+      "nuclear_shape": "Cabeza ovoide pequeña con flagelo visible en la cavidad luminal.",
+      "differential_diagnosis": "Presencia de cabeza condensada y flagelo libre en la luz tubular."
     },
     {
       "key": "celula_sertoli",
       "name": "Célula de Sertoli",
       "name_en": "Sertoli cell",
       "target_engine": "cellpose",
-      "prompt": "large triangular or pyramidal nucleus with prominent nucleolus spanning epithelium",
+      "prompt": "large pale triangular or oval indented nucleus with huge prominent bird's eye central nucleolus resting on basement membrane",
       "expected_diameter_px": 24,
       "spatial_rules": {
         "compartment": "parabasal",
@@ -292,7 +332,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#ef4444",
-      "label": "Célula de Sertoli"
+      "label": "Célula de Sertoli",
+      "cytological_features": "Célula somática nodriza cuya base descansa en la lámina basal. Núcleo voluminoso, ovalado, triangular o piramidal, con pliegues o escotaduras nucleares. Eucromatina muy clara y translúcida. Rasgo patognomónico: nucléolo gigante muy prominente flanqueado por corpúsculos de heterocromatina satélite ('en ojo de buey' o 'bird's eye'). Citoplasma extenso que envuelve a las células germinales.",
+      "chromatin_pattern": "Eucromatina sumamente clara, pálida y vesicular, con pliegues en la envoltura nuclear.",
+      "nucleolus": "Nucléolo gigante voluminoso central flanqueado por heterocromatina ('ojo de buey').",
+      "nuclear_shape": "Piramidal, triangular u ovalado grande con indentaciones.",
+      "differential_diagnosis": "Nucléolo gigante en ojo de buey y forma piramidal/plegada; claramente diferenciable de los núcleos esféricos/ovoides de las espermatogonias."
     },
     {
       "key": "celula_peritubular",
@@ -318,7 +363,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#22c55e",
-      "label": "Célula peritubular"
+      "label": "Célula peritubular",
+      "cytological_features": "Célula mioide peritubular. Núcleo muy aplanado, alargado y fusiforme formando una envoltura concéntrica adherida al exterior de la lámina basal.",
+      "chromatin_pattern": "Cromatina condensada y aplanada en la pared externa.",
+      "nucleolus": "Inconspicuo.",
+      "nuclear_shape": "Aplanada, ahusada / fusiforme, rodeando la lámina basal.",
+      "differential_diagnosis": "Núcleo alargado concéntrico en la túnica propia delimitando el túbulo."
     },
     {
       "key": "celula_leydig",
@@ -342,7 +392,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#eab308",
-      "label": "Célula de Leydig"
+      "label": "Célula de Leydig",
+      "cytological_features": "Célula endocrina intersticial. Célula grande poligonal en cúmulos con citoplasma eosinófilo abundante y núcleo esférico vesiculoso con 1-2 nucléolos prominentes.",
+      "chromatin_pattern": "Eucromatina vesiculosa con heterocromatina marginal.",
+      "nucleolus": "1 o 2 nucléolos prominentes.",
+      "nuclear_shape": "Redondo excéntrico en citoplasma eosinófilo poligonal abundante.",
+      "differential_diagnosis": "Células endocrinas poligonales agrupadas en el estroma conectivo intersticial perivascular."
     }
   ],
   "spatial_rules": [
@@ -570,7 +625,7 @@
       "name": "Espermatogonia A clara",
       "name_en": "Pale A spermatogonium",
       "target_engine": "cellpose",
-      "prompt": "small round pale nucleus at the base of the tubule",
+      "prompt": "spherical or oval nucleus with pale, fine, homogeneously dusty euchromatin and 1-2 prominent nucleoli attached to the inner nuclear envelope (carioteca) resting on basement membrane",
       "expected_diameter_px": 18,
       "spatial_rules": {
         "compartment": "basal",
@@ -589,14 +644,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#10b981",
-      "label": "Espermatogonia A clara"
+      "label": "Espermatogonia A clara",
+      "cytological_features": "Núcleo esférico u ovoide apoyado en la membrana basal. Eucromatina fina, clara, translúcida y homogéneamente pulverulenta (aspecto en vidrio esmerilado uniforme). Presenta 1 o 2 nucléolos prominentes adheridos a la cara interna de la membrana nuclear (carioteca). Sin rarefacción central ni grumos toscos.",
+      "chromatin_pattern": "Eucromatina clara, fina, homogéneamente pulverulenta y translúcida (sin hendidura ni grumos toscos).",
+      "nucleolus": "1 o 2 nucléolos prominentes adosados a la cara interna de la carioteca (membrana nuclear).",
+      "nuclear_shape": "Ovoide o esférico regular, eje mayor frecuentemente paralelo a la membrana basal.",
+      "differential_diagnosis": "Se diferencia de la A oscura por su cromatina pálida y ausencia de vacuola nuclear central; se diferencia de la B por tener eucromatina homogénea fina (no grumos toscos) y nucléolos en la carioteca (no un nucléolo central único)."
     },
     {
       "key": "espermatogonia_a_oscura",
       "name": "Espermatogonia A oscura",
       "name_en": "Dark A spermatogonium",
       "target_engine": "cellpose",
-      "prompt": "small dark nucleus with central rarefaction at basement membrane",
+      "prompt": "intensely hyperchromatic dark nucleus with pathognomonic central nuclear rarefaction vacuole and peripheral chromatin resting on basement membrane",
       "expected_diameter_px": 18,
       "spatial_rules": {
         "compartment": "basal",
@@ -615,14 +675,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#ec4899",
-      "label": "Espermatogonia A oscura"
+      "label": "Espermatogonia A oscura",
+      "cytological_features": "Célula madre de reserva en la lámina basal. Núcleo ovoide o redondeado intensamente hipercromático y oscuro. Rasgo patognomónico: zona o hendidura clara central de rarefacción intranuclear ('vacuola nuclear') rodeada de cromatina periférica condensada. 1-2 nucléolos pequeños poco conspicuos adosados a la carioteca.",
+      "chromatin_pattern": "Hipercromática, sumamente densa y oscura, con zona central clara de rarefacción intranuclear ('vacuola nuclear').",
+      "nucleolus": "1 o 2 nucléolos pequeños y discretos adheridos a la carioteca.",
+      "nuclear_shape": "Ovoide o redondeado, aplanado contra la membrana basal.",
+      "differential_diagnosis": "Patognomónica zona clara central de rarefacción intranuclear ('vacuola nuclear') rodeada por cromatina oscura densa. Inconfundible frente a la cromatina pálida uniforme de la A clara y frente a los grumos de la B."
     },
     {
       "key": "espermatogonia_b",
       "name": "Espermatogonia B",
       "name_en": "B spermatogonium",
       "target_engine": "cellpose",
-      "prompt": "round nucleus with heterogeneous chromatin slightly above basal layer",
+      "prompt": "strictly spherical nucleus with heterogeneous coarse chromatin clumps dispersed throughout and typically a single prominent central nucleolus in basal to suprabasal layer",
       "expected_diameter_px": 20,
       "spatial_rules": {
         "compartment": "basal",
@@ -641,7 +706,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#6366f1",
-      "label": "Espermatogonia B"
+      "label": "Espermatogonia B",
+      "cytological_features": "Última generación espermatogonial premeiótica. Núcleo estrictamente esférico y regular. Rasgo patognomónico: cromatina marcadamente heterogénea en grumos gruesos, densos y apelotonados en la carioteca y en el interior del nucleoplasma. Típicamente un único nucléolo central prominente (no adosado a la carioteca). Frecuentemente en posición basal a yuxtabasal.",
+      "chromatin_pattern": "Heterocromatina marcadamente heterogénea condensada en grumos gruesos, densos y dispersos ('aspecto grumoso en tablero').",
+      "nucleolus": "Típicamente UN ÚNICO nucléolo CENTRAL prominente (a diferencia de las tipo A que tienen nucléolos en la periferia/carioteca).",
+      "nuclear_shape": "Estrictamente esférico, redondeado y regular.",
+      "differential_diagnosis": "Núcleo esférico con cromatina en grumos gruesos heterogéneos y nucléolo único central; a diferencia de las A clara/oscura que tienen cromatina homogénea (fina u oscura con vacuola) y nucléolos adosados a la carioteca."
     },
     {
       "key": "espermatocito_primario",
@@ -667,7 +737,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#14b8a6",
-      "label": "Espermatocito primario en paquinema"
+      "label": "Espermatocito primario en paquinema",
+      "cytological_features": "Célula meiótica de gran tamaño en capas intermedias. Núcleo esférico muy voluminoso con cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema). Citoplasma abundante.",
+      "chromatin_pattern": "Cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema).",
+      "nucleolus": "Disperso o poco visible entre filamentos meióticos gruesos.",
+      "nuclear_shape": "Esférico de gran tamaño (el núcleo más voluminoso del epitelio germinal).",
+      "differential_diagnosis": "Célula de mayor tamaño en capas medias con cromatina filamentosa gruesa meiótica típica de paquinema."
     },
     {
       "key": "espermatocito_secundario",
@@ -692,7 +767,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#f97316",
-      "label": "Espermatocito secundario"
+      "label": "Espermatocito secundario",
+      "cytological_features": "Célula intermedia post-primera división meiótica, vida media efímera. Núcleo esférico mediano con cromatina finamente granular.",
+      "chromatin_pattern": "Cromatina finamente granular, célula de vida media muy corta.",
+      "nucleolus": "Pequeño o indiferenciado.",
+      "nuclear_shape": "Esférico de tamaño mediano (menor que espermatocito I, mayor que espermátide).",
+      "differential_diagnosis": "Célula intermedia infrecuente con cromatina granular, más pequeña que el espermatocito primario."
     },
     {
       "key": "espermartide_temprana",
@@ -717,7 +797,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#84cc16",
-      "label": "Espérmátide temprana"
+      "label": "Espérmátide temprana",
+      "cytological_features": "Célula haploide adluminal. Núcleo esférico pequeño y regular con eucromatina pálida, sostenida por prolongaciones de Sertoli.",
+      "chromatin_pattern": "Eucromatina pálida homogénea, núcleo redondeado pequeño sin divisiones.",
+      "nucleolus": "Poco conspicuo o central pequeño.",
+      "nuclear_shape": "Esférico pequeño y regular en la mitad adluminal.",
+      "differential_diagnosis": "Pequeña esfera nuclear en compartimento adluminal, cromatina no condensada aún."
     },
     {
       "key": "espermartide_tardia",
@@ -743,14 +828,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#a855f7",
-      "label": "Espérmátide tardía"
+      "label": "Espérmátide tardía",
+      "cytological_features": "Espermátide en fase de maduración/espermiogénesis. Núcleo alargado, afilado y densamente condensado e hipercromático, orientado hacia el lumen.",
+      "chromatin_pattern": "Heterocromatina sumamente densa y condensada, hipercromática.",
+      "nucleolus": "Ausente (cromatina totalmente empaquetada).",
+      "nuclear_shape": "Alargada, fusiforme, afilada en punta hacia la luz.",
+      "differential_diagnosis": "Núcleo alargado, pequeño y condensado en proceso de espermiogénesis apical."
     },
     {
       "key": "espermatozoide",
       "name": "Espermatozoide",
       "name_en": "Spermatozoon",
       "target_engine": "cellpose",
-      "prompt": "dense elongated sperm head with flagellum in tubular lumen",
+      "prompt": "small dense elongated condensed nucleus with flagellum in lumen",
       "expected_diameter_px": 10,
       "spatial_rules": {
         "compartment": "luminal",
@@ -769,14 +859,19 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#0ea5e9",
-      "label": "Espermatozoide"
+      "label": "Espermatozoide",
+      "cytological_features": "Gameto masculino maduro libre en la luz tubular. Cabeza ovalada muy pequeña y electrodensa con acrosoma apical y flagelo largo extendido en la cavidad.",
+      "chromatin_pattern": "Cromatina ultra condensada cristalina en la cabeza espermática.",
+      "nucleolus": "Ausente.",
+      "nuclear_shape": "Cabeza ovoide pequeña con flagelo visible en la cavidad luminal.",
+      "differential_diagnosis": "Presencia de cabeza condensada y flagelo libre en la luz tubular."
     },
     {
       "key": "celula_sertoli",
       "name": "Célula de Sertoli",
       "name_en": "Sertoli cell",
       "target_engine": "cellpose",
-      "prompt": "large triangular or pyramidal nucleus with prominent nucleolus spanning epithelium",
+      "prompt": "large pale triangular or oval indented nucleus with huge prominent bird's eye central nucleolus resting on basement membrane",
       "expected_diameter_px": 24,
       "spatial_rules": {
         "compartment": "parabasal",
@@ -795,7 +890,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#ef4444",
-      "label": "Célula de Sertoli"
+      "label": "Célula de Sertoli",
+      "cytological_features": "Célula somática nodriza cuya base descansa en la lámina basal. Núcleo voluminoso, ovalado, triangular o piramidal, con pliegues o escotaduras nucleares. Eucromatina muy clara y translúcida. Rasgo patognomónico: nucléolo gigante muy prominente flanqueado por corpúsculos de heterocromatina satélite ('en ojo de buey' o 'bird's eye'). Citoplasma extenso que envuelve a las células germinales.",
+      "chromatin_pattern": "Eucromatina sumamente clara, pálida y vesicular, con pliegues en la envoltura nuclear.",
+      "nucleolus": "Nucléolo gigante voluminoso central flanqueado por heterocromatina ('ojo de buey').",
+      "nuclear_shape": "Piramidal, triangular u ovalado grande con indentaciones.",
+      "differential_diagnosis": "Nucléolo gigante en ojo de buey y forma piramidal/plegada; claramente diferenciable de los núcleos esféricos/ovoides de las espermatogonias."
     },
     {
       "key": "celula_peritubular",
@@ -821,7 +921,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#22c55e",
-      "label": "Célula peritubular"
+      "label": "Célula peritubular",
+      "cytological_features": "Célula mioide peritubular. Núcleo muy aplanado, alargado y fusiforme formando una envoltura concéntrica adherida al exterior de la lámina basal.",
+      "chromatin_pattern": "Cromatina condensada y aplanada en la pared externa.",
+      "nucleolus": "Inconspicuo.",
+      "nuclear_shape": "Aplanada, ahusada / fusiforme, rodeando la lámina basal.",
+      "differential_diagnosis": "Núcleo alargado concéntrico en la túnica propia delimitando el túbulo."
     },
     {
       "key": "celula_leydig",
@@ -845,7 +950,12 @@
       "role": "cell",
       "tissue_name": "Testículo",
       "color": "#eab308",
-      "label": "Célula de Leydig"
+      "label": "Célula de Leydig",
+      "cytological_features": "Célula endocrina intersticial. Célula grande poligonal en cúmulos con citoplasma eosinófilo abundante y núcleo esférico vesiculoso con 1-2 nucléolos prominentes.",
+      "chromatin_pattern": "Eucromatina vesiculosa con heterocromatina marginal.",
+      "nucleolus": "1 o 2 nucléolos prominentes.",
+      "nuclear_shape": "Redondo excéntrico en citoplasma eosinófilo poligonal abundante.",
+      "differential_diagnosis": "Células endocrinas poligonales agrupadas en el estroma conectivo intersticial perivascular."
     }
   ],
   "extracted_images": [
@@ -1006,7 +1116,7 @@
     },
     {
       "key": "espermatogonia_a_clara",
-      "prompt": "small round pale nucleus at the base of the tubule",
+      "prompt": "spherical or oval nucleus with pale, fine, homogeneously dusty euchromatin and 1-2 prominent nucleoli attached to the inner nuclear envelope (carioteca) resting on basement membrane",
       "label": "Espermatogonia A clara",
       "color": "#10b981",
       "is_macro": false,
@@ -1023,11 +1133,16 @@
           1.0
         ],
         "rule_description": "Ubicada en la zona basal en contacto con la membrana basal; prohibida en la luz tubular."
-      }
+      },
+      "cytological_features": "Núcleo esférico u ovoide apoyado en la membrana basal. Eucromatina fina, clara, translúcida y homogéneamente pulverulenta (aspecto en vidrio esmerilado uniforme). Presenta 1 o 2 nucléolos prominentes adheridos a la cara interna de la membrana nuclear (carioteca). Sin rarefacción central ni grumos toscos.",
+      "chromatin_pattern": "Eucromatina clara, fina, homogéneamente pulverulenta y translúcida (sin hendidura ni grumos toscos).",
+      "nucleolus": "1 o 2 nucléolos prominentes adosados a la cara interna de la carioteca (membrana nuclear).",
+      "nuclear_shape": "Ovoide o esférico regular, eje mayor frecuentemente paralelo a la membrana basal.",
+      "differential_diagnosis": "Se diferencia de la A oscura por su cromatina pálida y ausencia de vacuola nuclear central; se diferencia de la B por tener eucromatina homogénea fina (no grumos toscos) y nucléolos en la carioteca (no un nucléolo central único)."
     },
     {
       "key": "espermatogonia_a_oscura",
-      "prompt": "small dark nucleus with central rarefaction at basement membrane",
+      "prompt": "intensely hyperchromatic dark nucleus with pathognomonic central nuclear rarefaction vacuole and peripheral chromatin resting on basement membrane",
       "label": "Espermatogonia A oscura",
       "color": "#ec4899",
       "is_macro": false,
@@ -1044,11 +1159,16 @@
           1.0
         ],
         "rule_description": "Localizada en la capa basal adyacente a la membrana basal; ausente en el compartimento luminal."
-      }
+      },
+      "cytological_features": "Célula madre de reserva en la lámina basal. Núcleo ovoide o redondeado intensamente hipercromático y oscuro. Rasgo patognomónico: zona o hendidura clara central de rarefacción intranuclear ('vacuola nuclear') rodeada de cromatina periférica condensada. 1-2 nucléolos pequeños poco conspicuos adosados a la carioteca.",
+      "chromatin_pattern": "Hipercromática, sumamente densa y oscura, con zona central clara de rarefacción intranuclear ('vacuola nuclear').",
+      "nucleolus": "1 o 2 nucléolos pequeños y discretos adheridos a la carioteca.",
+      "nuclear_shape": "Ovoide o redondeado, aplanado contra la membrana basal.",
+      "differential_diagnosis": "Patognomónica zona clara central de rarefacción intranuclear ('vacuola nuclear') rodeada por cromatina oscura densa. Inconfundible frente a la cromatina pálida uniforme de la A clara y frente a los grumos de la B."
     },
     {
       "key": "espermatogonia_b",
-      "prompt": "round nucleus with heterogeneous chromatin slightly above basal layer",
+      "prompt": "strictly spherical nucleus with heterogeneous coarse chromatin clumps dispersed throughout and typically a single prominent central nucleolus in basal to suprabasal layer",
       "label": "Espermatogonia B",
       "color": "#6366f1",
       "is_macro": false,
@@ -1065,7 +1185,12 @@
           0.9
         ],
         "rule_description": "Situada por encima de las espermatogonias A, separada de la membrana basal pero sin alcanzar la luz."
-      }
+      },
+      "cytological_features": "Última generación espermatogonial premeiótica. Núcleo estrictamente esférico y regular. Rasgo patognomónico: cromatina marcadamente heterogénea en grumos gruesos, densos y apelotonados en la carioteca y en el interior del nucleoplasma. Típicamente un único nucléolo central prominente (no adosado a la carioteca). Frecuentemente en posición basal a yuxtabasal.",
+      "chromatin_pattern": "Heterocromatina marcadamente heterogénea condensada en grumos gruesos, densos y dispersos ('aspecto grumoso en tablero').",
+      "nucleolus": "Típicamente UN ÚNICO nucléolo CENTRAL prominente (a diferencia de las tipo A que tienen nucléolos en la periferia/carioteca).",
+      "nuclear_shape": "Estrictamente esférico, redondeado y regular.",
+      "differential_diagnosis": "Núcleo esférico con cromatina en grumos gruesos heterogéneos y nucléolo único central; a diferencia de las A clara/oscura que tienen cromatina homogénea (fina u oscura con vacuola) y nucléolos adosados a la carioteca."
     },
     {
       "key": "espermatocito_primario",
@@ -1086,7 +1211,12 @@
           0.75
         ],
         "rule_description": "Célula grande ubicada en las capas intermedias del epitelio seminífero."
-      }
+      },
+      "cytological_features": "Célula meiótica de gran tamaño en capas intermedias. Núcleo esférico muy voluminoso con cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema). Citoplasma abundante.",
+      "chromatin_pattern": "Cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema).",
+      "nucleolus": "Disperso o poco visible entre filamentos meióticos gruesos.",
+      "nuclear_shape": "Esférico de gran tamaño (el núcleo más voluminoso del epitelio germinal).",
+      "differential_diagnosis": "Célula de mayor tamaño en capas medias con cromatina filamentosa gruesa meiótica típica de paquinema."
     },
     {
       "key": "espermatocito_secundario",
@@ -1106,7 +1236,12 @@
           0.6
         ],
         "rule_description": "Localizado en capas intermedias a adluminales del epitelio, escaso en preparados."
-      }
+      },
+      "cytological_features": "Célula intermedia post-primera división meiótica, vida media efímera. Núcleo esférico mediano con cromatina finamente granular.",
+      "chromatin_pattern": "Cromatina finamente granular, célula de vida media muy corta.",
+      "nucleolus": "Pequeño o indiferenciado.",
+      "nuclear_shape": "Esférico de tamaño mediano (menor que espermatocito I, mayor que espermátide).",
+      "differential_diagnosis": "Célula intermedia infrecuente con cromatina granular, más pequeña que el espermatocito primario."
     },
     {
       "key": "espermartide_temprana",
@@ -1126,7 +1261,12 @@
           0.45
         ],
         "rule_description": "Alojada en el compartimento adluminal, sostenida por las células de Sertoli."
-      }
+      },
+      "cytological_features": "Célula haploide adluminal. Núcleo esférico pequeño y regular con eucromatina pálida, sostenida por prolongaciones de Sertoli.",
+      "chromatin_pattern": "Eucromatina pálida homogénea, núcleo redondeado pequeño sin divisiones.",
+      "nucleolus": "Poco conspicuo o central pequeño.",
+      "nuclear_shape": "Esférico pequeño y regular en la mitad adluminal.",
+      "differential_diagnosis": "Pequeña esfera nuclear en compartimento adluminal, cromatina no condensada aún."
     },
     {
       "key": "espermartide_tardia",
@@ -1147,11 +1287,16 @@
           0.3
         ],
         "rule_description": "Situada en la región apical del epitelio con orientación hacia la luz."
-      }
+      },
+      "cytological_features": "Espermátide en fase de maduración/espermiogénesis. Núcleo alargado, afilado y densamente condensado e hipercromático, orientado hacia el lumen.",
+      "chromatin_pattern": "Heterocromatina sumamente densa y condensada, hipercromática.",
+      "nucleolus": "Ausente (cromatina totalmente empaquetada).",
+      "nuclear_shape": "Alargada, fusiforme, afilada en punta hacia la luz.",
+      "differential_diagnosis": "Núcleo alargado, pequeño y condensado en proceso de espermiogénesis apical."
     },
     {
       "key": "espermatozoide",
-      "prompt": "dense elongated sperm head with flagellum in tubular lumen",
+      "prompt": "small dense elongated condensed nucleus with flagellum in lumen",
       "label": "Espermatozoide",
       "color": "#0ea5e9",
       "is_macro": false,
@@ -1168,11 +1313,16 @@
           0.25
         ],
         "rule_description": "Ubicado estrictamente en la cavidad de la luz tubular libre de epitelio."
-      }
+      },
+      "cytological_features": "Gameto masculino maduro libre en la luz tubular. Cabeza ovalada muy pequeña y electrodensa con acrosoma apical y flagelo largo extendido en la cavidad.",
+      "chromatin_pattern": "Cromatina ultra condensada cristalina en la cabeza espermática.",
+      "nucleolus": "Ausente.",
+      "nuclear_shape": "Cabeza ovoide pequeña con flagelo visible en la cavidad luminal.",
+      "differential_diagnosis": "Presencia de cabeza condensada y flagelo libre en la luz tubular."
     },
     {
       "key": "celula_sertoli",
-      "prompt": "large triangular or pyramidal nucleus with prominent nucleolus spanning epithelium",
+      "prompt": "large pale triangular or oval indented nucleus with huge prominent bird's eye central nucleolus resting on basement membrane",
       "label": "Célula de Sertoli",
       "color": "#ef4444",
       "is_macro": false,
@@ -1189,7 +1339,12 @@
           0.8
         ],
         "rule_description": "Núcleo típicamente en la segunda hilera (parabasal) extendiéndose por todo el grosor epitelial."
-      }
+      },
+      "cytological_features": "Célula somática nodriza cuya base descansa en la lámina basal. Núcleo voluminoso, ovalado, triangular o piramidal, con pliegues o escotaduras nucleares. Eucromatina muy clara y translúcida. Rasgo patognomónico: nucléolo gigante muy prominente flanqueado por corpúsculos de heterocromatina satélite ('en ojo de buey' o 'bird's eye'). Citoplasma extenso que envuelve a las células germinales.",
+      "chromatin_pattern": "Eucromatina sumamente clara, pálida y vesicular, con pliegues en la envoltura nuclear.",
+      "nucleolus": "Nucléolo gigante voluminoso central flanqueado por heterocromatina ('ojo de buey').",
+      "nuclear_shape": "Piramidal, triangular u ovalado grande con indentaciones.",
+      "differential_diagnosis": "Nucléolo gigante en ojo de buey y forma piramidal/plegada; claramente diferenciable de los núcleos esféricos/ovoides de las espermatogonias."
     },
     {
       "key": "celula_peritubular",
@@ -1210,7 +1365,12 @@
           1.1
         ],
         "rule_description": "Dispuesta concéntricamente formando parte de la pared externa del túbulo seminífero."
-      }
+      },
+      "cytological_features": "Célula mioide peritubular. Núcleo muy aplanado, alargado y fusiforme formando una envoltura concéntrica adherida al exterior de la lámina basal.",
+      "chromatin_pattern": "Cromatina condensada y aplanada en la pared externa.",
+      "nucleolus": "Inconspicuo.",
+      "nuclear_shape": "Aplanada, ahusada / fusiforme, rodeando la lámina basal.",
+      "differential_diagnosis": "Núcleo alargado concéntrico en la túnica propia delimitando el túbulo."
     },
     {
       "key": "celula_leydig",
@@ -1229,7 +1389,12 @@
         ],
         "relative_radial_position": null,
         "rule_description": "Exclusiva del tejido conectivo intersticial perivascular; estrictamente prohibida dentro de los túbulos."
-      }
+      },
+      "cytological_features": "Célula endocrina intersticial. Célula grande poligonal en cúmulos con citoplasma eosinófilo abundante y núcleo esférico vesiculoso con 1-2 nucléolos prominentes.",
+      "chromatin_pattern": "Eucromatina vesiculosa con heterocromatina marginal.",
+      "nucleolus": "1 o 2 nucléolos prominentes.",
+      "nuclear_shape": "Redondo excéntrico en citoplasma eosinófilo poligonal abundante.",
+      "differential_diagnosis": "Células endocrinas poligonales agrupadas en el estroma conectivo intersticial perivascular."
     }
   ],
   "is_histology": true

@@ -67,6 +67,11 @@ You must dissect the tissue into two complementary architectural scales and defi
      * "name_en": English name
      * "target_engine": "cellpose"
      * "prompt": Visual English prompt for morphology (e.g. "small round dark nucleus at basement membrane", "elongated condensed sperm head with flagellum in lumen")
+     * "cytological_features": High-detail cytological description in Spanish (nuclear chromatin texture, nucleoli count/position, nuclear shape, N/C ratio)
+     * "chromatin_pattern": Specific chromatin pattern (e.g. "hipercromática oscura con rarefacción central", "eucromatina fina homogénea translúcida", "grumos gruesos heterogéneos")
+     * "nucleolus": Nucleolus count, size, and position (e.g. "1-2 adosados a la carioteca", "único central prominente", "gigante en ojo de buey")
+     * "nuclear_shape": Nuclear morphology and orientation (e.g. "esférico regular", "ovoide aplanado", "piramidal indentado")
+     * "differential_diagnosis": Patognomonic hallmark distinguishing this cell from other cells residing in the same compartment
      * "expected_diameter_px": Approximate nuclear/cellular diameter in standard 20x/40x microscopy (e.g. 15 to 40)
      * "spatial_rules": Explicit spatial constraints and anatomical distribution rules:
        - "compartment": The specific histological compartment (e.g. "basal", "adluminal", "luminal", "interstitial", "cortex", "medulla")
@@ -1393,7 +1398,7 @@ def derive_spatial_map_and_rules(
     forbidden_map: Dict[str, List[str]] = {}
 
     if not ontology_doc:
-        return _apply_testicular_fallbacks(spatial_rules_lookup, spatial_map, forbidden_map)
+        return spatial_rules_lookup, spatial_map, forbidden_map
 
     # 1. Parse root-level spatial_rules list if present
     raw_rules = ontology_doc.get("spatial_rules", [])
@@ -1475,60 +1480,6 @@ def derive_spatial_map_and_rules(
                 if key not in forbidden_map[forb]:
                     forbidden_map[forb].append(key)
 
-    # 4. Check if testicular fallbacks are needed to ensure complete protection
-    return _apply_testicular_fallbacks(spatial_rules_lookup, spatial_map, forbidden_map)
-
-
-def _apply_testicular_fallbacks(
-    spatial_rules_lookup: Dict[str, Dict[str, Any]],
-    spatial_map: Dict[str, List[str]],
-    forbidden_map: Dict[str, List[str]],
-) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[str]], Dict[str, List[str]]]:
-    """Ensures absolute architectural constraints for testicular tissues."""
-    testis_germ_cells = [
-        "espermatogonia_a_clara", "espermatogonia_a_oscura", "espermatogonia_b",
-        "espermatocito_primario", "espermatocito_secundario",
-        "espermatide_temprana", "espermatide_tardia", "espermatozoide",
-        "celula_sertoli", "sertoli", "espermatogonia", "espermatocito", "espermatide"
-    ]
-    interstitial_cells = ["celula_leydig", "leydig", "celula_intersticial", "celula_peritubular"]
-
-    # 1. Tubule must strictly forbid Leydig cells
-    tubule_aliases = ["tubulo_seminifero", "tubulo", "tubule", "epitelio_germinal", "seminiferous_tubule"]
-    for t_alias in tubule_aliases:
-        forbidden_map.setdefault(t_alias, [])
-        for lc in ["celula_leydig", "leydig", "celula_intersticial"]:
-            if lc not in forbidden_map[t_alias]:
-                forbidden_map[t_alias].append(lc)
-
-    # 2. Interstitial space must strictly forbid all germ cells and Sertoli
-    interstitial_aliases = ["espacio_intersticial", "intersticio", "interstitium", "interstitial_space", "estroma_intersticial"]
-    for i_alias in interstitial_aliases:
-        forbidden_map.setdefault(i_alias, [])
-        spatial_map.setdefault(i_alias, [])
-        for gc in testis_germ_cells:
-            if gc not in forbidden_map[i_alias]:
-                forbidden_map[i_alias].append(gc)
-        for ic in interstitial_cells:
-            if ic not in spatial_map[i_alias]:
-                spatial_map[i_alias].append(ic)
-
-    # 3. Lumen must forbid spermatogonia, spermatocytes, Sertoli, and Leydig
-    lumen_aliases = ["luz_tubular", "luz", "lumen", "tubular_lumen"]
-    for l_alias in lumen_aliases:
-        forbidden_map.setdefault(l_alias, [])
-        spatial_map.setdefault(l_alias, [])
-        for non_luminal in [
-            "espermatogonia_a_clara", "espermatogonia_a_oscura", "espermatogonia_b",
-            "espermatocito_primario", "espermatocito_secundario", "celula_sertoli",
-            "celula_leydig", "leydig", "celula_peritubular"
-        ]:
-            if non_luminal not in forbidden_map[l_alias]:
-                forbidden_map[l_alias].append(non_luminal)
-        for lum in ["espermatozoide", "espermatide_tardia", "espermatide"]:
-            if lum not in spatial_map[l_alias]:
-                spatial_map[l_alias].append(lum)
-
     return spatial_rules_lookup, spatial_map, forbidden_map
 
 
@@ -1592,33 +1543,30 @@ def enforce_spatial_rules_on_detections(
         # 2. Determine containing anatomical compartment
         comp = str(det.get("containing_layer") or det.get("compartment") or "").strip().lower()
 
-        # If geometric macro polygons exist and centroid is available, check polygon containment
+        # If geometric macro polygons exist and centroid is available, check polygon containment dynamically
         if macro_polys_by_key and has_centroid:
-            # Order of evaluation: lumen (inner cavity) -> basement membrane -> tubule -> interstitium
             matched_macro = None
-            if "luz_tubular" in macro_polys_by_key:
-                for poly in macro_polys_by_key["luz_tubular"]:
+            # Evaluate most specific to least specific:
+            # 1. Cavities / lumens / inner spaces
+            # 2. Boundaries / membranes / capsules
+            # 3. Functional compartments / parenchyma
+            # 4. Stroma / connective / interstitium
+            sorted_macro_keys = sorted(
+                macro_polys_by_key.keys(),
+                key=lambda k: (
+                    0 if any(w in k for w in ["luz", "lumen", "cavidad", "sinusoide", "espacio_urinario"]) else
+                    1 if any(w in k for w in ["membrana", "capsula", "borde", "boundary", "lamina"]) else
+                    2 if any(w in k for w in ["tubulo", "foliculo", "glomerulo", "lobulillo", "compartimento"]) else
+                    3
+                )
+            )
+            for m_k in sorted_macro_keys:
+                for poly in macro_polys_by_key[m_k]:
                     if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
-                        matched_macro = "luz_tubular"
+                        matched_macro = m_k
                         break
-
-            if not matched_macro and "membrana_basal" in macro_polys_by_key:
-                for poly in macro_polys_by_key["membrana_basal"]:
-                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
-                        matched_macro = "membrana_basal"
-                        break
-
-            if not matched_macro and "tubulo_seminifero" in macro_polys_by_key:
-                for poly in macro_polys_by_key["tubulo_seminifero"]:
-                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
-                        matched_macro = "tubulo_seminifero"
-                        break
-
-            if not matched_macro and "espacio_intersticial" in macro_polys_by_key:
-                for poly in macro_polys_by_key["espacio_intersticial"]:
-                    if cv2.pointPolygonTest(poly, (cx, cy), False) >= 0:
-                        matched_macro = "espacio_intersticial"
-                        break
+                if matched_macro:
+                    break
 
             if matched_macro:
                 comp = matched_macro
@@ -1641,45 +1589,26 @@ def enforce_spatial_rules_on_detections(
         )
 
         if is_violated:
-            # Reassign to an allowed class in this compartment
+            # Reassign dynamically to an allowed class in this compartment
             replacement_key = None
             allowed_in_comp = spatial_map.get(comp, [])
 
-            if "interstic" in comp:
-                # In interstitium: prioritize Leydig or peritubular
-                for pref in ["celula_leydig", "leydig", "celula_peritubular", "celula_intersticial"]:
-                    if pref in allowed_in_comp or pref in meta_lookup:
-                        replacement_key = pref
-                        break
-                if not replacement_key:
-                    replacement_key = "celula_leydig"
+            # 1. Prioritize permitted class for this compartment from active ontology
+            for pref in allowed_in_comp:
+                if pref != d_key:
+                    replacement_key = pref
+                    break
 
-            elif "luz" in comp or "lumen" in comp:
-                # In lumen: prioritize spermatozoa or late spermatid
-                for pref in ["espermatozoide", "espermatide_tardia", "espermatide"]:
-                    if pref in allowed_in_comp or pref in meta_lookup:
-                        replacement_key = pref
-                        break
-                if not replacement_key:
-                    replacement_key = "espermatozoide"
-
-            elif "basal" in comp or "membrana" in comp:
-                # At boundary/basal: prioritize spermatogonia or Sertoli
-                for pref in ["espermatogonia_a_clara", "espermatogonia_a_oscura", "celula_sertoli", "celula_peritubular"]:
-                    if pref in allowed_in_comp or pref in meta_lookup:
-                        replacement_key = pref
-                        break
-                if not replacement_key:
-                    replacement_key = "espermatogonia_a_clara"
-
-            elif "tubulo" in comp or "tubule" in comp:
-                # Inside tubule: if Leydig, reassign to basal germ cell or intermediate spermatocyte
-                for pref in ["espermatogonia_a_clara", "espermatocito_primario", "celula_sertoli"]:
-                    if pref in allowed_in_comp or pref in meta_lookup:
-                        replacement_key = pref
-                        break
-                if not replacement_key:
-                    replacement_key = "espermatogonia_a_clara"
+            # 2. Fallback search across spatial rules matching parent macro or compartment
+            if not replacement_key:
+                for cand_k, cand_rule in spatial_rules_lookup.items():
+                    if cand_k != d_key:
+                        p_macro = str(cand_rule.get("parent_macro", "")).lower()
+                        c_zone = str(cand_rule.get("compartment", "")).lower()
+                        cand_forb = [str(x).lower() for x in cand_rule.get("forbidden_in", [])]
+                        if (p_macro == comp or c_zone == comp or comp in str(cand_rule)) and comp not in cand_forb:
+                            replacement_key = cand_k
+                            break
 
             if replacement_key and replacement_key != d_key:
                 target_meta = meta_lookup.get(replacement_key) or spatial_rules_lookup.get(replacement_key, {})

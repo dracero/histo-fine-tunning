@@ -2113,14 +2113,13 @@ async def classify_gemini_endpoint(
             if filtered:
                 candidate_classes = filtered
 
-        # Fallback to default histology classes if none provided
+        # Fallback to general cellular classes if none provided and no ontology loaded
         if not candidate_classes:
             candidate_classes = [
-                {"key": "espermatogonia_a_clara", "name": "Espermatogonia A clara", "label": "Espermatogonia A clara", "color": "#10b981"},
-                {"key": "espermatocito_primario", "name": "Espermatocito primario", "label": "Espermatocito primario", "color": "#6366f1"},
-                {"key": "espermatide_temprana", "name": "Espermátide temprana", "label": "Espermátide temprana", "color": "#06b6d4"},
-                {"key": "celula_sertoli", "name": "Célula de Sertoli", "label": "Célula de Sertoli", "color": "#ef4444"},
-                {"key": "celula_leydig", "name": "Célula de Leydig", "label": "Célula de Leydig", "color": "#f59e0b"},
+                {"key": "celula_epitelial", "name": "Célula epitelial", "label": "Célula epitelial", "color": "#10b981"},
+                {"key": "celula_estromal", "name": "Célula estromal / fibroblasto", "label": "Célula estromal / fibroblasto", "color": "#6366f1"},
+                {"key": "celula_endotelial", "name": "Célula endotelial / vascular", "label": "Célula endotelial", "color": "#06b6d4"},
+                {"key": "leucocito_infiltrante", "name": "Leucocito infiltrante", "label": "Leucocito infiltrante", "color": "#f59e0b"},
             ]
 
         classified, uncertain_idxs = classify_cells_batch_gemini(
@@ -2219,11 +2218,15 @@ async def student_validate_structure_endpoint(
     structure_scale: str = Form("micro"),
     polygon: Optional[str] = Form(None),
     organ_context: Optional[str] = Form(None),
+    ontology_name: Optional[str] = Form(None),
+    macro_annotations: Optional[str] = Form(None),
+    all_detections: Optional[str] = Form(None),
     student_notes: Optional[str] = Form(None),
 ) -> Dict[str, Any]:
     """
     Validates a student's identification of a segmented micro or macro structure
-    using Google Gemini 3.5 Flash multimodal vision.
+    using Google Gemini Multimodal Vision and active spatial/textual ontologies.
+    Embeddings are disabled per user directive; strict spatial constraints are enforced.
     """
     try:
         contents = await image.read()
@@ -2241,6 +2244,20 @@ async def student_validate_structure_endpoint(
             except Exception:
                 parsed_poly = None
 
+        parsed_macro = None
+        if macro_annotations and macro_annotations.strip():
+            try:
+                parsed_macro = json.loads(macro_annotations)
+            except Exception:
+                parsed_macro = None
+
+        parsed_all_dets = None
+        if all_detections and all_detections.strip():
+            try:
+                parsed_all_dets = json.loads(all_detections)
+            except Exception:
+                parsed_all_dets = None
+
         result = validate_student_structure_identification(
             image=pil_image,
             bbox=parsed_bbox,
@@ -2248,6 +2265,9 @@ async def student_validate_structure_endpoint(
             structure_scale=structure_scale,
             polygon=parsed_poly,
             organ_context=organ_context,
+            ontology_name=ontology_name,
+            macro_annotations=parsed_macro,
+            all_detections=parsed_all_dets,
             student_notes=student_notes,
         )
         return result
@@ -2264,15 +2284,18 @@ async def evaluate_segmentations_gemini_endpoint(
     bbox: Optional[str] = Form(None),
     polygon: Optional[str] = Form(None),
     all_detections: Optional[str] = Form(None),
+    macro_annotations: Optional[str] = Form(None),
     structure_choice: Optional[str] = Form(""),
     structure_scale: str = Form("micro"),
     organ_context: Optional[str] = Form(None),
+    ontology_name: Optional[str] = Form(None),
+    student_notes: Optional[str] = Form(None),
     preferred_model: Optional[str] = Form("gemini-3.8-flash"),
 ) -> Dict[str, Any]:
     """
-    Evaluates segmented histological annotations using Gemini (3.8 Flash / 3.5 Flash).
-    Returns probability of correct choice (probabilidad de elección correcta),
-    segmentation contour quality, true diagnosis, morphological hallmarks, and clinical rationale.
+    Evaluates segmented histological annotations using Gemini (3.8 Flash / 3.5 Flash),
+    integrating spatial ontology (compartments and topological rules) and textual ontology.
+    Embeddings are disabled per user directive; strict spatial constraints are enforced.
     """
     try:
         contents = await image.read()
@@ -2299,14 +2322,24 @@ async def evaluate_segmentations_gemini_endpoint(
             except Exception:
                 parsed_all_dets = None
 
+        parsed_macro = None
+        if macro_annotations and macro_annotations.strip():
+            try:
+                parsed_macro = json.loads(macro_annotations)
+            except Exception:
+                parsed_macro = None
+
         result = evaluate_segmentation_with_gemini(
             image=pil_image,
             bbox=parsed_bbox,
             polygon=parsed_poly,
             all_detections=parsed_all_dets,
+            macro_annotations=parsed_macro,
             structure_choice=structure_choice,
             structure_scale=structure_scale,
             organ_context=organ_context,
+            ontology_name=ontology_name,
+            student_notes=student_notes,
             preferred_model=preferred_model or "gemini-3.8-flash",
         )
         return result

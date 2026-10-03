@@ -2538,6 +2538,108 @@ async def autolabel_batch_endpoint(
         raise
     except Exception as e:
         logger.error(f"Autolabel batch error: {e}", exc_info=True)
+# ---------------------------------------------------------------------------
+# NAMS (Neo4j Agent Memory Service) Multi-Agent Endpoints
+# ---------------------------------------------------------------------------
+try:
+    from backend.nams_memory import NAMSClient, NAMSRole
+    from backend.adk_histology_agents import PedagogicalOrchestratorAgent
+except ImportError:
+    from nams_memory import NAMSClient, NAMSRole
+    from adk_histology_agents import PedagogicalOrchestratorAgent
+
+nams_service_client = NAMSClient()
+adk_orchestrator = PedagogicalOrchestratorAgent(nams_client=nams_service_client)
+
+
+@app.post("/api/nams/analyze")
+@app.post("/nams/analyze")
+async def nams_analyze_endpoint(
+    image: Optional[UploadFile] = File(None),
+    query: str = Form("Analiza las estructuras histológicas visibles"),
+    mode: str = Form("teacher"),
+    conversation_id: str = Form("default_session"),
+    user_id: str = Form("docente_1"),
+    ontology_name: str = Form("arch4"),
+    target_entity_id: Optional[str] = Form(None),
+    accepted_class: Optional[str] = Form(None),
+    teacher_rationale: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    """
+    Executes ADK multi-agent cycle with NAMS memory.
+    - 'teacher' mode: Full analysis, accepts teacher corrections, writes to NAMS knowledge graph.
+    - 'student' mode: Socratic guidance, read-only on NAMS knowledge graph.
+    """
+    try:
+        pil_image = None
+        if image is not None:
+            image_bytes = await image.read()
+            if image_bytes:
+                pil_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+        role = NAMSRole.TEACHER if mode.lower() == "teacher" else NAMSRole.STUDENT
+        result = adk_orchestrator.run_cycle(
+            image=pil_image,
+            user_query=query,
+            mode=role,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            ontology_name=ontology_name,
+            target_entity_id=target_entity_id,
+            accepted_class=accepted_class,
+            teacher_rationale=teacher_rationale,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in NAMS analyze endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/nams/correct")
+@app.post("/nams/correct")
+async def nams_teacher_correct_endpoint(
+    conversation_id: str = Form("default_session"),
+    target_entity_id: str = Form(...),
+    accepted_class: str = Form(...),
+    teacher_rationale: str = Form(...),
+    correction_text: Optional[str] = Form(""),
+) -> Dict[str, Any]:
+    """
+    Teacher Mode exclusive: Commits a teacher correction directly to NAMS knowledge graph.
+    """
+    try:
+        result = nams_service_client.record_teacher_correction(
+            conversation_id=conversation_id,
+            target_entity_id=target_entity_id,
+            correction_text=correction_text or f"Corrección a {accepted_class}",
+            accepted_class=accepted_class,
+            reasoning=teacher_rationale,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in NAMS teacher correct endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/nams/context/{conversation_id}")
+@app.get("/nams/context/{conversation_id}")
+def nams_context_endpoint(conversation_id: str) -> Dict[str, Any]:
+    """Returns layered context (reflection, observations, messages) from NAMS."""
+    try:
+        return nams_service_client.get_context(conversation_id)
+    except Exception as e:
+        logger.error(f"Error fetching NAMS context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/nams/graph")
+@app.get("/nams/graph")
+def nams_graph_endpoint() -> Dict[str, Any]:
+    """Returns nodes and edges from NAMS knowledge graph for visualization."""
+    try:
+        return nams_service_client.get_graph_visualization()
+    except Exception as e:
+        logger.error(f"Error fetching NAMS graph: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

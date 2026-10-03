@@ -14,6 +14,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import cv2
+import numpy as np
 from dotenv import load_dotenv
 from PIL import Image
 
@@ -104,7 +106,7 @@ class GeminiKeyManager:
         from google import genai
         from google.genai import types
 
-        http_opts = types.HttpOptions(timeout=90000)
+        http_opts = types.HttpOptions(timeout=30000)
         target_model = preferred_model or GEMINI_MODEL
 
         def _classify_error(err: Exception) -> Tuple[bool, float, str]:
@@ -133,11 +135,10 @@ class GeminiKeyManager:
 
             return True, 45.0, f"Error de llamada: {err_str[:120]}"
 
-        # Candidate models prioritizing Gemini 3.8 / Gemini 3.5 with intelligent fallback
-        models_to_try = [target_model]
-        for m_candidate in ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-flash-latest"]:
-            if m_candidate not in models_to_try:
-                models_to_try.append(m_candidate)
+        # Strictly restrict candidate models to Gemini 3.5 Flash and Gemini 3.8 Flash per user directive
+        ALLOWED_GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.8-flash"]
+        first_choice = target_model if target_model in ALLOWED_GEMINI_MODELS else ("gemini-3.5-flash" if "3.5" in str(target_model) else "gemini-3.8-flash")
+        models_to_try = [first_choice] + [m for m in ALLOWED_GEMINI_MODELS if m != first_choice]
 
         # If an explicit key was provided, try it first
         if explicit_api_key:
@@ -164,7 +165,7 @@ class GeminiKeyManager:
         for mod in models_to_try:
             if self._model_cooldowns.get(mod, 0) > time.time():
                 continue
-            model_overloaded = False
+
             for key in ordered_keys:
                 key_preview = key[:8] + "..." + key[-4:] if len(key) > 12 else "key"
                 try:
@@ -180,24 +181,29 @@ class GeminiKeyManager:
                 except Exception as e:
                     rotatable, cooldown, reason = _classify_error(e)
                     err_s = str(e).lower()
-                    if any(ov in err_s for ov in ["503", "unavailable", "spikes in demand", "high demand", "overloaded"]):
-                        logger.warning(f"Model {mod} is overloaded/503 ({reason}). Skipping to next candidate model immediately.")
-                        self._model_cooldowns[mod] = time.time() + 90.0
-                        model_overloaded = True
-                        last_error = e
-                        break
-                    if any(nf in err_s for nf in ["404", "not_found", "not found", "no longer available"]):
-                        logger.warning(f"Model {mod} is not found / deprecated ({reason}). Skipping model permanently.")
-                        self._model_cooldowns[mod] = time.time() + 86400.0
-                        model_overloaded = True
-                        last_error = e
-                        break
-                    self.mark_key_cooldown(key, duration_sec=cooldown, reason=reason)
-                    logger.warning(f"Gemini call failed with key [{key_preview}] on {mod} ({reason}). Rotando...")
                     last_error = e
+
+                    # Model not found / deprecated: skip this model
+                    if any(nf in err_s for nf in ["404", "not_found", "not found", "no longer available"]):
+                        logger.warning(f"Model {mod} is not found / deprecated ({reason}). Skipping model.")
+                        self._model_cooldowns[mod] = time.time() + 86400.0
+                        break
+
+                    # 503 UNAVAILABLE / Overloaded / High demand / Read/Write timeouts:
+                    # Spikes in demand are temporary and often specific to GCP project shards.
+                    # Rotate IMMEDIATELY to the next key in the pool rather than aborting the model.
+                    if any(ov in err_s for ov in ["503", "unavailable", "spikes in demand", "high demand", "overloaded", "timeout", "timed out", "read operation", "write operation"]):
+                        logger.warning(f"Key [{key_preview}] on {mod} hit transient overload/timeout ({reason}). Rotating to next key...")
+                        self.mark_key_cooldown(key, duration_sec=15.0, reason=reason)
+                        continue
+
+                    # Rate limit (429/403) or quota exhaustion: mark cooldown on key and rotate
+                    self.mark_key_cooldown(key, duration_sec=cooldown, reason=reason)
+                    logger.warning(f"Gemini call failed with key [{key_preview}] on {mod} ({reason}). Rotating...")
                     continue
-            if model_overloaded:
-                continue
+
+            # If all keys failed on this model, set a brief 10s cooldown before fallback to next allowed model
+            self._model_cooldowns[mod] = time.time() + 10.0
 
         if last_error:
             raise last_error

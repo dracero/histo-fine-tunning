@@ -37,15 +37,18 @@
 						<span class="model-pill" id="virchow-pill" title="Paige AI Virchow2 ViT-Huge (1280d)">
 							<span class="dot" id="virchow-dot"></span> Virchow2 (1280d)
 						</span>
-						<span class="model-pill active" id="gemini-keys-pill" style="border-color: rgba(14,165,233,0.4); background: rgba(14,165,233,0.08); cursor: pointer;" title="Google Gemini 3.5 Flash | Rotación de API Keys (GOOGLE_API_KEYS) ante 429/403">
-							<span class="dot green" id="gemini-keys-dot"></span> 🔑 <strong id="gemini-keys-badge" style="color: #38bdf8;">Gemini 3.5 (Rotación Auto)</strong>
+						<span class="model-pill active" id="gemini-keys-pill" style="border-color: rgba(14,165,233,0.4); background: rgba(14,165,233,0.08); cursor: pointer;" title="Google Gemini 3.5 / 3.8 Flash | Rotación de API Keys (GOOGLE_API_KEYS) ante 429/403/503">
+							<span class="dot green" id="gemini-keys-dot"></span> 🔑 <strong id="gemini-keys-badge" style="color: #38bdf8;">Gemini 3.5 / 3.8</strong>
 						</span>
 						<span class="model-pill active" id="ont-pill" style="border-color: rgba(6,182,212,0.4); background: rgba(6,182,212,0.1); cursor: pointer;" title="Ontología activa. Click para ver ontología e imágenes del PDF.">
 							<span class="dot green"></span> 🧬 <strong id="ont-pill-name" style="color: var(--accent-cyan); font-weight: 700;">Cargando...</strong>
 						</span>
+						<span class="model-pill active" id="neo4j-pill" style="border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); cursor: pointer;" title="Neo4j Local NAMS Memory (bolt://127.0.0.1:7687)">
+							<span class="dot green" id="neo4j-dot"></span> 🧠 <strong id="neo4j-pill-text" style="color: #4ade80;">Neo4j Local NAMS</strong>
+						</span>
 					</div>
 				</div>
-				<p class="subtitle">Segmentación histológica a escala micro y macro con Cellpose y Meta SAM 3.1 + Reconocimiento y validación diagnóstica con Gemini 3.5 Flash.</p>
+				<p class="subtitle">Segmentación histológica a escala micro y macro con Cellpose y Meta SAM 3.1 + Memoria NAMS Neo4j Local (Modo Profesor / Estudiante).</p>
 			</header>
 
 			<main class="app-main">
@@ -54,7 +57,7 @@
 					<!-- Tab Buttons -->
 					<div class="tab-bar">
 						<button class="tab-btn active" data-tab="images-tab">🖼️ Imágenes & Escala</button>
-						<button class="tab-btn" data-tab="student-quiz-tab" id="tab-btn-student-quiz" style="color: #38bdf8;">🎓 Validación Gemini 3.5 / 3.8</button>
+						<button class="tab-btn" data-tab="student-quiz-tab" id="tab-btn-student-quiz" style="color: #38bdf8;">🎓 NAMS Neo4j (Profesor/Alumno)</button>
 						<button class="tab-btn" data-tab="pdf-tab">📄 PDFs & Ontología</button>
 						<button class="tab-btn" data-tab="classes-tab">🏷️ Clases</button>
 						<button class="tab-btn" data-tab="export-tab">📊 Reporte</button>
@@ -404,10 +407,37 @@
 						</div>
 					</div>
 
-					<!-- ==================== STUDENT QUIZ & VALIDATION TAB ==================== -->
+					<!-- ==================== STUDENT / TEACHER NAMS NEO4J TAB ==================== -->
 					<div class="tab-content" id="student-quiz-tab">
-						<!-- Scorecard & Progress Overview -->
-						<div class="panel-box" style="margin-bottom: 0.85rem; border-left: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.05);">
+						<!-- NAMS Neo4j Local Control & Role Switcher -->
+						<div class="panel-box" style="margin-bottom: 0.75rem; background: rgba(15, 23, 42, 0.65); border: 1px solid var(--border-color); padding: 0.65rem; border-radius: 8px;">
+							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+								<span style="font-size: 0.76rem; font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 0.35rem;">
+									🧠 Memoria NAMS Neo4j <span class="badge" style="font-size: 0.6rem; background: rgba(34,197,94,0.15); color: #4ade80;">100% Local</span>
+								</span>
+								<button type="button" id="btn-view-neo4j-graph" class="btn-small" style="background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.35); color: #4ade80; font-size: 0.68rem; padding: 0.2rem 0.5rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">
+									🕸️ Explorar Grafo
+								</button>
+							</div>
+
+							<!-- Role Switcher -->
+							<div class="role-selector-bar" style="display: flex; gap: 0.35rem; background: var(--bg-tertiary); padding: 0.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 0.4rem;">
+								<button type="button" class="role-btn active" id="btn-role-teacher" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.4rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; background: #059669; color: #fff; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 0.3rem;">
+									👨‍🏫 Modo Profesor
+								</button>
+								<button type="button" class="role-btn" id="btn-role-student" style="flex: 1; font-size: 0.75rem; padding: 0.35rem 0.4rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; background: transparent; color: var(--text-muted); transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 0.3rem;">
+									🎓 Modo Estudiante
+								</button>
+							</div>
+
+							<!-- Dynamic Role Badge / Status -->
+							<div id="role-status-badge" style="font-size: 0.68rem; padding: 0.3rem 0.5rem; border-radius: 6px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); color: #6ee7b7; display: flex; align-items: center; gap: 0.35rem; line-height: 1.35;">
+								<span>🟢 <strong>Modo Docente Activo:</strong> Puedes validar estructuras y comitear correcciones directas al Grafo Neo4j local (bolt://127.0.0.1:7687).</span>
+							</div>
+						</div>
+
+						<!-- Scorecard & Progress Overview (Estudiante) -->
+						<div class="panel-box" id="student-scorecard-panel" style="margin-bottom: 0.85rem; border-left: 3px solid #38bdf8; background: rgba(56, 189, 248, 0.05); display: none;">
 							<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
 								<h3 class="section-title-sm" style="margin: 0; color: #38bdf8; display: flex; align-items: center; gap: 0.35rem;">
 									🎓 Autoevaluación del Estudiante
@@ -415,7 +445,7 @@
 								<span id="student-score-badge" class="badge" style="background: rgba(56,189,248,0.15); color: #38bdf8; font-weight: 700;">0 evaluadas</span>
 							</div>
 							<p style="font-size: 0.72rem; color: var(--text-muted); margin: 0 0 0.5rem 0; line-height: 1.35;">
-								Reconoce la estructura o célula segmentada en el visor. Gemini 3.5 evaluará tu respuesta con rigor diagnóstico y retroalimentación docente.
+								Reconoce la estructura en el visor. El tutor socrático te guiará usando el conocimiento validado en Neo4j sin alterar el grafo de referencia.
 							</p>
 							<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; text-align: center;">
 								<div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; padding: 0.35rem 0.2rem;">
@@ -502,12 +532,41 @@
 									<textarea id="student-notes-input" rows="2" placeholder="ej. Citoplasma intensamente eosinófilo, núcleo esférico excéntrico, ubicación en cuello glandular..." class="form-input" style="width: 100%; font-size: 0.74rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); resize: vertical;"></textarea>
 								</div>
 
-								<div style="display: flex; gap: 0.4rem; margin-top: 0.2rem;">
+								<div style="display: flex; gap: 0.4rem; margin-top: 0.2rem;" id="student-quiz-action-buttons">
 									<button type="button" id="student-validate-btn" class="btn-action" style="flex: 1; font-size: 0.78rem; padding: 0.55rem; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 50%, #818cf8 100%); color: #fff; font-weight: 700; border: none; border-radius: 6px; box-shadow: 0 2px 10px rgba(56,189,248,0.35); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem;" title="Evalúa con Gemini la segmentación y calcula la probabilidad de elección correcta">
 										⚖️ Evaluar Anotación con Gemini
 									</button>
 									<button type="button" id="student-direct-ask-btn" class="btn-small" style="font-size: 0.74rem; padding: 0.55rem 0.65rem; background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4); font-weight: 700; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;" title="Pregúntale a Gemini qué estructura es directamente para ver su corrección docente">
 										💡 Corrección Directa
+									</button>
+								</div>
+
+								<!-- TEACHER CORRECTION BOX (Modo Profesor - Escritura en Neo4j Local) -->
+								<div id="teacher-correction-box" style="margin-top: 0.65rem; padding: 0.65rem; background: rgba(5, 150, 105, 0.08); border: 1px solid rgba(5, 150, 105, 0.35); border-radius: 8px;">
+									<label style="font-size: 0.72rem; font-weight: 700; color: #34d399; margin-bottom: 0.3rem; display: flex; justify-content: space-between; align-items: center;">
+										<span>👨‍🏫 Corrección Docente (Grafo Neo4j Local):</span>
+										<span class="badge" style="font-size: 0.6rem; background: rgba(16,185,129,0.2); color: #6ee7b7;">HITL Write</span>
+									</label>
+									<div style="margin-bottom: 0.4rem;">
+										<input type="text" id="teacher-correct-class-input" placeholder="Clase confirmada/corregida (ej: Podocito, Túbulo proximal...)" class="form-input" style="width: 100%; font-size: 0.74rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary);" />
+									</div>
+									<textarea id="teacher-rationale-input" rows="2" placeholder="Criterio patológico/morfológico del docente (se registrará como observación y razonamiento en Neo4j)..." class="form-input" style="width: 100%; font-size: 0.72rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); resize: vertical; margin-bottom: 0.4rem;"></textarea>
+									<button type="button" id="btn-submit-teacher-correction" class="btn-action" style="width: 100%; font-size: 0.76rem; padding: 0.5rem; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #fff; font-weight: 700; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem; box-shadow: 0 2px 8px rgba(16,185,129,0.3);">
+										💾 Guardar Corrección en Grafo Neo4j (Local NAMS)
+									</button>
+								</div>
+
+								<!-- STUDENT SOCRATIC BOX (Modo Estudiante - Solo Lectura) -->
+								<div id="student-socratic-box" style="display: none; margin-top: 0.65rem; padding: 0.65rem; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 8px;">
+									<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+										<span style="font-size: 0.72rem; font-weight: 700; color: #38bdf8;">
+											🎓 Tutor Socrático (Memoria NAMS Neo4j)
+										</span>
+										<span class="badge" style="font-size: 0.6rem; background: rgba(56,189,248,0.2); color: #38bdf8;">🔒 Solo Lectura</span>
+									</div>
+									<textarea id="student-socratic-query-input" rows="2" placeholder="Pregunta al tutor socrático (ej: ¿Por qué esta célula no es un fibroblasto o qué características debo mirar?)..." class="form-input" style="width: 100%; font-size: 0.72rem; padding: 0.35rem 0.5rem; background: var(--bg-tertiary); resize: vertical; margin-bottom: 0.4rem;"></textarea>
+									<button type="button" id="btn-ask-socratic-tutor" class="btn-action" style="width: 100%; font-size: 0.76rem; padding: 0.5rem; background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%); color: #fff; font-weight: 700; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.35rem; box-shadow: 0 2px 8px rgba(56,189,248,0.3);">
+										💬 Consultar al Tutor Socrático (Sin alterar Grafo)
 									</button>
 								</div>
 							</div>
@@ -725,6 +784,33 @@
 						<div class="progress-fill" id="batch-progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--primary), var(--accent-cyan)); transition: width 0.3s;"></div>
 					</div>
 					<span id="batch-progress-text" style="font-size: 0.75rem; color: var(--accent-cyan); font-weight: 600;">0 / 0 procesadas (0%)</span>
+				</div>
+			</div>
+		</div>
+
+		<!-- Neo4j Local NAMS Graph Explorer Modal -->
+		<div id="neo4j-graph-modal" class="modal-backdrop" style="display: none;">
+			<div class="modal-card modal-card-lg" style="max-width: 840px; width: 92%;">
+				<div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.6rem;">
+					<h3 style="margin: 0; color: #4ade80; display: flex; align-items: center; gap: 0.4rem; font-size: 1rem;">
+						🧠 Grafo de Conocimiento Neo4j Local (NAMS)
+					</h3>
+					<button type="button" id="close-neo4j-modal-btn" class="btn-small btn-outline" style="padding: 0.2rem 0.5rem; cursor: pointer;">✕</button>
+				</div>
+				<div class="modal-body" style="padding: 1.2rem; max-height: 72vh; overflow-y: auto;">
+					<div id="neo4j-modal-stats" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-bottom: 1rem;"></div>
+					<div style="margin-bottom: 1rem;">
+						<h4 style="font-size: 0.8rem; color: #38bdf8; margin: 0 0 0.4rem 0;">📜 Reflexión Activa y Observaciones del Docente:</h4>
+						<div id="neo4j-modal-observations" style="font-size: 0.74rem; background: var(--bg-tertiary); padding: 0.6rem; border-radius: 6px; border: 1px solid var(--border-color); max-height: 140px; overflow-y: auto; line-height: 1.4;">
+							Cargando observaciones de Neo4j...
+						</div>
+					</div>
+					<div>
+						<h4 style="font-size: 0.8rem; color: #34d399; margin: 0 0 0.4rem 0;">🏷️ Entidades y Relaciones en Neo4j (bolt://127.0.0.1:7687):</h4>
+						<div id="neo4j-modal-entities-list" style="font-size: 0.74rem; display: flex; flex-direction: column; gap: 0.4rem; max-height: 250px; overflow-y: auto;">
+							Cargando entidades de Neo4j...
+						</div>
+					</div>
 				</div>
 			</div>
 		</div>
@@ -2278,8 +2364,30 @@
 
 	// Keyboard shortcuts
 	document.addEventListener("keydown", (e) => {
+		const target = e.target;
+		const active = document.activeElement;
+		const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+
+		const isInputElement = (el) => {
+			if (!el || !(el instanceof HTMLElement)) return false;
+			const tag = el.tagName ? el.tagName.toUpperCase() : "";
+			return (
+				tag === "INPUT" ||
+				tag === "TEXTAREA" ||
+				tag === "SELECT" ||
+				el.isContentEditable === true ||
+				Boolean(el.closest && el.closest("input, textarea, select, [contenteditable='true'], #student-socratic-box, #teacher-correction-box, #student-active-challenge, .sidebar-panel, .panel-box, .modal-card, .modal-backdrop"))
+			);
+		};
+
+		const isTyping = isInputElement(active) || isInputElement(target) || path.some(el => isInputElement(el));
+		if (isTyping) {
+			// Never intercept shortcuts while typing in form inputs, textareas, or panels
+			return;
+		}
+
 		if (e.key === "Delete" || e.key === "Backspace") {
-			if (selectedDetections.size > 0 && document.activeElement.tagName !== "INPUT") {
+			if (selectedDetections.size > 0) {
 				e.preventDefault();
 				deleteSelectedDetections();
 			}
@@ -2294,7 +2402,7 @@
 			contextMenu.style.display = "none";
 		}
 		// Quick correction tool hotkeys (when not editing text inputs)
-		if (document.activeElement.tagName !== "INPUT" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+		if (!e.ctrlKey && !e.metaKey && !e.altKey) {
 			if (typeof setActiveInteractiveTool === "function") {
 				if (e.key === "b" || e.key === "B") {
 					setActiveInteractiveTool("box");
@@ -2308,7 +2416,7 @@
 			}
 		}
 		// Ctrl+A = select all visible
-		if (e.key === "a" && (e.ctrlKey || e.metaKey) && document.activeElement.tagName !== "INPUT") {
+		if (e.key === "a" && (e.ctrlKey || e.metaKey)) {
 			e.preventDefault();
 			selectAllVisible();
 		}
@@ -4459,6 +4567,15 @@
 			studentNotesInput.value = "";
 		}
 
+		const teacherClassInput = document.getElementById("teacher-correct-class-input");
+		const teacherRatInput = document.getElementById("teacher-rationale-input");
+		if (teacherClassInput) {
+			teacherClassInput.value = det.label || "";
+		}
+		if (teacherRatInput) {
+			teacherRatInput.value = det.teacher_rationale || "";
+		}
+
 		// Draw preview crop
 		renderStudentCrop(det);
 
@@ -4552,7 +4669,7 @@
 			formData.append("structure_choice", studentChoice);
 			formData.append("student_choice", studentChoice);
 			formData.append("structure_scale", detScale);
-			formData.append("preferred_model", "gemini-3.8-flash");
+			formData.append("preferred_model", "gemini-3.5-flash");
 
 			const bbox = det.box || (det.bbox ? [det.bbox[0], det.bbox[1], det.bbox[0] + det.bbox[2], det.bbox[1] + det.bbox[3]] : [0,0,50,50]);
 			formData.append("bbox", JSON.stringify(bbox));
@@ -4993,7 +5110,7 @@
 			formData.append("ontology_name", activeOntology);
 			formData.append("organ_context", activeOntology);
 			formData.append("structure_scale", (typeof currentStructureScale !== "undefined" ? currentStructureScale : "micro") || "micro");
-			formData.append("preferred_model", "gemini-3.8-flash");
+			formData.append("preferred_model", "gemini-3.5-flash");
 
 			const res = await fetch(`${API_URL}/evaluate-segmentations-gemini`, {
 				method: "POST",
@@ -5261,6 +5378,306 @@
 			switchTab("student-quiz-tab");
 		}
 		hideContextMenu();
+	});
+
+	// =========================================================================
+	// NAMS Neo4j Local (Profesor / Estudiante) Management
+	// =========================================================================
+	let currentNamsRole = "teacher";
+	const btnRoleTeacher = document.getElementById("btn-role-teacher");
+	const btnRoleStudent = document.getElementById("btn-role-student");
+	const roleStatusBadge = document.getElementById("role-status-badge");
+	const teacherCorrectionBox = document.getElementById("teacher-correction-box");
+	const studentSocraticBox = document.getElementById("student-socratic-box");
+	const studentScorecardPanel = document.getElementById("student-scorecard-panel");
+	const studentQuizActionButtons = document.getElementById("student-quiz-action-buttons");
+	const teacherCorrectClassInput = document.getElementById("teacher-correct-class-input");
+	const teacherRationaleInput = document.getElementById("teacher-rationale-input");
+	const btnSubmitTeacherCorrection = document.getElementById("btn-submit-teacher-correction");
+	const studentSocraticQueryInput = document.getElementById("student-socratic-query-input");
+	const btnAskSocraticTutor = document.getElementById("btn-ask-socratic-tutor");
+	const btnViewNeo4jGraph = document.getElementById("btn-view-neo4j-graph");
+	const neo4jGraphModal = document.getElementById("neo4j-graph-modal");
+	const closeNeo4jModalBtn = document.getElementById("close-neo4j-modal-btn");
+	const neo4jPill = document.getElementById("neo4j-pill");
+
+	function setNamsRole(role) {
+		currentNamsRole = role === "student" ? "student" : "teacher";
+		const isTeacher = currentNamsRole === "teacher";
+
+		if (btnRoleTeacher) {
+			btnRoleTeacher.style.background = isTeacher ? "#059669" : "transparent";
+			btnRoleTeacher.style.color = isTeacher ? "#fff" : "var(--text-muted)";
+			btnRoleTeacher.classList.toggle("active", isTeacher);
+		}
+		if (btnRoleStudent) {
+			btnRoleStudent.style.background = !isTeacher ? "#0284c7" : "transparent";
+			btnRoleStudent.style.color = !isTeacher ? "#fff" : "var(--text-muted)";
+			btnRoleStudent.classList.toggle("active", !isTeacher);
+		}
+
+		if (roleStatusBadge) {
+			if (isTeacher) {
+				roleStatusBadge.innerHTML = '<span>🟢 <strong>Modo Docente Activo:</strong> Puedes validar estructuras y comitear correcciones directas al Grafo Neo4j local (bolt://127.0.0.1:7687).</span>';
+				roleStatusBadge.style.borderColor = "rgba(16, 185, 129, 0.25)";
+				roleStatusBadge.style.color = "#6ee7b7";
+				roleStatusBadge.style.background = "rgba(16, 185, 129, 0.1)";
+			} else {
+				roleStatusBadge.innerHTML = '<span>🔒 <strong>Modo Estudiante (Solo Lectura):</strong> Consulta al tutor socrático con el conocimiento de Neo4j sin alterar el Grafo canónico.</span>';
+				roleStatusBadge.style.borderColor = "rgba(56, 189, 248, 0.25)";
+				roleStatusBadge.style.color = "#7dd3fc";
+				roleStatusBadge.style.background = "rgba(56, 189, 248, 0.1)";
+			}
+		}
+
+		if (teacherCorrectionBox) teacherCorrectionBox.style.display = isTeacher ? "block" : "none";
+		if (studentSocraticBox) studentSocraticBox.style.display = !isTeacher ? "block" : "none";
+		if (studentScorecardPanel) studentScorecardPanel.style.display = !isTeacher ? "block" : "none";
+		if (studentQuizActionButtons) studentQuizActionButtons.style.display = !isTeacher ? "flex" : "none";
+	}
+
+	btnRoleTeacher?.addEventListener("click", () => setNamsRole("teacher"));
+	btnRoleStudent?.addEventListener("click", () => setNamsRole("student"));
+
+	// Submit Teacher Correction directly to Neo4j Local
+	btnSubmitTeacherCorrection?.addEventListener("click", async () => {
+		const acceptedClass = teacherCorrectClassInput?.value.trim() || "";
+		const rationale = teacherRationaleInput?.value.trim() || "";
+
+		if (!acceptedClass) {
+			alert("Por favor ingresa la clase confirmada o corregida.");
+			return;
+		}
+		if (!_studentActiveDetId) {
+			alert("Por favor selecciona una estructura en el visor primero.");
+			return;
+		}
+
+		const origBtnText = btnSubmitTeacherCorrection.innerHTML;
+		btnSubmitTeacherCorrection.disabled = true;
+		btnSubmitTeacherCorrection.innerHTML = `⏳ Comiteando a Neo4j Local...`;
+
+		try {
+			const convId = "session_" + (activeImageKey || "default");
+			const formData = new FormData();
+			formData.append("conversation_id", convId);
+			formData.append("target_entity_id", _studentActiveDetId);
+			formData.append("accepted_class", acceptedClass);
+			formData.append("teacher_rationale", rationale || "Validación directa por el docente");
+
+			const res = await fetch(`${API_URL}/nams/correct`, {
+				method: "POST",
+				body: formData
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `HTTP ${res.status}`);
+			}
+
+			const data = await res.json();
+
+			// Update local detection
+			const mapEntry = findDetectionById(_studentActiveDetId);
+			if (mapEntry && mapEntry.det) {
+				mapEntry.det.label = acceptedClass;
+				mapEntry.det.teacher_validated = true;
+				mapEntry.det.teacher_rationale = rationale;
+			}
+			renderOverlay();
+			updateClassesList();
+
+			// Show validation card
+			renderValidationResult({
+				status: "correct",
+				score: 100,
+				probabilidad_eleccion_correcta: 1.0,
+				porcentaje_probabilidad: 100,
+				actual_structure: acceptedClass,
+				verdict_title: "Validación Docente Persistida 💾",
+				didactic_feedback: `✔ Registrado en Neo4j local (bolt://127.0.0.1:7687).\n\nObservación creada: ${data.observation || ''}`,
+				criterio_diagnostico: rationale,
+			});
+
+			statusText.textContent = `✔ Corrección persistida en Neo4j local para ${_studentActiveDetId} -> ${acceptedClass}.`;
+		} catch (err) {
+			console.error("Error guardando corrección en Neo4j:", err);
+			alert(`⚠️ Error guardando en Neo4j local: ${err.message}`);
+		} finally {
+			btnSubmitTeacherCorrection.disabled = false;
+			btnSubmitTeacherCorrection.innerHTML = origBtnText;
+		}
+	});
+
+	// Submit Student Socratic Query to NAMS Memory
+	btnAskSocraticTutor?.addEventListener("click", async () => {
+		const query = studentSocraticQueryInput?.value.trim() || "";
+		if (!query) {
+			alert("Por favor escribe tu duda o consulta para el tutor socrático.");
+			return;
+		}
+
+		const origBtnText = btnAskSocraticTutor.innerHTML;
+		btnAskSocraticTutor.disabled = true;
+		btnAskSocraticTutor.innerHTML = `🧠 Consultando Tutor Socrático (NAMS)...`;
+
+		try {
+			const convId = "session_" + (activeImageKey || "default");
+			const formData = new FormData();
+			formData.append("query", query);
+			formData.append("mode", "student");
+			formData.append("conversation_id", convId);
+			if (_studentActiveDetId) {
+				formData.append("target_entity_id", _studentActiveDetId);
+			}
+			if (activeImageKey && imageStore.has(activeImageKey)) {
+				const imgData = imageStore.get(activeImageKey);
+				if (imgData.file) {
+					formData.append("image", imgData.file);
+				}
+			}
+
+			const res = await fetch(`${API_URL}/nams/analyze`, {
+				method: "POST",
+				body: formData
+			});
+
+			if (!res.ok) {
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.detail || `HTTP ${res.status}`);
+			}
+
+			const data = await res.json();
+
+			renderValidationResult({
+				status: "partial",
+				score: 90,
+				probabilidad_eleccion_correcta: 0.9,
+				porcentaje_probabilidad: 90,
+				actual_structure: "Orientación Pedagógica Socrática",
+				verdict_title: "Tutor Socrático NAMS 🎓",
+				didactic_feedback: data.response || "No se recibió respuesta del tutor.",
+			});
+		} catch (err) {
+			console.error("Error consultando tutor socrático:", err);
+			alert(`⚠️ Error consultando tutor: ${err.message}`);
+		} finally {
+			btnAskSocraticTutor.disabled = false;
+			btnAskSocraticTutor.innerHTML = origBtnText;
+		}
+	});
+
+	// Prevent keyboard events in student socratic box and related inputs from triggering viewer/drawing shortcuts
+	studentSocraticQueryInput?.addEventListener("keydown", (e) => {
+		e.stopPropagation();
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault();
+			btnAskSocraticTutor?.click();
+		}
+	});
+	studentSocraticQueryInput?.addEventListener("keyup", (e) => e.stopPropagation());
+	studentSocraticQueryInput?.addEventListener("keypress", (e) => e.stopPropagation());
+	studentSocraticBox?.addEventListener("keydown", (e) => e.stopPropagation());
+	studentSocraticBox?.addEventListener("click", (e) => {
+		if (e.target !== btnAskSocraticTutor && studentSocraticQueryInput) {
+			studentSocraticQueryInput.focus();
+		}
+	});
+
+	// Stop propagation for all student & teacher form text inputs so shortcuts never intercept them
+	[
+		studentNotesInput,
+		studentChoiceInput,
+		teacherCorrectClassInput,
+		teacherRationaleInput
+	].forEach(inp => {
+		if (inp) {
+			inp.addEventListener("keydown", (e) => e.stopPropagation());
+			inp.addEventListener("keyup", (e) => e.stopPropagation());
+			inp.addEventListener("keypress", (e) => e.stopPropagation());
+		}
+	});
+
+	// Open / Close Neo4j Graph Explorer Modal
+	async function openNeo4jModal() {
+		if (neo4jGraphModal) neo4jGraphModal.style.display = "flex";
+		const statsBox = document.getElementById("neo4j-modal-stats");
+		const obsBox = document.getElementById("neo4j-modal-observations");
+		const entList = document.getElementById("neo4j-modal-entities-list");
+
+		if (statsBox) statsBox.innerHTML = '<div style="color: var(--text-muted); font-size: 0.75rem;">Consultando Neo4j local (bolt://127.0.0.1:7687)...</div>';
+
+		try {
+			const convId = "session_" + (activeImageKey || "default");
+			const [graphRes, ctxRes] = await Promise.all([
+				fetch(`${API_URL}/nams/graph`),
+				fetch(`${API_URL}/nams/context/${convId}`).catch(() => null)
+			]);
+
+			const graphData = await graphRes.json();
+			const ctxData = ctxRes && ctxRes.ok ? await ctxRes.json() : null;
+
+			if (statsBox) {
+				statsBox.innerHTML = `
+					<div style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 6px; padding: 0.5rem; text-align: center;">
+						<div style="font-size: 1.15rem; font-weight: 800; color: #4ade80;">${graphData.total_nodes || 0}</div>
+						<div style="font-size: 0.65rem; color: #86efac; font-weight: 600;">Nodos / Entidades</div>
+					</div>
+					<div style="background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); border-radius: 6px; padding: 0.5rem; text-align: center;">
+						<div style="font-size: 1.15rem; font-weight: 800; color: #38bdf8;">${graphData.total_edges || 0}</div>
+						<div style="font-size: 0.65rem; color: #7dd3fc; font-weight: 600;">Relaciones / Tripletas</div>
+					</div>
+					<div style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 6px; padding: 0.5rem; text-align: center;">
+						<div style="font-size: 0.85rem; font-weight: 800; color: #c084fc;">bolt://127.0.0.1:7687</div>
+						<div style="font-size: 0.65rem; color: #d8b4fe; font-weight: 600;">${graphData.engine || 'Neo4j Local'}</div>
+					</div>
+				`;
+			}
+
+			if (obsBox) {
+				const observations = ctxData?.observations || [];
+				const refl = ctxData?.active_reflection || "";
+				let html = "";
+				if (refl) {
+					html += `<div style="margin-bottom: 0.4rem; color: #e2e8f0; font-size: 0.72rem;"><strong>Reflexión Activa:</strong> ${refl}</div>`;
+				}
+				if (observations.length > 0) {
+					html += `<div style="color: var(--accent-cyan); font-size: 0.68rem; font-weight: 600; margin-bottom: 0.2rem;">Observaciones registradas en Neo4j:</div>`;
+					observations.forEach(o => {
+						html += `<div style="padding: 0.2rem 0; border-bottom: 1px dashed rgba(255,255,255,0.06); color: #cbd5e1; font-size: 0.7rem;">• ${o}</div>`;
+					});
+				}
+				obsBox.innerHTML = html || "<span style='color: var(--text-muted);'>No hay observaciones registradas en esta sesión.</span>";
+			}
+
+			if (entList) {
+				const nodes = graphData.nodes || [];
+				if (nodes.length === 0) {
+					entList.innerHTML = "<span style='color: var(--text-muted);'>No hay entidades en el grafo Neo4j local aún.</span>";
+				} else {
+					entList.innerHTML = nodes.map(n => `
+						<div style="padding: 0.45rem 0.6rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+							<div>
+								<strong style="color: #38bdf8;">${n.label}</strong>
+								<span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 0.4rem;">[${n.type || 'Entity'}]</span>
+								${n.histology_class ? `<span style="font-size: 0.65rem; color: #4ade80; margin-left: 0.4rem; font-weight: 700;">(${n.histology_class})</span>` : ''}
+								<div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem;">${n.description || ''}</div>
+							</div>
+							${n.verified ? '<span class="badge" style="background: rgba(34,197,94,0.2); color: #4ade80; font-size: 0.6rem; padding: 0.15rem 0.4rem;">Docente ✔</span>' : ''}
+						</div>
+					`).join("");
+				}
+			}
+		} catch (err) {
+			console.error("Error abriendo modal Neo4j:", err);
+			if (statsBox) statsBox.innerHTML = `<div style="color: #ef4444; font-size: 0.75rem;">Error conectando a Neo4j local: ${err.message}</div>`;
+		}
+	}
+
+	btnViewNeo4jGraph?.addEventListener("click", openNeo4jModal);
+	neo4jPill?.addEventListener("click", openNeo4jModal);
+	closeNeo4jModalBtn?.addEventListener("click", () => {
+		if (neo4jGraphModal) neo4jGraphModal.style.display = "none";
 	});
 
 	studentClearHistoryBtn?.addEventListener("click", () => {

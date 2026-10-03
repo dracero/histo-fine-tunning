@@ -1,0 +1,1401 @@
+{
+  "domain": "arch4",
+  "tissue_name": "Testículo",
+  "source_pdf": "arch4.pdf",
+  "pdf_id": "af51e67a2f47",
+  "macro_structures": [
+    {
+      "key": "tubulo_seminifero",
+      "name": "Túbulo seminífero",
+      "name_en": "Seminiferous tubule",
+      "role": "compartment",
+      "target_engine": "sam3",
+      "prompt": "circular or oval cross section of seminiferous tubule",
+      "description": "Unidad tubular funcional revestida por el epitelio seminífero estratificado.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#e11d48",
+      "label": "Túbulo seminífero"
+    },
+    {
+      "key": "membrana_basal",
+      "name": "Membrana basal tubular",
+      "name_en": "Basement membrane",
+      "role": "boundary_outer",
+      "target_engine": "sam3",
+      "prompt": "thin basement membrane boundary ring surrounding tubule",
+      "description": "Lámina externa que delimita el epitelio seminífero del estroma intersticial.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#8b5cf6",
+      "label": "Membrana basal tubular"
+    },
+    {
+      "key": "luz_tubular",
+      "name": "Luz del túbulo",
+      "name_en": "Tubular lumen",
+      "role": "cavity",
+      "target_engine": "sam3",
+      "prompt": "empty central tubular lumen cavity space",
+      "description": "Espacio central donde convergen las espermátides tardías y se liberan los espermatozoides.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#06b6d4",
+      "label": "Luz del túbulo"
+    },
+    {
+      "key": "espacio_intersticial",
+      "name": "Espacio intersticial",
+      "name_en": "Interstitial stroma",
+      "role": "stroma",
+      "target_engine": "sam3",
+      "prompt": "interstitial connective tissue space between seminiferous tubules",
+      "description": "Tejido conectivo laxo que contiene vasos sanguíneos y cúmulos de células endocrinas.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#f59e0b",
+      "label": "Espacio intersticial"
+    }
+  ],
+  "micro_structures": [
+    {
+      "key": "espermatogonia_a_clara",
+      "name": "Espermatogonia A clara",
+      "name_en": "Pale A spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "spherical or oval nucleus with pale, fine, homogeneously dusty euchromatin and 1-2 prominent nucleoli attached to the inner nuclear envelope (carioteca) resting on basement membrane",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.85,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal en contacto con la membrana basal; prohibida en la luz tubular."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#10b981",
+      "label": "Espermatogonia A clara",
+      "cytological_features": "Núcleo esférico u ovoide apoyado en la membrana basal. Eucromatina fina, clara, translúcida y homogéneamente pulverulenta (aspecto en vidrio esmerilado uniforme). Presenta 1 o 2 nucléolos prominentes adheridos a la cara interna de la membrana nuclear (carioteca). Sin rarefacción central ni grumos toscos.",
+      "chromatin_pattern": "Eucromatina clara, fina, homogéneamente pulverulenta y translúcida (sin hendidura ni grumos toscos).",
+      "nucleolus": "1 o 2 nucléolos prominentes adosados a la cara interna de la carioteca (membrana nuclear).",
+      "nuclear_shape": "Ovoide o esférico regular, eje mayor frecuentemente paralelo a la membrana basal.",
+      "differential_diagnosis": "Se diferencia de la A oscura por su cromatina pálida y ausencia de vacuola nuclear central; se diferencia de la B por tener eucromatina homogénea fina (no grumos toscos) y nucléolos en la carioteca (no un nucléolo central único)."
+    },
+    {
+      "key": "espermatogonia_a_oscura",
+      "name": "Espermatogonia A oscura",
+      "name_en": "Dark A spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "intensely hyperchromatic dark nucleus with pathognomonic central nuclear rarefaction vacuole and peripheral chromatin resting on basement membrane",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.85,
+          1.0
+        ],
+        "rule_description": "Localizada en la capa basal adyacente a la membrana basal; ausente en el compartimento luminal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#ec4899",
+      "label": "Espermatogonia A oscura",
+      "cytological_features": "Célula madre de reserva en la lámina basal. Núcleo ovoide o redondeado intensamente hipercromático y oscuro. Rasgo patognomónico: zona o hendidura clara central de rarefacción intranuclear ('vacuola nuclear') rodeada de cromatina periférica condensada. 1-2 nucléolos pequeños poco conspicuos adosados a la carioteca.",
+      "chromatin_pattern": "Hipercromática, sumamente densa y oscura, con zona central clara de rarefacción intranuclear ('vacuola nuclear').",
+      "nucleolus": "1 o 2 nucléolos pequeños y discretos adheridos a la carioteca.",
+      "nuclear_shape": "Ovoide o redondeado, aplanado contra la membrana basal.",
+      "differential_diagnosis": "Patognomónica zona clara central de rarefacción intranuclear ('vacuola nuclear') rodeada por cromatina oscura densa. Inconfundible frente a la cromatina pálida uniforme de la A clara y frente a los grumos de la B."
+    },
+    {
+      "key": "espermatogonia_b",
+      "name": "Espermatogonia B",
+      "name_en": "B spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "strictly spherical nucleus with heterogeneous coarse chromatin clumps dispersed throughout and typically a single prominent central nucleolus in basal to suprabasal layer",
+      "expected_diameter_px": 20,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.65,
+          0.9
+        ],
+        "rule_description": "Situada por encima de las espermatogonias A, separada de la membrana basal pero sin alcanzar la luz."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#6366f1",
+      "label": "Espermatogonia B",
+      "cytological_features": "Última generación espermatogonial premeiótica. Núcleo estrictamente esférico y regular. Rasgo patognomónico: cromatina marcadamente heterogénea en grumos gruesos, densos y apelotonados en la carioteca y en el interior del nucleoplasma. Típicamente un único nucléolo central prominente (no adosado a la carioteca). Frecuentemente en posición basal a yuxtabasal.",
+      "chromatin_pattern": "Heterocromatina marcadamente heterogénea condensada en grumos gruesos, densos y dispersos ('aspecto grumoso en tablero').",
+      "nucleolus": "Típicamente UN ÚNICO nucléolo CENTRAL prominente (a diferencia de las tipo A que tienen nucléolos en la periferia/carioteca).",
+      "nuclear_shape": "Estrictamente esférico, redondeado y regular.",
+      "differential_diagnosis": "Núcleo esférico con cromatina en grumos gruesos heterogéneos y nucléolo único central; a diferencia de las A clara/oscura que tienen cromatina homogénea (fina u oscura con vacuola) y nucléolos adosados a la carioteca."
+    },
+    {
+      "key": "espermatocito_primario",
+      "name": "Espermatocito primario en paquinema",
+      "name_en": "Primary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "large round central nucleus with filamentous chromatin in epithelial layer",
+      "expected_diameter_px": 26,
+      "spatial_rules": {
+        "compartment": "intermediate",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.4,
+          0.75
+        ],
+        "rule_description": "Célula grande ubicada en las capas intermedias del epitelio seminífero."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#14b8a6",
+      "label": "Espermatocito primario en paquinema",
+      "cytological_features": "Célula meiótica de gran tamaño en capas intermedias. Núcleo esférico muy voluminoso con cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema). Citoplasma abundante.",
+      "chromatin_pattern": "Cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema).",
+      "nucleolus": "Disperso o poco visible entre filamentos meióticos gruesos.",
+      "nuclear_shape": "Esférico de gran tamaño (el núcleo más voluminoso del epitelio germinal).",
+      "differential_diagnosis": "Célula de mayor tamaño en capas medias con cromatina filamentosa gruesa meiótica típica de paquinema."
+    },
+    {
+      "key": "espermatocito_secundario",
+      "name": "Espermatocito secundario",
+      "name_en": "Secondary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "medium spherical nucleus with pale granular chromatin",
+      "expected_diameter_px": 22,
+      "spatial_rules": {
+        "compartment": "intermediate",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.3,
+          0.6
+        ],
+        "rule_description": "Localizado en capas intermedias a adluminales del epitelio, escaso en preparados."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#f97316",
+      "label": "Espermatocito secundario",
+      "cytological_features": "Célula intermedia post-primera división meiótica, vida media efímera. Núcleo esférico mediano con cromatina finamente granular.",
+      "chromatin_pattern": "Cromatina finamente granular, célula de vida media muy corta.",
+      "nucleolus": "Pequeño o indiferenciado.",
+      "nuclear_shape": "Esférico de tamaño mediano (menor que espermatocito I, mayor que espermátide).",
+      "differential_diagnosis": "Célula intermedia infrecuente con cromatina granular, más pequeña que el espermatocito primario."
+    },
+    {
+      "key": "espermartide_temprana",
+      "name": "Espérmátide temprana",
+      "name_en": "Early spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small round spherical nucleus in adluminal layer",
+      "expected_diameter_px": 15,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.15,
+          0.45
+        ],
+        "rule_description": "Alojada en el compartimento adluminal, sostenida por las células de Sertoli."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#84cc16",
+      "label": "Espérmátide temprana",
+      "cytological_features": "Célula haploide adluminal. Núcleo esférico pequeño y regular con eucromatina pálida, sostenida por prolongaciones de Sertoli.",
+      "chromatin_pattern": "Eucromatina pálida homogénea, núcleo redondeado pequeño sin divisiones.",
+      "nucleolus": "Poco conspicuo o central pequeño.",
+      "nuclear_shape": "Esférico pequeño y regular en la mitad adluminal.",
+      "differential_diagnosis": "Pequeña esfera nuclear en compartimento adluminal, cromatina no condensada aún."
+    },
+    {
+      "key": "espermartide_tardia",
+      "name": "Espérmátide tardía",
+      "name_en": "Late spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small elongated tapered condensed nucleus near lumen",
+      "expected_diameter_px": 12,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial",
+          "membrana_basal"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.3
+        ],
+        "rule_description": "Situada en la región apical del epitelio con orientación hacia la luz."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#a855f7",
+      "label": "Espérmátide tardía",
+      "cytological_features": "Espermátide en fase de maduración/espermiogénesis. Núcleo alargado, afilado y densamente condensado e hipercromático, orientado hacia el lumen.",
+      "chromatin_pattern": "Heterocromatina sumamente densa y condensada, hipercromática.",
+      "nucleolus": "Ausente (cromatina totalmente empaquetada).",
+      "nuclear_shape": "Alargada, fusiforme, afilada en punta hacia la luz.",
+      "differential_diagnosis": "Núcleo alargado, pequeño y condensado en proceso de espermiogénesis apical."
+    },
+    {
+      "key": "espermatozoide",
+      "name": "Espermatozoide",
+      "name_en": "Spermatozoon",
+      "target_engine": "cellpose",
+      "prompt": "small dense elongated condensed nucleus with flagellum in lumen",
+      "expected_diameter_px": 10,
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": [
+          "membrana_basal",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.25
+        ],
+        "rule_description": "Ubicado estrictamente en la cavidad de la luz tubular libre de epitelio."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#0ea5e9",
+      "label": "Espermatozoide",
+      "cytological_features": "Gameto masculino maduro libre en la luz tubular. Cabeza ovalada muy pequeña y electrodensa con acrosoma apical y flagelo largo extendido en la cavidad.",
+      "chromatin_pattern": "Cromatina ultra condensada cristalina en la cabeza espermática.",
+      "nucleolus": "Ausente.",
+      "nuclear_shape": "Cabeza ovoide pequeña con flagelo visible en la cavidad luminal.",
+      "differential_diagnosis": "Presencia de cabeza condensada y flagelo libre en la luz tubular."
+    },
+    {
+      "key": "celula_sertoli",
+      "name": "Célula de Sertoli",
+      "name_en": "Sertoli cell",
+      "target_engine": "cellpose",
+      "prompt": "large pale triangular or oval indented nucleus with huge prominent bird's eye central nucleolus resting on basement membrane",
+      "expected_diameter_px": 24,
+      "spatial_rules": {
+        "compartment": "parabasal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.5,
+          0.8
+        ],
+        "rule_description": "Núcleo típicamente en la segunda hilera (parabasal) extendiéndose por todo el grosor epitelial."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#ef4444",
+      "label": "Célula de Sertoli",
+      "cytological_features": "Célula somática nodriza cuya base descansa en la lámina basal. Núcleo voluminoso, ovalado, triangular o piramidal, con pliegues o escotaduras nucleares. Eucromatina muy clara y translúcida. Rasgo patognomónico: nucléolo gigante muy prominente flanqueado por corpúsculos de heterocromatina satélite ('en ojo de buey' o 'bird's eye'). Citoplasma extenso que envuelve a las células germinales.",
+      "chromatin_pattern": "Eucromatina sumamente clara, pálida y vesicular, con pliegues en la envoltura nuclear.",
+      "nucleolus": "Nucléolo gigante voluminoso central flanqueado por heterocromatina ('ojo de buey').",
+      "nuclear_shape": "Piramidal, triangular u ovalado grande con indentaciones.",
+      "differential_diagnosis": "Nucléolo gigante en ojo de buey y forma piramidal/plegada; claramente diferenciable de los núcleos esféricos/ovoides de las espermatogonias."
+    },
+    {
+      "key": "celula_peritubular",
+      "name": "Célula peritubular",
+      "name_en": "Peritubular myoid cell",
+      "target_engine": "cellpose",
+      "prompt": "elongated spindle-shaped nucleus forming concentric layer around tubule",
+      "expected_diameter_px": 16,
+      "spatial_rules": {
+        "compartment": "wall",
+        "parent_macro": "membrana_basal",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.95,
+          1.1
+        ],
+        "rule_description": "Dispuesta concéntricamente formando parte de la pared externa del túbulo seminífero."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#22c55e",
+      "label": "Célula peritubular",
+      "cytological_features": "Célula mioide peritubular. Núcleo muy aplanado, alargado y fusiforme formando una envoltura concéntrica adherida al exterior de la lámina basal.",
+      "chromatin_pattern": "Cromatina condensada y aplanada en la pared externa.",
+      "nucleolus": "Inconspicuo.",
+      "nuclear_shape": "Aplanada, ahusada / fusiforme, rodeando la lámina basal.",
+      "differential_diagnosis": "Núcleo alargado concéntrico en la túnica propia delimitando el túbulo."
+    },
+    {
+      "key": "celula_leydig",
+      "name": "Célula de Leydig",
+      "name_en": "Leydig cell",
+      "target_engine": "cellpose",
+      "prompt": "large polygonal eosinophilic cell cluster in interstitial stroma",
+      "expected_diameter_px": 30,
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": [
+          "tubulo_seminifero",
+          "luz_tubular",
+          "membrana_basal"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Exclusiva del tejido conectivo intersticial perivascular; estrictamente prohibida dentro de los túbulos."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#eab308",
+      "label": "Célula de Leydig",
+      "cytological_features": "Célula endocrina intersticial. Célula grande poligonal en cúmulos con citoplasma eosinófilo abundante y núcleo esférico vesiculoso con 1-2 nucléolos prominentes.",
+      "chromatin_pattern": "Eucromatina vesiculosa con heterocromatina marginal.",
+      "nucleolus": "1 o 2 nucléolos prominentes.",
+      "nuclear_shape": "Redondo excéntrico en citoplasma eosinófilo poligonal abundante.",
+      "differential_diagnosis": "Células endocrinas poligonales agrupadas en el estroma conectivo intersticial perivascular."
+    }
+  ],
+  "spatial_rules": [
+    {
+      "micro_key": "espermatogonia_a_clara",
+      "micro_name": "Espermatogonia A clara",
+      "compartment": "basal",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.85,
+        1.0
+      ],
+      "rule_description": "Ubicada en la zona basal en contacto con la membrana basal; prohibida en la luz tubular."
+    },
+    {
+      "micro_key": "espermatogonia_a_oscura",
+      "micro_name": "Espermatogonia A oscura",
+      "compartment": "basal",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.85,
+        1.0
+      ],
+      "rule_description": "Localizada en la capa basal adyacente a la membrana basal; ausente en el compartimento luminal."
+    },
+    {
+      "micro_key": "espermatogonia_b",
+      "micro_name": "Espermatogonia B",
+      "compartment": "basal",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.65,
+        0.9
+      ],
+      "rule_description": "Situada por encima de las espermatogonias A, separada de la membrana basal pero sin alcanzar la luz."
+    },
+    {
+      "micro_key": "espermatocito_primario",
+      "micro_name": "Espermatocito primario en paquinema",
+      "compartment": "intermediate",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.4,
+        0.75
+      ],
+      "rule_description": "Célula grande ubicada en las capas intermedias del epitelio seminífero."
+    },
+    {
+      "micro_key": "espermatocito_secundario",
+      "micro_name": "Espermatocito secundario",
+      "compartment": "intermediate",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.3,
+        0.6
+      ],
+      "rule_description": "Localizado en capas intermedias a adluminales del epitelio, escaso en preparados."
+    },
+    {
+      "micro_key": "espermartide_temprana",
+      "micro_name": "Espérmátide temprana",
+      "compartment": "adluminal",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.15,
+        0.45
+      ],
+      "rule_description": "Alojada en el compartimento adluminal, sostenida por las células de Sertoli."
+    },
+    {
+      "micro_key": "espermartide_tardia",
+      "micro_name": "Espérmátide tardía",
+      "compartment": "adluminal",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "espacio_intersticial",
+        "membrana_basal"
+      ],
+      "relative_radial_position": [
+        0.0,
+        0.3
+      ],
+      "rule_description": "Situada en la región apical del epitelio con orientación hacia la luz."
+    },
+    {
+      "micro_key": "espermatozoide",
+      "micro_name": "Espermatozoide",
+      "compartment": "luminal",
+      "parent_macro": "luz_tubular",
+      "forbidden_in": [
+        "membrana_basal",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.0,
+        0.25
+      ],
+      "rule_description": "Ubicado estrictamente en la cavidad de la luz tubular libre de epitelio."
+    },
+    {
+      "micro_key": "celula_sertoli",
+      "micro_name": "Célula de Sertoli",
+      "compartment": "parabasal",
+      "parent_macro": "tubulo_seminifero",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.5,
+        0.8
+      ],
+      "rule_description": "Núcleo típicamente en la segunda hilera (parabasal) extendiéndose por todo el grosor epitelial."
+    },
+    {
+      "micro_key": "celula_peritubular",
+      "micro_name": "Célula peritubular",
+      "compartment": "wall",
+      "parent_macro": "membrana_basal",
+      "forbidden_in": [
+        "luz_tubular",
+        "espacio_intersticial"
+      ],
+      "relative_radial_position": [
+        0.95,
+        1.1
+      ],
+      "rule_description": "Dispuesta concéntricamente formando parte de la pared externa del túbulo seminífero."
+    },
+    {
+      "micro_key": "celula_leydig",
+      "micro_name": "Célula de Leydig",
+      "compartment": "interstitial",
+      "parent_macro": "espacio_intersticial",
+      "forbidden_in": [
+        "tubulo_seminifero",
+        "luz_tubular",
+        "membrana_basal"
+      ],
+      "relative_radial_position": null,
+      "rule_description": "Exclusiva del tejido conectivo intersticial perivascular; estrictamente prohibida dentro de los túbulos."
+    }
+  ],
+  "structures": [
+    {
+      "key": "tubulo_seminifero",
+      "name": "Túbulo seminífero",
+      "name_en": "Seminiferous tubule",
+      "role": "compartment",
+      "target_engine": "sam3",
+      "prompt": "circular or oval cross section of seminiferous tubule",
+      "description": "Unidad tubular funcional revestida por el epitelio seminífero estratificado.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#e11d48",
+      "label": "Túbulo seminífero"
+    },
+    {
+      "key": "membrana_basal",
+      "name": "Membrana basal tubular",
+      "name_en": "Basement membrane",
+      "role": "boundary_outer",
+      "target_engine": "sam3",
+      "prompt": "thin basement membrane boundary ring surrounding tubule",
+      "description": "Lámina externa que delimita el epitelio seminífero del estroma intersticial.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#8b5cf6",
+      "label": "Membrana basal tubular"
+    },
+    {
+      "key": "luz_tubular",
+      "name": "Luz del túbulo",
+      "name_en": "Tubular lumen",
+      "role": "cavity",
+      "target_engine": "sam3",
+      "prompt": "empty central tubular lumen cavity space",
+      "description": "Espacio central donde convergen las espermátides tardías y se liberan los espermatozoides.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#06b6d4",
+      "label": "Luz del túbulo"
+    },
+    {
+      "key": "espacio_intersticial",
+      "name": "Espacio intersticial",
+      "name_en": "Interstitial stroma",
+      "role": "stroma",
+      "target_engine": "sam3",
+      "prompt": "interstitial connective tissue space between seminiferous tubules",
+      "description": "Tejido conectivo laxo que contiene vasos sanguíneos y cúmulos de células endocrinas.",
+      "is_macro": true,
+      "spatial_rules": {},
+      "tissue_name": "Testículo",
+      "color": "#f59e0b",
+      "label": "Espacio intersticial"
+    },
+    {
+      "key": "espermatogonia_a_clara",
+      "name": "Espermatogonia A clara",
+      "name_en": "Pale A spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "spherical or oval nucleus with pale, fine, homogeneously dusty euchromatin and 1-2 prominent nucleoli attached to the inner nuclear envelope (carioteca) resting on basement membrane",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.85,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal en contacto con la membrana basal; prohibida en la luz tubular."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#10b981",
+      "label": "Espermatogonia A clara",
+      "cytological_features": "Núcleo esférico u ovoide apoyado en la membrana basal. Eucromatina fina, clara, translúcida y homogéneamente pulverulenta (aspecto en vidrio esmerilado uniforme). Presenta 1 o 2 nucléolos prominentes adheridos a la cara interna de la membrana nuclear (carioteca). Sin rarefacción central ni grumos toscos.",
+      "chromatin_pattern": "Eucromatina clara, fina, homogéneamente pulverulenta y translúcida (sin hendidura ni grumos toscos).",
+      "nucleolus": "1 o 2 nucléolos prominentes adosados a la cara interna de la carioteca (membrana nuclear).",
+      "nuclear_shape": "Ovoide o esférico regular, eje mayor frecuentemente paralelo a la membrana basal.",
+      "differential_diagnosis": "Se diferencia de la A oscura por su cromatina pálida y ausencia de vacuola nuclear central; se diferencia de la B por tener eucromatina homogénea fina (no grumos toscos) y nucléolos en la carioteca (no un nucléolo central único)."
+    },
+    {
+      "key": "espermatogonia_a_oscura",
+      "name": "Espermatogonia A oscura",
+      "name_en": "Dark A spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "intensely hyperchromatic dark nucleus with pathognomonic central nuclear rarefaction vacuole and peripheral chromatin resting on basement membrane",
+      "expected_diameter_px": 18,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.85,
+          1.0
+        ],
+        "rule_description": "Localizada en la capa basal adyacente a la membrana basal; ausente en el compartimento luminal."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#ec4899",
+      "label": "Espermatogonia A oscura",
+      "cytological_features": "Célula madre de reserva en la lámina basal. Núcleo ovoide o redondeado intensamente hipercromático y oscuro. Rasgo patognomónico: zona o hendidura clara central de rarefacción intranuclear ('vacuola nuclear') rodeada de cromatina periférica condensada. 1-2 nucléolos pequeños poco conspicuos adosados a la carioteca.",
+      "chromatin_pattern": "Hipercromática, sumamente densa y oscura, con zona central clara de rarefacción intranuclear ('vacuola nuclear').",
+      "nucleolus": "1 o 2 nucléolos pequeños y discretos adheridos a la carioteca.",
+      "nuclear_shape": "Ovoide o redondeado, aplanado contra la membrana basal.",
+      "differential_diagnosis": "Patognomónica zona clara central de rarefacción intranuclear ('vacuola nuclear') rodeada por cromatina oscura densa. Inconfundible frente a la cromatina pálida uniforme de la A clara y frente a los grumos de la B."
+    },
+    {
+      "key": "espermatogonia_b",
+      "name": "Espermatogonia B",
+      "name_en": "B spermatogonium",
+      "target_engine": "cellpose",
+      "prompt": "strictly spherical nucleus with heterogeneous coarse chromatin clumps dispersed throughout and typically a single prominent central nucleolus in basal to suprabasal layer",
+      "expected_diameter_px": 20,
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.65,
+          0.9
+        ],
+        "rule_description": "Situada por encima de las espermatogonias A, separada de la membrana basal pero sin alcanzar la luz."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#6366f1",
+      "label": "Espermatogonia B",
+      "cytological_features": "Última generación espermatogonial premeiótica. Núcleo estrictamente esférico y regular. Rasgo patognomónico: cromatina marcadamente heterogénea en grumos gruesos, densos y apelotonados en la carioteca y en el interior del nucleoplasma. Típicamente un único nucléolo central prominente (no adosado a la carioteca). Frecuentemente en posición basal a yuxtabasal.",
+      "chromatin_pattern": "Heterocromatina marcadamente heterogénea condensada en grumos gruesos, densos y dispersos ('aspecto grumoso en tablero').",
+      "nucleolus": "Típicamente UN ÚNICO nucléolo CENTRAL prominente (a diferencia de las tipo A que tienen nucléolos en la periferia/carioteca).",
+      "nuclear_shape": "Estrictamente esférico, redondeado y regular.",
+      "differential_diagnosis": "Núcleo esférico con cromatina en grumos gruesos heterogéneos y nucléolo único central; a diferencia de las A clara/oscura que tienen cromatina homogénea (fina u oscura con vacuola) y nucléolos adosados a la carioteca."
+    },
+    {
+      "key": "espermatocito_primario",
+      "name": "Espermatocito primario en paquinema",
+      "name_en": "Primary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "large round central nucleus with filamentous chromatin in epithelial layer",
+      "expected_diameter_px": 26,
+      "spatial_rules": {
+        "compartment": "intermediate",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.4,
+          0.75
+        ],
+        "rule_description": "Célula grande ubicada en las capas intermedias del epitelio seminífero."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#14b8a6",
+      "label": "Espermatocito primario en paquinema",
+      "cytological_features": "Célula meiótica de gran tamaño en capas intermedias. Núcleo esférico muy voluminoso con cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema). Citoplasma abundante.",
+      "chromatin_pattern": "Cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema).",
+      "nucleolus": "Disperso o poco visible entre filamentos meióticos gruesos.",
+      "nuclear_shape": "Esférico de gran tamaño (el núcleo más voluminoso del epitelio germinal).",
+      "differential_diagnosis": "Célula de mayor tamaño en capas medias con cromatina filamentosa gruesa meiótica típica de paquinema."
+    },
+    {
+      "key": "espermatocito_secundario",
+      "name": "Espermatocito secundario",
+      "name_en": "Secondary spermatocyte",
+      "target_engine": "cellpose",
+      "prompt": "medium spherical nucleus with pale granular chromatin",
+      "expected_diameter_px": 22,
+      "spatial_rules": {
+        "compartment": "intermediate",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.3,
+          0.6
+        ],
+        "rule_description": "Localizado en capas intermedias a adluminales del epitelio, escaso en preparados."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#f97316",
+      "label": "Espermatocito secundario",
+      "cytological_features": "Célula intermedia post-primera división meiótica, vida media efímera. Núcleo esférico mediano con cromatina finamente granular.",
+      "chromatin_pattern": "Cromatina finamente granular, célula de vida media muy corta.",
+      "nucleolus": "Pequeño o indiferenciado.",
+      "nuclear_shape": "Esférico de tamaño mediano (menor que espermatocito I, mayor que espermátide).",
+      "differential_diagnosis": "Célula intermedia infrecuente con cromatina granular, más pequeña que el espermatocito primario."
+    },
+    {
+      "key": "espermartide_temprana",
+      "name": "Espérmátide temprana",
+      "name_en": "Early spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small round spherical nucleus in adluminal layer",
+      "expected_diameter_px": 15,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.15,
+          0.45
+        ],
+        "rule_description": "Alojada en el compartimento adluminal, sostenida por las células de Sertoli."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#84cc16",
+      "label": "Espérmátide temprana",
+      "cytological_features": "Célula haploide adluminal. Núcleo esférico pequeño y regular con eucromatina pálida, sostenida por prolongaciones de Sertoli.",
+      "chromatin_pattern": "Eucromatina pálida homogénea, núcleo redondeado pequeño sin divisiones.",
+      "nucleolus": "Poco conspicuo o central pequeño.",
+      "nuclear_shape": "Esférico pequeño y regular en la mitad adluminal.",
+      "differential_diagnosis": "Pequeña esfera nuclear en compartimento adluminal, cromatina no condensada aún."
+    },
+    {
+      "key": "espermartide_tardia",
+      "name": "Espérmátide tardía",
+      "name_en": "Late spermatid",
+      "target_engine": "cellpose",
+      "prompt": "small elongated tapered condensed nucleus near lumen",
+      "expected_diameter_px": 12,
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial",
+          "membrana_basal"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.3
+        ],
+        "rule_description": "Situada en la región apical del epitelio con orientación hacia la luz."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#a855f7",
+      "label": "Espérmátide tardía",
+      "cytological_features": "Espermátide en fase de maduración/espermiogénesis. Núcleo alargado, afilado y densamente condensado e hipercromático, orientado hacia el lumen.",
+      "chromatin_pattern": "Heterocromatina sumamente densa y condensada, hipercromática.",
+      "nucleolus": "Ausente (cromatina totalmente empaquetada).",
+      "nuclear_shape": "Alargada, fusiforme, afilada en punta hacia la luz.",
+      "differential_diagnosis": "Núcleo alargado, pequeño y condensado en proceso de espermiogénesis apical."
+    },
+    {
+      "key": "espermatozoide",
+      "name": "Espermatozoide",
+      "name_en": "Spermatozoon",
+      "target_engine": "cellpose",
+      "prompt": "small dense elongated condensed nucleus with flagellum in lumen",
+      "expected_diameter_px": 10,
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": [
+          "membrana_basal",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.25
+        ],
+        "rule_description": "Ubicado estrictamente en la cavidad de la luz tubular libre de epitelio."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#0ea5e9",
+      "label": "Espermatozoide",
+      "cytological_features": "Gameto masculino maduro libre en la luz tubular. Cabeza ovalada muy pequeña y electrodensa con acrosoma apical y flagelo largo extendido en la cavidad.",
+      "chromatin_pattern": "Cromatina ultra condensada cristalina en la cabeza espermática.",
+      "nucleolus": "Ausente.",
+      "nuclear_shape": "Cabeza ovoide pequeña con flagelo visible en la cavidad luminal.",
+      "differential_diagnosis": "Presencia de cabeza condensada y flagelo libre en la luz tubular."
+    },
+    {
+      "key": "celula_sertoli",
+      "name": "Célula de Sertoli",
+      "name_en": "Sertoli cell",
+      "target_engine": "cellpose",
+      "prompt": "large pale triangular or oval indented nucleus with huge prominent bird's eye central nucleolus resting on basement membrane",
+      "expected_diameter_px": 24,
+      "spatial_rules": {
+        "compartment": "parabasal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.5,
+          0.8
+        ],
+        "rule_description": "Núcleo típicamente en la segunda hilera (parabasal) extendiéndose por todo el grosor epitelial."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#ef4444",
+      "label": "Célula de Sertoli",
+      "cytological_features": "Célula somática nodriza cuya base descansa en la lámina basal. Núcleo voluminoso, ovalado, triangular o piramidal, con pliegues o escotaduras nucleares. Eucromatina muy clara y translúcida. Rasgo patognomónico: nucléolo gigante muy prominente flanqueado por corpúsculos de heterocromatina satélite ('en ojo de buey' o 'bird's eye'). Citoplasma extenso que envuelve a las células germinales.",
+      "chromatin_pattern": "Eucromatina sumamente clara, pálida y vesicular, con pliegues en la envoltura nuclear.",
+      "nucleolus": "Nucléolo gigante voluminoso central flanqueado por heterocromatina ('ojo de buey').",
+      "nuclear_shape": "Piramidal, triangular u ovalado grande con indentaciones.",
+      "differential_diagnosis": "Nucléolo gigante en ojo de buey y forma piramidal/plegada; claramente diferenciable de los núcleos esféricos/ovoides de las espermatogonias."
+    },
+    {
+      "key": "celula_peritubular",
+      "name": "Célula peritubular",
+      "name_en": "Peritubular myoid cell",
+      "target_engine": "cellpose",
+      "prompt": "elongated spindle-shaped nucleus forming concentric layer around tubule",
+      "expected_diameter_px": 16,
+      "spatial_rules": {
+        "compartment": "wall",
+        "parent_macro": "membrana_basal",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.95,
+          1.1
+        ],
+        "rule_description": "Dispuesta concéntricamente formando parte de la pared externa del túbulo seminífero."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#22c55e",
+      "label": "Célula peritubular",
+      "cytological_features": "Célula mioide peritubular. Núcleo muy aplanado, alargado y fusiforme formando una envoltura concéntrica adherida al exterior de la lámina basal.",
+      "chromatin_pattern": "Cromatina condensada y aplanada en la pared externa.",
+      "nucleolus": "Inconspicuo.",
+      "nuclear_shape": "Aplanada, ahusada / fusiforme, rodeando la lámina basal.",
+      "differential_diagnosis": "Núcleo alargado concéntrico en la túnica propia delimitando el túbulo."
+    },
+    {
+      "key": "celula_leydig",
+      "name": "Célula de Leydig",
+      "name_en": "Leydig cell",
+      "target_engine": "cellpose",
+      "prompt": "large polygonal eosinophilic cell cluster in interstitial stroma",
+      "expected_diameter_px": 30,
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": [
+          "tubulo_seminifero",
+          "luz_tubular",
+          "membrana_basal"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Exclusiva del tejido conectivo intersticial perivascular; estrictamente prohibida dentro de los túbulos."
+      },
+      "is_macro": false,
+      "role": "cell",
+      "tissue_name": "Testículo",
+      "color": "#eab308",
+      "label": "Célula de Leydig",
+      "cytological_features": "Célula endocrina intersticial. Célula grande poligonal en cúmulos con citoplasma eosinófilo abundante y núcleo esférico vesiculoso con 1-2 nucléolos prominentes.",
+      "chromatin_pattern": "Eucromatina vesiculosa con heterocromatina marginal.",
+      "nucleolus": "1 o 2 nucléolos prominentes.",
+      "nuclear_shape": "Redondo excéntrico en citoplasma eosinófilo poligonal abundante.",
+      "differential_diagnosis": "Células endocrinas poligonales agrupadas en el estroma conectivo intersticial perivascular."
+    }
+  ],
+  "extracted_images": [
+    {
+      "filename": "af51e67a2f47_p1_img1.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img1.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img2.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img2.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img3.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img3.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img4.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img4.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img5.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img5.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img6.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img6.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img7.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img7.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img8.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img8.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img9.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img9.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img10.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img10.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img11.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img11.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img12.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img12.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    },
+    {
+      "filename": "af51e67a2f47_p1_img13.png",
+      "path": "/run/media/cetec/c182e059-3c92-4885-9b5a-0b2f0aeaadfe/AIProjects/histo-fine-tunning/datasets/pdf_images/af51e67a2f47/af51e67a2f47_p1_img13.png",
+      "page": 1,
+      "width": 1300,
+      "height": 731,
+      "caption": null,
+      "pdf_id": "af51e67a2f47"
+    }
+  ],
+  "prompts": [
+    {
+      "key": "tubulo_seminifero",
+      "prompt": "circular or oval cross section of seminiferous tubule",
+      "label": "Túbulo seminífero",
+      "color": "#e11d48",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "membrana_basal",
+      "prompt": "thin basement membrane boundary ring surrounding tubule",
+      "label": "Membrana basal tubular",
+      "color": "#8b5cf6",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "luz_tubular",
+      "prompt": "empty central tubular lumen cavity space",
+      "label": "Luz del túbulo",
+      "color": "#06b6d4",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "espacio_intersticial",
+      "prompt": "interstitial connective tissue space between seminiferous tubules",
+      "label": "Espacio intersticial",
+      "color": "#f59e0b",
+      "is_macro": true,
+      "target_engine": "sam3",
+      "spatial_rules": {}
+    },
+    {
+      "key": "espermatogonia_a_clara",
+      "prompt": "spherical or oval nucleus with pale, fine, homogeneously dusty euchromatin and 1-2 prominent nucleoli attached to the inner nuclear envelope (carioteca) resting on basement membrane",
+      "label": "Espermatogonia A clara",
+      "color": "#10b981",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.85,
+          1.0
+        ],
+        "rule_description": "Ubicada en la zona basal en contacto con la membrana basal; prohibida en la luz tubular."
+      },
+      "cytological_features": "Núcleo esférico u ovoide apoyado en la membrana basal. Eucromatina fina, clara, translúcida y homogéneamente pulverulenta (aspecto en vidrio esmerilado uniforme). Presenta 1 o 2 nucléolos prominentes adheridos a la cara interna de la membrana nuclear (carioteca). Sin rarefacción central ni grumos toscos.",
+      "chromatin_pattern": "Eucromatina clara, fina, homogéneamente pulverulenta y translúcida (sin hendidura ni grumos toscos).",
+      "nucleolus": "1 o 2 nucléolos prominentes adosados a la cara interna de la carioteca (membrana nuclear).",
+      "nuclear_shape": "Ovoide o esférico regular, eje mayor frecuentemente paralelo a la membrana basal.",
+      "differential_diagnosis": "Se diferencia de la A oscura por su cromatina pálida y ausencia de vacuola nuclear central; se diferencia de la B por tener eucromatina homogénea fina (no grumos toscos) y nucléolos en la carioteca (no un nucléolo central único)."
+    },
+    {
+      "key": "espermatogonia_a_oscura",
+      "prompt": "intensely hyperchromatic dark nucleus with pathognomonic central nuclear rarefaction vacuole and peripheral chromatin resting on basement membrane",
+      "label": "Espermatogonia A oscura",
+      "color": "#ec4899",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.85,
+          1.0
+        ],
+        "rule_description": "Localizada en la capa basal adyacente a la membrana basal; ausente en el compartimento luminal."
+      },
+      "cytological_features": "Célula madre de reserva en la lámina basal. Núcleo ovoide o redondeado intensamente hipercromático y oscuro. Rasgo patognomónico: zona o hendidura clara central de rarefacción intranuclear ('vacuola nuclear') rodeada de cromatina periférica condensada. 1-2 nucléolos pequeños poco conspicuos adosados a la carioteca.",
+      "chromatin_pattern": "Hipercromática, sumamente densa y oscura, con zona central clara de rarefacción intranuclear ('vacuola nuclear').",
+      "nucleolus": "1 o 2 nucléolos pequeños y discretos adheridos a la carioteca.",
+      "nuclear_shape": "Ovoide o redondeado, aplanado contra la membrana basal.",
+      "differential_diagnosis": "Patognomónica zona clara central de rarefacción intranuclear ('vacuola nuclear') rodeada por cromatina oscura densa. Inconfundible frente a la cromatina pálida uniforme de la A clara y frente a los grumos de la B."
+    },
+    {
+      "key": "espermatogonia_b",
+      "prompt": "strictly spherical nucleus with heterogeneous coarse chromatin clumps dispersed throughout and typically a single prominent central nucleolus in basal to suprabasal layer",
+      "label": "Espermatogonia B",
+      "color": "#6366f1",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "basal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.65,
+          0.9
+        ],
+        "rule_description": "Situada por encima de las espermatogonias A, separada de la membrana basal pero sin alcanzar la luz."
+      },
+      "cytological_features": "Última generación espermatogonial premeiótica. Núcleo estrictamente esférico y regular. Rasgo patognomónico: cromatina marcadamente heterogénea en grumos gruesos, densos y apelotonados en la carioteca y en el interior del nucleoplasma. Típicamente un único nucléolo central prominente (no adosado a la carioteca). Frecuentemente en posición basal a yuxtabasal.",
+      "chromatin_pattern": "Heterocromatina marcadamente heterogénea condensada en grumos gruesos, densos y dispersos ('aspecto grumoso en tablero').",
+      "nucleolus": "Típicamente UN ÚNICO nucléolo CENTRAL prominente (a diferencia de las tipo A que tienen nucléolos en la periferia/carioteca).",
+      "nuclear_shape": "Estrictamente esférico, redondeado y regular.",
+      "differential_diagnosis": "Núcleo esférico con cromatina en grumos gruesos heterogéneos y nucléolo único central; a diferencia de las A clara/oscura que tienen cromatina homogénea (fina u oscura con vacuola) y nucléolos adosados a la carioteca."
+    },
+    {
+      "key": "espermatocito_primario",
+      "prompt": "large round central nucleus with filamentous chromatin in epithelial layer",
+      "label": "Espermatocito primario en paquinema",
+      "color": "#14b8a6",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "intermediate",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.4,
+          0.75
+        ],
+        "rule_description": "Célula grande ubicada en las capas intermedias del epitelio seminífero."
+      },
+      "cytological_features": "Célula meiótica de gran tamaño en capas intermedias. Núcleo esférico muy voluminoso con cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema). Citoplasma abundante.",
+      "chromatin_pattern": "Cromatina condensada en filamentos gruesos meióticos en ovillo (paquinema).",
+      "nucleolus": "Disperso o poco visible entre filamentos meióticos gruesos.",
+      "nuclear_shape": "Esférico de gran tamaño (el núcleo más voluminoso del epitelio germinal).",
+      "differential_diagnosis": "Célula de mayor tamaño en capas medias con cromatina filamentosa gruesa meiótica típica de paquinema."
+    },
+    {
+      "key": "espermatocito_secundario",
+      "prompt": "medium spherical nucleus with pale granular chromatin",
+      "label": "Espermatocito secundario",
+      "color": "#f97316",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "intermediate",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.3,
+          0.6
+        ],
+        "rule_description": "Localizado en capas intermedias a adluminales del epitelio, escaso en preparados."
+      },
+      "cytological_features": "Célula intermedia post-primera división meiótica, vida media efímera. Núcleo esférico mediano con cromatina finamente granular.",
+      "chromatin_pattern": "Cromatina finamente granular, célula de vida media muy corta.",
+      "nucleolus": "Pequeño o indiferenciado.",
+      "nuclear_shape": "Esférico de tamaño mediano (menor que espermatocito I, mayor que espermátide).",
+      "differential_diagnosis": "Célula intermedia infrecuente con cromatina granular, más pequeña que el espermatocito primario."
+    },
+    {
+      "key": "espermartide_temprana",
+      "prompt": "small round spherical nucleus in adluminal layer",
+      "label": "Espérmátide temprana",
+      "color": "#84cc16",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.15,
+          0.45
+        ],
+        "rule_description": "Alojada en el compartimento adluminal, sostenida por las células de Sertoli."
+      },
+      "cytological_features": "Célula haploide adluminal. Núcleo esférico pequeño y regular con eucromatina pálida, sostenida por prolongaciones de Sertoli.",
+      "chromatin_pattern": "Eucromatina pálida homogénea, núcleo redondeado pequeño sin divisiones.",
+      "nucleolus": "Poco conspicuo o central pequeño.",
+      "nuclear_shape": "Esférico pequeño y regular en la mitad adluminal.",
+      "differential_diagnosis": "Pequeña esfera nuclear en compartimento adluminal, cromatina no condensada aún."
+    },
+    {
+      "key": "espermartide_tardia",
+      "prompt": "small elongated tapered condensed nucleus near lumen",
+      "label": "Espérmátide tardía",
+      "color": "#a855f7",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "adluminal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "espacio_intersticial",
+          "membrana_basal"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.3
+        ],
+        "rule_description": "Situada en la región apical del epitelio con orientación hacia la luz."
+      },
+      "cytological_features": "Espermátide en fase de maduración/espermiogénesis. Núcleo alargado, afilado y densamente condensado e hipercromático, orientado hacia el lumen.",
+      "chromatin_pattern": "Heterocromatina sumamente densa y condensada, hipercromática.",
+      "nucleolus": "Ausente (cromatina totalmente empaquetada).",
+      "nuclear_shape": "Alargada, fusiforme, afilada en punta hacia la luz.",
+      "differential_diagnosis": "Núcleo alargado, pequeño y condensado en proceso de espermiogénesis apical."
+    },
+    {
+      "key": "espermatozoide",
+      "prompt": "small dense elongated condensed nucleus with flagellum in lumen",
+      "label": "Espermatozoide",
+      "color": "#0ea5e9",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "luminal",
+        "parent_macro": "luz_tubular",
+        "forbidden_in": [
+          "membrana_basal",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.0,
+          0.25
+        ],
+        "rule_description": "Ubicado estrictamente en la cavidad de la luz tubular libre de epitelio."
+      },
+      "cytological_features": "Gameto masculino maduro libre en la luz tubular. Cabeza ovalada muy pequeña y electrodensa con acrosoma apical y flagelo largo extendido en la cavidad.",
+      "chromatin_pattern": "Cromatina ultra condensada cristalina en la cabeza espermática.",
+      "nucleolus": "Ausente.",
+      "nuclear_shape": "Cabeza ovoide pequeña con flagelo visible en la cavidad luminal.",
+      "differential_diagnosis": "Presencia de cabeza condensada y flagelo libre en la luz tubular."
+    },
+    {
+      "key": "celula_sertoli",
+      "prompt": "large pale triangular or oval indented nucleus with huge prominent bird's eye central nucleolus resting on basement membrane",
+      "label": "Célula de Sertoli",
+      "color": "#ef4444",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "parabasal",
+        "parent_macro": "tubulo_seminifero",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.5,
+          0.8
+        ],
+        "rule_description": "Núcleo típicamente en la segunda hilera (parabasal) extendiéndose por todo el grosor epitelial."
+      },
+      "cytological_features": "Célula somática nodriza cuya base descansa en la lámina basal. Núcleo voluminoso, ovalado, triangular o piramidal, con pliegues o escotaduras nucleares. Eucromatina muy clara y translúcida. Rasgo patognomónico: nucléolo gigante muy prominente flanqueado por corpúsculos de heterocromatina satélite ('en ojo de buey' o 'bird's eye'). Citoplasma extenso que envuelve a las células germinales.",
+      "chromatin_pattern": "Eucromatina sumamente clara, pálida y vesicular, con pliegues en la envoltura nuclear.",
+      "nucleolus": "Nucléolo gigante voluminoso central flanqueado por heterocromatina ('ojo de buey').",
+      "nuclear_shape": "Piramidal, triangular u ovalado grande con indentaciones.",
+      "differential_diagnosis": "Nucléolo gigante en ojo de buey y forma piramidal/plegada; claramente diferenciable de los núcleos esféricos/ovoides de las espermatogonias."
+    },
+    {
+      "key": "celula_peritubular",
+      "prompt": "elongated spindle-shaped nucleus forming concentric layer around tubule",
+      "label": "Célula peritubular",
+      "color": "#22c55e",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "wall",
+        "parent_macro": "membrana_basal",
+        "forbidden_in": [
+          "luz_tubular",
+          "espacio_intersticial"
+        ],
+        "relative_radial_position": [
+          0.95,
+          1.1
+        ],
+        "rule_description": "Dispuesta concéntricamente formando parte de la pared externa del túbulo seminífero."
+      },
+      "cytological_features": "Célula mioide peritubular. Núcleo muy aplanado, alargado y fusiforme formando una envoltura concéntrica adherida al exterior de la lámina basal.",
+      "chromatin_pattern": "Cromatina condensada y aplanada en la pared externa.",
+      "nucleolus": "Inconspicuo.",
+      "nuclear_shape": "Aplanada, ahusada / fusiforme, rodeando la lámina basal.",
+      "differential_diagnosis": "Núcleo alargado concéntrico en la túnica propia delimitando el túbulo."
+    },
+    {
+      "key": "celula_leydig",
+      "prompt": "large polygonal eosinophilic cell cluster in interstitial stroma",
+      "label": "Célula de Leydig",
+      "color": "#eab308",
+      "is_macro": false,
+      "target_engine": "cellpose",
+      "spatial_rules": {
+        "compartment": "interstitial",
+        "parent_macro": "espacio_intersticial",
+        "forbidden_in": [
+          "tubulo_seminifero",
+          "luz_tubular",
+          "membrana_basal"
+        ],
+        "relative_radial_position": null,
+        "rule_description": "Exclusiva del tejido conectivo intersticial perivascular; estrictamente prohibida dentro de los túbulos."
+      },
+      "cytological_features": "Célula endocrina intersticial. Célula grande poligonal en cúmulos con citoplasma eosinófilo abundante y núcleo esférico vesiculoso con 1-2 nucléolos prominentes.",
+      "chromatin_pattern": "Eucromatina vesiculosa con heterocromatina marginal.",
+      "nucleolus": "1 o 2 nucléolos prominentes.",
+      "nuclear_shape": "Redondo excéntrico en citoplasma eosinófilo poligonal abundante.",
+      "differential_diagnosis": "Células endocrinas poligonales agrupadas en el estroma conectivo intersticial perivascular."
+    }
+  ],
+  "is_histology": true
+}
